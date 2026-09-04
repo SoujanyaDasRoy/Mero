@@ -165,6 +165,12 @@ If you're not comfortable with that, don't use it.
 
 ---
 
+## Security
+
+The `AIzaSy…` strings in `innertube/` are YouTube's own public client keys, not
+leaked credentials — see [`SECURITY.md`](SECURITY.md) if GitHub's scanner flags
+them.
+
 ## Credits
 
 - [z-huang/InnerTune](https://github.com/z-huang/InnerTune) — the `innertube` module
