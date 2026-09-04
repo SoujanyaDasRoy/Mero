@@ -26,6 +26,7 @@ robolectric = "4.14"
 youtubedlAndroid = "0.18.1"
 room = "2.6.1"
 reorderable = "3.1.0"
+splashscreen = "1.2.0"
 ksp = "2.1.0-1.0.29"
 
 [libraries]
@@ -70,6 +71,7 @@ androidx-room-runtime = { group = "androidx.room", name = "room-runtime", versio
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

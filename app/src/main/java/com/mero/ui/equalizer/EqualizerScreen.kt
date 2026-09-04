@@ -59,6 +59,7 @@ fun EqualizerScreen(
     onCrossfadeChange: (Float) -> Unit,
     toggles: Map<String, Boolean>,
     onToggle: (String, Boolean) -> Unit,
+    spatialSupported: Boolean = false,
     onBack: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -174,6 +175,27 @@ fun EqualizerScreen(
                 "No pause between tracks of the same album",
                 toggles["gapless"] == true,
             ) { onToggle("gapless", it) }
+            EqSwitch(
+                "Spatial audio",
+                if (spatialSupported) {
+                    "Widens the stereo image. Not Dolby Atmos — see the note below."
+                } else {
+                    "Not supported on this device's audio output"
+                },
+                toggles["spatial"] == true && spatialSupported,
+                enabled = spatialSupported,
+            ) { onToggle("spatial", it) }
+
+            Text(
+                "Dolby Atmos needs a licence from Dolby, firmware support from the " +
+                    "phone maker, and Atmos-encoded source audio. YouTube serves " +
+                    "stereo Opus, so none of those hold here. Spatial audio above is " +
+                    "the real equivalent Android exposes.",
+                Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                color = scheme.onSurfaceVariant,
+            )
 
             Spacer(Modifier.height(16.dp))
         }
@@ -265,13 +287,19 @@ private fun LabelledSlider(label: String, value: String, position: Float, onChan
 }
 
 @Composable
-private fun EqSwitch(label: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun EqSwitch(
+    label: String,
+    subtitle: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onChange: (Boolean) -> Unit,
+) {
     PreferenceRow(
         icon = null,
         label = label,
         subtitle = subtitle,
-        onClick = { onChange(!checked) },
+        onClick = if (enabled) ({ onChange(!checked) }) else null,
     ) {
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
     }
 }

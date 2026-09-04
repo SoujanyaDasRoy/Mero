@@ -7,4 +7,12 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">#141218</item>
     </style>
+
+    <!-- Shown by the system before the first frame, so there is no white flash
+         between the launcher and Mero's own animated splash. -->
+    <style name="Theme.Mero.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/mero_yellow</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Mero</item>
+    </style>
 </resources>

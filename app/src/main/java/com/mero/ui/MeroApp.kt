@@ -15,9 +15,13 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -38,6 +42,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -90,7 +96,7 @@ fun MeroApp() {
         mutableStateOf(
             mapOf(
                 "dynamic" to false, "amoled" to false, "wifi" to true,
-                "norm" to true, "silence" to false, "gapless" to true,
+                "norm" to false, "silence" to false, "gapless" to true, "spatial" to false,
             ),
         )
     }
@@ -100,12 +106,18 @@ fun MeroApp() {
         dynamicColor = toggles["dynamic"] == true,
         amoled = toggles["amoled"] == true,
     ) {
+        var splashDone by remember { mutableStateOf(false) }
+
         Surface(
             Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.systemBars),
             color = MaterialTheme.colorScheme.background,
         ) {
+            if (!splashDone) {
+                MeroSplash(onFinished = { splashDone = true })
+                return@Surface
+            }
             MeroContent(
                 accent = accent,
                 onAccentChange = { accent = it },
@@ -128,6 +140,7 @@ private fun MeroContent(
     val destination = backStackEntry?.destination
 
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val container = remember { (context.applicationContext as MeroApplication).container }
     val connection = remember { PlayerConnection() }
@@ -174,8 +187,8 @@ private fun MeroContent(
     }
     var homeError by remember { mutableStateOf<String?>(null) }
     var eqEnabled by remember { mutableStateOf(true) }
-    var preset by remember { mutableStateOf("Bass Boost") }
-    var bands by remember { mutableStateOf(EqPresets.presets.getValue("Bass Boost")) }
+    var preset by remember { mutableStateOf("Flat") }
+    var bands by remember { mutableStateOf(EqPresets.presets.getValue("Flat")) }
     var preamp by remember { mutableStateOf(0.6f) }
     var crossfade by remember { mutableStateOf(0.5f) }
     var importStep by remember { mutableIntStateOf(1) }
@@ -322,25 +335,36 @@ private fun MeroContent(
                         )
                     }
                     NavigationBar {
-                    val items = listOf(
-                        NavItem("Home", Icons.Rounded.Home, Home, Home::class),
-                        NavItem("Search", Icons.Rounded.Search, SearchRoute, SearchRoute::class),
-                        NavItem("Library", Icons.Rounded.LibraryMusic, Library, Library::class),
-                    )
-                    items.forEach { (label, icon, route, routeClass) ->
-                        val selected = destination?.hierarchy?.any { it.hasRoute(routeClass) } == true
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
-                                navController.navigate(route) {
-                                    popUpTo(Home) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { Icon(icon, contentDescription = label) },
-                            label = { Text(label) },
+                        val items = listOf(
+                            NavItem("Home", Icons.Rounded.Home, Icons.Outlined.Home, Home, Home::class),
+                            NavItem("Search", Icons.Rounded.Search, Icons.Rounded.Search, SearchRoute, SearchRoute::class),
+                            NavItem("Library", Icons.Rounded.LibraryMusic, Icons.Outlined.LibraryMusic, Library, Library::class),
+                            NavItem("Settings", Icons.Rounded.Settings, Icons.Outlined.Settings, SettingsRoute, SettingsRoute::class),
                         )
+                        items.forEach { item ->
+                            val selected =
+                                destination?.hierarchy?.any { it.hasRoute(item.routeClass) } == true
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = {
+                                    // Re-tapping the current tab shouldn't rebuild it.
+                                    if (selected) return@NavigationBarItem
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    navController.navigate(item.route) {
+                                        popUpTo(Home) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                },
+                                icon = {
+                                    Icon(
+                                        if (selected) item.selectedIcon else item.icon,
+                                        contentDescription = item.label,
+                                    )
+                                },
+                                label = { Text(item.label) },
+                                alwaysShowLabel = true,
+                            )
                         }
                     }
                 }
@@ -472,8 +496,12 @@ private fun MeroContent(
                         toggles = toggles,
                         onToggle = { key, value ->
                             onToggle(key, value)
-                            if (key == "norm") audioEffects.setNormalization(value)
+                            when (key) {
+                                "norm" -> audioEffects.setNormalization(value)
+                                "spatial" -> audioEffects.setSpatial(value)
+                            }
                         },
+                        spatialSupported = audioEffects.spatialSupported,
                         onBack = { navController.popBackStack() },
                         contentPadding = contentPadding,
                     )
@@ -595,6 +623,7 @@ private const val NEXT_BATCH = 3
 
 private data class NavItem(
     val label: String,
+    val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
     val route: Any,
     val routeClass: kotlin.reflect.KClass<*>,

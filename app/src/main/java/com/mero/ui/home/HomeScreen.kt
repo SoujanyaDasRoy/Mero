@@ -1,5 +1,6 @@
 package com.mero.ui.home
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -33,11 +34,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.mero.R
 import com.mero.data.HomeSection
 import com.mero.domain.Song
 import com.mero.ui.components.Artwork
@@ -79,7 +84,21 @@ fun HomeScreen(
                 .padding(start = 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Mero", Modifier.weight(1f), fontSize = 22.sp, fontWeight = FontWeight.Medium)
+            Image(
+                painter = painterResource(R.drawable.mero_logo),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+            )
+            Text(
+                "Mero",
+                Modifier
+                    .weight(1f)
+                    .padding(start = 10.dp),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Medium,
+            )
             IconButton(onClick = onRetry) {
                 Icon(Icons.Rounded.Refresh, "Refresh", tint = scheme.onSurfaceVariant)
             }
