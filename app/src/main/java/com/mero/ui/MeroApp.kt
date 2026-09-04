@@ -161,6 +161,17 @@ private fun MeroContent(
     var recentSearches by remember { mutableStateOf(emptyList<String>()) }
     var homeSections by remember { mutableStateOf(emptyList<HomeSection>()) }
     var homeLoading by remember { mutableStateOf(true) }
+    var homeLoadingMore by remember { mutableStateOf(false) }
+    var seedQueue by remember { mutableStateOf(emptyList<String>()) }
+    var endedTick by remember { mutableIntStateOf(0) }
+    var playSource by remember { mutableStateOf("Mero") }
+
+    // Same slice LibraryScreen shows, so tapping a row queues its siblings.
+    val librarySongs = when (libraryTab) {
+        "Recent" -> recentlyPlayed
+        "Most played" -> mostPlayed
+        else -> likedSongs
+    }
     var homeError by remember { mutableStateOf<String?>(null) }
     var eqEnabled by remember { mutableStateOf(true) }
     var preset by remember { mutableStateOf("Bass Boost") }
@@ -185,6 +196,7 @@ private fun MeroContent(
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 buffering = playbackState == Player.STATE_BUFFERING
+                if (playbackState == Player.STATE_ENDED) endedTick++
             }
         }
         controller.addListener(listener)
@@ -193,14 +205,32 @@ private fun MeroContent(
         onDispose { controller.removeListener(listener) }
     }
 
+    // Every refresh reshuffles the whole seed pool, so the feed is different
+    // each time rather than cycling the same shelves.
     fun loadHome() {
+        homeLoading = true
+        homeSections = emptyList()
+        val fresh = container.homeRepository.seeds.shuffled()
+        val batch = fresh.take(FIRST_BATCH)
+        seedQueue = fresh.drop(FIRST_BATCH)
         scope.launch {
-            homeLoading = true
-            container.homeRepository.sections().fold(
+            container.homeRepository.sectionsFor(batch).fold(
                 onSuccess = { homeSections = it; homeError = null },
                 onFailure = { homeError = it.message ?: it.toString() },
             )
             homeLoading = false
+        }
+    }
+
+    fun loadMoreHome() {
+        if (homeLoading || homeLoadingMore || seedQueue.isEmpty()) return
+        homeLoadingMore = true
+        val batch = seedQueue.take(NEXT_BATCH)
+        seedQueue = seedQueue.drop(NEXT_BATCH)
+        scope.launch {
+            container.homeRepository.sectionsFor(batch)
+                .onSuccess { homeSections = homeSections + it }
+            homeLoadingMore = false
         }
     }
     LaunchedEffect(Unit) { loadHome() }
@@ -232,7 +262,7 @@ private fun MeroContent(
         }
     }
 
-    fun play(song: Song) {
+    fun start(song: Song) {
         current = song
         positionSec = 0
         playing = true
@@ -240,6 +270,27 @@ private fun MeroContent(
         connection.play(song)
         scope.launch { library.onPlayed(song) }
     }
+
+    /**
+     * Playing a track from a list makes the rest of that list the queue, which
+     * is what gives shuffle and auto-advance something to work with.
+     */
+    fun playFrom(song: Song, context: List<Song>, source: String = playSource) {
+        playSource = source
+        start(song)
+        scope.launch { library.setQueue(context.filterNot { it.id == song.id }) }
+    }
+
+    fun playNext() {
+        val q = queue
+        if (q.isEmpty()) return
+        val next = if (shuffle) q.random() else q.first()
+        start(next)
+        scope.launch { library.setQueue(q.filterNot { it.id == next.id }) }
+    }
+
+    // Auto-advance when a track finishes; nothing else moves the queue along.
+    LaunchedEffect(endedTick) { if (endedTick > 0) playNext() }
 
     // Scaffold measures the bottom bar and pads the NavHost by it, so the
     // mini-player lives in that slot rather than being positioned by hand — the
@@ -266,7 +317,7 @@ private fun MeroContent(
                             onPlayPause = {
                                 connection.controller?.let { if (it.isPlaying) it.pause() else it.play() }
                             },
-                            onNext = { queue.firstOrNull()?.let(::play) },
+                            onNext = { playNext() },
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         )
                     }
@@ -309,7 +360,9 @@ private fun MeroContent(
                         loading = homeLoading,
                         error = homeError,
                         onRetry = { loadHome() },
-                        onSongClick = ::play,
+                        onLoadMore = { loadMoreHome() },
+                        loadingMore = homeLoadingMore,
+                        onSongClick = { song, context -> playFrom(song, context, "Home") },
                         onSettingsClick = { navController.navigate(SettingsRoute) },
                         contentPadding = contentPadding,
                     )
@@ -345,7 +398,7 @@ private fun MeroContent(
                         onTabChange = { searchTab = it },
                         results = results,
                         nowPlayingId = current?.id,
-                        onSongClick = ::play,
+                        onSongClick = { song -> playFrom(song, results, "Search") },
                         contentPadding = contentPadding,
                     )
                     // ponytail: plain overlay, not proper SearchScreen error UI —
@@ -372,7 +425,7 @@ private fun MeroContent(
                         recentlyPlayed = recentlyPlayed,
                         mostPlayed = mostPlayed,
                         nowPlayingId = current?.id,
-                        onSongClick = ::play,
+                        onSongClick = { song -> playFrom(song, librarySongs, libraryTab) },
                         onSettingsClick = { navController.navigate(SettingsRoute) },
                         contentPadding = contentPadding,
                     )
@@ -459,7 +512,7 @@ private fun MeroContent(
                         variant = playerVariant,
                         ui = PlayerUi(
                             song = song,
-                            source = "Liked songs",
+                            source = playSource,
                             positionSec = positionSec,
                             playing = playing,
                             liked = liked,
@@ -478,7 +531,7 @@ private fun MeroContent(
                                 positionSec = 0
                                 connection.controller?.seekTo(0)
                             },
-                            onNext = { queue.firstOrNull()?.let(::play) },
+                            onNext = { playNext() },
                             onSeek = {
                                 val newPosSec = (it * song.durationSec).toInt()
                                 positionSec = newPosSec
@@ -515,7 +568,7 @@ private fun MeroContent(
                     queue = queue,
                     onClose = { overlay = null },
                     onClear = { scope.launch { library.clearQueue() } },
-                    onPlay = { play(it); overlay = null },
+                    onPlay = { playFrom(it, queue, playSource); overlay = null },
                     onRemove = { removed -> scope.launch { library.removeFromQueue(removed.id) } },
                 )
 
@@ -532,6 +585,9 @@ private fun MeroContent(
         }
     }
 }
+
+private const val FIRST_BATCH = 4
+private const val NEXT_BATCH = 3
 
 private data class NavItem(
     val label: String,

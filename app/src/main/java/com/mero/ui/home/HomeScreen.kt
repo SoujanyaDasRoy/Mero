@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
@@ -24,6 +26,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -41,12 +48,28 @@ fun HomeScreen(
     loading: Boolean,
     error: String?,
     onRetry: () -> Unit,
-    onSongClick: (Song) -> Unit,
+    onLoadMore: () -> Unit,
+    loadingMore: Boolean,
+    onSongClick: (Song, List<Song>) -> Unit,
     onSettingsClick: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val listState = rememberLazyListState()
+
+    // Pull in the next batch of shelves before the user hits the bottom, so the
+    // feed reads as continuous rather than as a page that ran out.
+    val nearEnd by remember {
+        derivedStateOf {
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val total = listState.layoutInfo.totalItemsCount
+            total > 0 && last >= total - 2
+        }
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { nearEnd }.collect { if (it) onLoadMore() }
+    }
 
     Column(modifier.fillMaxSize()) {
         Row(
@@ -86,6 +109,7 @@ fun HomeScreen(
             }
 
             else -> LazyColumn(
+                state = listState,
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
                 for (section in sections) {
@@ -107,7 +131,7 @@ fun HomeScreen(
                                     Column(
                                         Modifier
                                             .width(150.dp)
-                                            .clickable { onSongClick(song) },
+                                            .clickable { onSongClick(song, section.songs) },
                                     ) {
                                         Artwork(song.thumbnailUrl, size = 150, radius = 12)
                                         Text(
@@ -131,7 +155,24 @@ fun HomeScreen(
                         }
                     }
                 }
-                item { Spacer(Modifier.height(16.dp)) }
+                item {
+                    if (loadingMore) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(
+                                Modifier.size(28.dp),
+                                color = scheme.primary,
+                                strokeWidth = 2.dp,
+                            )
+                        }
+                    } else {
+                        Spacer(Modifier.height(16.dp))
+                    }
+                }
             }
         }
     }
