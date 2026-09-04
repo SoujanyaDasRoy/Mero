@@ -32,15 +32,6 @@ object InnerTubeSearchApi : SearchApi {
         return result.items
             .filterIsInstance<com.zionhuang.innertube.models.SongItem>()
             .filter { it.id.isNotBlank() }
-            .map { item ->
-                Song(
-                    id = item.id,
-                    title = item.title,
-                    artist = item.artists.joinToString(", ") { it.name },
-                    album = item.album?.name.orEmpty(),
-                    durationSec = item.duration ?: 0,
-                    thumbnailUrl = item.thumbnail,
-                )
-            }
+            .map { it.toDomain() }
     }
 }

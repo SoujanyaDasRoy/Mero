@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -77,6 +78,8 @@ data class PlayerUi(
     val shuffle: Boolean,
     val repeat: RepeatMode,
     val upNext: List<Song>,
+    /** e.g. "Opus · 160 kbps" — what the stream actually resolved to. */
+    val qualityLabel: String? = null,
 )
 
 data class PlayerActions(
@@ -131,13 +134,27 @@ private fun StandardPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modif
             onCollapse = actions.onCollapse,
         )
 
-        Spacer(Modifier.height(32.dp))
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Artwork(ui.song.thumbnailUrl, size = 330, radius = 16)
+        // Artwork sits high, not centred — Tidal-style.
+        Spacer(Modifier.height(20.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Artwork(
+                ui.song.thumbnailUrl,
+                size = 330,
+                radius = 16,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f),
+            )
         }
 
-        Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp)) {
-            Spacer(Modifier.height(36.dp))
+        // Middle block: what's playing, and where you are in it.
+        Spacer(Modifier.weight(1f))
+        Column(Modifier.padding(horizontal = 28.dp)) {
             TitleBlock(
                 song = ui.song,
                 liked = ui.liked,
@@ -146,53 +163,69 @@ private fun StandardPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modif
                 titleLineHeight = 32,
                 artistSize = 16,
             )
-
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(18.dp))
             SeekBar(ui, actions.onSeek, thumb = 16)
+        }
 
-            Spacer(Modifier.height(8.dp))
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ShuffleButton(ui.shuffle, actions.onShuffle, 48)
-                SkipButton(Icons.Rounded.SkipPrevious, "Previous", actions.onPrev, 56, 36)
-                PlayButton(ui.playing, actions.onPlayPause, size = 72, icon = 40, CircleShape)
-                SkipButton(Icons.Rounded.SkipNext, "Next", actions.onNext, 56, 36)
-                RepeatButton(ui.repeat, actions.onRepeat, 48)
-            }
+        // Transport sits low.
+        Spacer(Modifier.weight(1f))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ShuffleButton(ui.shuffle, actions.onShuffle, 48)
+            SkipButton(Icons.Rounded.SkipPrevious, "Previous", actions.onPrev, 56, 40)
+            PlayButton(ui.playing, actions.onPlayPause, size = 76, icon = 42, CircleShape)
+            SkipButton(Icons.Rounded.SkipNext, "Next", actions.onNext, 56, 40)
+            RepeatButton(ui.repeat, actions.onRepeat, 48)
+        }
 
-            Spacer(Modifier.weight(1f))
-            Row(
+        Spacer(Modifier.height(20.dp))
+        if (ui.qualityLabel != null) {
+            Text(
+                ui.qualityLabel,
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextIconButton(Icons.Rounded.Lyrics, "Lyrics", actions.onLyrics)
-                IconButton(onClick = actions.onEqualizer) {
-                    Icon(
-                        Icons.Rounded.GraphicEq,
-                        "Equalizer",
-                        Modifier.size(22.dp),
-                        tint = scheme.onSurfaceVariant,
-                    )
-                }
-                IconButton(onClick = actions.onSleepTimer) {
-                    Icon(
-                        Icons.Rounded.Bedtime,
-                        "Sleep timer",
-                        Modifier.size(22.dp),
-                        tint = scheme.onSurfaceVariant,
-                    )
-                }
-                TextIconButton(Icons.Rounded.QueueMusic, "Queue", actions.onQueue)
-            }
+                    .padding(bottom = 6.dp),
+                fontSize = 11.sp,
+                letterSpacing = 0.5.sp,
+                color = scheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
         }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextIconButton(Icons.Rounded.Lyrics, "Lyrics", actions.onLyrics)
+            IconButton(onClick = actions.onEqualizer) {
+                Icon(
+                    Icons.Rounded.GraphicEq,
+                    "Equalizer",
+                    Modifier.size(22.dp),
+                    tint = scheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = actions.onSleepTimer) {
+                Icon(
+                    Icons.Rounded.Bedtime,
+                    "Sleep timer",
+                    Modifier.size(22.dp),
+                    tint = scheme.onSurfaceVariant,
+                )
+            }
+            TextIconButton(Icons.Rounded.QueueMusic, "Queue", actions.onQueue)
+        }
+        Spacer(Modifier.height(8.dp))
     }
 }
+
 
 /* ------------------------------ B · Full-bleed ----------------------------- */
 

@@ -2,8 +2,13 @@ package com.mero
 
 import android.app.Application
 import android.content.Context
+import androidx.room.Room
+import com.mero.data.HomeRepository
 import com.mero.data.InnerTubeSearchApi
+import com.mero.data.LibraryRepository
 import com.mero.data.SearchRepository
+import com.mero.data.db.MeroDatabase
+import com.mero.playback.AudioEffects
 import com.mero.data.StreamRepository
 import com.mero.data.YtDlpPlayerApi
 import com.zionhuang.innertube.YouTube
@@ -19,7 +24,21 @@ import java.util.Locale
  * "Why a hand-written DI container".
  */
 class AppContainer(context: Context) {
+
+    private val database: MeroDatabase by lazy {
+        Room.databaseBuilder(
+            context.applicationContext,
+            MeroDatabase::class.java,
+            "mero.db",
+        ).build()
+    }
+
     val searchRepository: SearchRepository by lazy { SearchRepository(InnerTubeSearchApi) }
+    val homeRepository: HomeRepository by lazy { HomeRepository() }
+
+    /** Shared between the equalizer screen and the playback service. */
+    val audioEffects: AudioEffects by lazy { AudioEffects() }
+    val libraryRepository: LibraryRepository by lazy { LibraryRepository(database.dao()) }
 
     // YtDlpPlayerApi, not InnerTubePlayerApi — see StreamRepository.kt's note
     // on InnerTubePlayerApi for why.

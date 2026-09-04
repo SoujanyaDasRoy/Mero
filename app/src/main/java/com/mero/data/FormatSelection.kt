@@ -24,3 +24,14 @@ fun selectAudioFormat(formats: List<AudioFormat>, quality: Quality): AudioFormat
     return audioOnly.firstOrNull { it.itag == quality.preferredItag }
         ?: audioOnly.maxByOrNull { it.bitrate }
 }
+
+/** Human-readable codec name derived from the format's mime type / itag. */
+fun AudioFormat.codecLabel(): String = when {
+    mimeType.contains("opus", ignoreCase = true) -> "Opus"
+    mimeType.contains("webm", ignoreCase = true) -> "Opus"
+    mimeType.contains("mp4", ignoreCase = true) -> "AAC"
+    mimeType.contains("m4a", ignoreCase = true) -> "AAC"
+    itag == 251 || itag == 250 || itag == 249 -> "Opus"
+    itag == 140 -> "AAC"
+    else -> "Audio"
+}

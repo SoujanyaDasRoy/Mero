@@ -40,13 +40,16 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.mero.data.SampleData
 import com.mero.domain.Song
 import com.mero.ui.components.MeroChip
 import com.mero.ui.components.SongRow
 
+private val SEARCH_TABS = listOf("Songs", "Albums", "Artists", "Playlists")
+
 @Composable
 fun SearchScreen(
+    recentSearches: List<String>,
+    onRemoveRecent: (String) -> Unit,
     query: String,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
@@ -107,7 +110,12 @@ fun SearchScreen(
         }
 
         if (query.isBlank()) {
-            SearchIdle(onQueryChange = { onQueryChange(it); onSearch() }, contentPadding)
+            SearchIdle(
+                recentSearches = recentSearches,
+                onRemoveRecent = onRemoveRecent,
+                onQueryChange = { onQueryChange(it); onSearch() },
+                contentPadding = contentPadding,
+            )
         } else {
             Row(
                 Modifier
@@ -115,7 +123,7 @@ fun SearchScreen(
                     .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                SampleData.searchTabs.forEach { tab ->
+                SEARCH_TABS.forEach { tab ->
                     MeroChip(tab, selected = tab == selectedTab, onClick = { onTabChange(tab) })
                 }
             }
@@ -141,7 +149,12 @@ fun SearchScreen(
 }
 
 @Composable
-private fun SearchIdle(onQueryChange: (String) -> Unit, contentPadding: PaddingValues) {
+private fun SearchIdle(
+    recentSearches: List<String>,
+    onRemoveRecent: (String) -> Unit,
+    onQueryChange: (String) -> Unit,
+    contentPadding: PaddingValues,
+) {
     val scheme = MaterialTheme.colorScheme
     LazyColumn(contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding())) {
         item {
@@ -153,7 +166,7 @@ private fun SearchIdle(onQueryChange: (String) -> Unit, contentPadding: PaddingV
                 color = scheme.onSurfaceVariant,
             )
         }
-        items(SampleData.recentSearches) { term ->
+        items(recentSearches) { term ->
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -177,36 +190,13 @@ private fun SearchIdle(onQueryChange: (String) -> Unit, contentPadding: PaddingV
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                IconButton(onClick = {}) {
+                IconButton(onClick = { onRemoveRecent(term) }) {
                     Icon(
                         Icons.Rounded.Close,
                         contentDescription = "Remove",
                         tint = scheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp),
                     )
-                }
-            }
-        }
-        item {
-            Text(
-                "Trending on YouTube Music",
-                Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = scheme.onSurfaceVariant,
-            )
-        }
-        item {
-            // Chips wrap onto rows of three — FlowRow is still experimental in the
-            // pinned Compose BOM, and three-per-row matches the design's density.
-            SampleData.trending.chunked(3).forEach { row ->
-                Row(
-                    Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    row.forEach { term ->
-                        MeroChip(term, selected = false, onClick = { onQueryChange(term) })
-                    }
                 }
             }
         }

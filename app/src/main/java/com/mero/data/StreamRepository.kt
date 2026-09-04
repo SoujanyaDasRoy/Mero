@@ -5,6 +5,9 @@ import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import com.zionhuang.innertube.YouTube
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -12,13 +15,23 @@ import java.util.concurrent.atomic.AtomicBoolean
 data class ResolvedStream(
     val url: String,
     val headers: Map<String, String>,
-)
+    val bitrateKbps: Int,
+    val codec: String,
+) {
+    /** e.g. "Opus · 160 kbps" — shown in Now Playing. */
+    val label: String get() = "$codec · $bitrateKbps kbps"
+}
 
 fun interface PlayerApi {
     suspend fun formatsFor(videoId: String): List<AudioFormat>
 }
 
 class StreamRepository(private val api: PlayerApi) {
+
+    private val _lastResolved = MutableStateFlow<ResolvedStream?>(null)
+
+    /** What the currently playing track actually resolved to, for the UI. */
+    val lastResolved: StateFlow<ResolvedStream?> = _lastResolved.asStateFlow()
 
     /**
      * Never cache or persist the result — the URL expires in roughly six hours.
@@ -29,7 +42,12 @@ class StreamRepository(private val api: PlayerApi) {
         val formats = api.formatsFor(videoId)
         val chosen = selectAudioFormat(formats, quality)
             ?: error("No playable audio format for $videoId")
-        return ResolvedStream(chosen.url, chosen.headers)
+        return ResolvedStream(
+            url = chosen.url,
+            headers = chosen.headers,
+            bitrateKbps = chosen.bitrate / 1000,
+            codec = chosen.codecLabel(),
+        ).also { _lastResolved.value = it }
     }
 }
 

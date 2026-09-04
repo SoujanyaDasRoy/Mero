@@ -38,7 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.mero.data.SampleData
+import com.mero.data.EqPresets
 import com.mero.ui.components.MeroChip
 import com.mero.ui.components.PreferenceRow
 import kotlin.math.roundToInt
@@ -102,7 +102,7 @@ fun EqualizerScreen(
                     .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                SampleData.eqPresets.keys.forEach { name ->
+                EqPresets.presets.keys.forEach { name ->
                     MeroChip(name, name == preset, onClick = { onPresetChange(name) })
                 }
             }
@@ -136,7 +136,7 @@ fun EqualizerScreen(
                     bands.forEachIndexed { index, db ->
                         BandSlider(
                             db = db,
-                            hz = SampleData.eqBandLabels.getOrElse(index) { "" },
+                            hz = EqPresets.bandLabels.getOrElse(index) { "" },
                             onChange = { onBandChange(index, it) },
                         )
                     }

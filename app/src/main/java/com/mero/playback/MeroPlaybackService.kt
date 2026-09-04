@@ -1,6 +1,7 @@
 package com.mero.playback
 
 import androidx.media3.common.AudioAttributes
+import androidx.media3.common.Player
 import androidx.media3.common.C
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
@@ -40,12 +41,22 @@ class MeroPlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
 
+        // The equalizer processes this session only — not system audio.
+        val effects = container.audioEffects
+        effects.attach(player.audioSessionId)
+        player.addListener(object : Player.Listener {
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                effects.attach(audioSessionId)
+            }
+        })
+
         mediaSession = MediaSession.Builder(this, player).build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession
 
     override fun onDestroy() {
+        (application as MeroApplication).container.audioEffects.release()
         mediaSession?.run {
             player.release()
             release()
