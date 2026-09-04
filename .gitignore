@@ -1,0 +1,17 @@
+# Secrets — never commit
+*.jks
+*.keystore
+keystore.properties
+local.properties
+secrets.properties
+
+# Build
+.gradle/
+build/
+*.apk
+*.aab
+
+# IDE
+.idea/
+*.iml
+.DS_Store
