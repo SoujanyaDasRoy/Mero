@@ -52,12 +52,33 @@ class SearchRepository(
  * — see CLAUDE.md constraint 1, no Google sign-in anywhere in Mero.
  */
 object InnerTubeSearchApi : SearchApi {
+
+    /**
+     * One search page is about 20 tracks, which runs out fast. Following the
+     * continuation token a few times gets a useful list without turning a
+     * search into an open-ended crawl; each extra page is one cheap request.
+     */
+    private const val TARGET_RESULTS = 80
+    private const val MAX_PAGES = 5
+
     override suspend fun searchSongs(query: String): List<Song> {
-        val result = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrThrow()
-        return result.items
-            .filterIsInstance<SongItem>()
-            .filter { it.id.isNotBlank() }
-            .map { it.toDomain() }
+        var page = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrThrow()
+        val songs = LinkedHashMap<String, Song>()
+        var fetched = 1
+
+        while (true) {
+            page.items
+                .filterIsInstance<SongItem>()
+                .filter { it.id.isNotBlank() }
+                .forEach { songs.putIfAbsent(it.id, it.toDomain()) }
+
+            val next = page.continuation
+            if (next == null || songs.size >= TARGET_RESULTS || fetched >= MAX_PAGES) break
+            // A failed continuation just means fewer results, never no results.
+            page = YouTube.searchContinuation(next).getOrNull() ?: break
+            fetched++
+        }
+        return songs.values.toList()
     }
 }
 

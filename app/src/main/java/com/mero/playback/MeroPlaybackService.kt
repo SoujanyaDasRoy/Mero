@@ -3,8 +3,7 @@ package com.mero.playback
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.Player
 import androidx.media3.common.C
-import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
@@ -24,13 +23,21 @@ class MeroPlaybackService : MediaSessionService() {
         super.onCreate()
         val container = (application as MeroApplication).container
 
-        val dataSourceFactory = ResolvingDataSource.Factory(
-            DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true),
-            StreamResolver(container.streamRepository),
-        )
-
         val player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(container.mediaDataSourceFactory(this)))
+            .setLoadControl(
+                // Defaults wait 2.5s of buffered audio before starting. For a
+                // 160 kbps stream that is pure dead time on top of extraction.
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(
+                        /* minBufferMs = */ 15_000,
+                        /* maxBufferMs = */ 60_000,
+                        /* bufferForPlaybackMs = */ 500,
+                        /* bufferForPlaybackAfterRebufferMs = */ 1_500,
+                    )
+                    .setPrioritizeTimeOverSizeThresholds(true)
+                    .build(),
+            )
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)

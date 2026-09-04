@@ -206,19 +206,36 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
         // in case a play somehow beats startup.
         YoutubeDL.init(appContext)
 
+        val started = System.currentTimeMillis()
         val request = YoutubeDLRequest("https://www.youtube.com/watch?v=$videoId")
         // yt-dlp writes advisories (e.g. "your version is older than 90 days")
         // to stderr, and the wrapper turns any stderr into an exception.
         request.addOption("--no-warnings")
+        // Deliberately NOT pinning player_client. android_vr looks attractive
+        // (its URLs skip the JavaScript signature challenge, which is most of
+        // the extraction time) but it answers with storyboards and one muxed
+        // 360p stream — no adaptive audio at all, so nothing is playable.
+        // yt-dlp's own client order is the thing that keeps working.
+        request.addOption("--extractor-args", "youtube:skip=translated_subs")
+        // Nothing here needs the video half of the manifest, the rest of a
+        // playlist, or a second guess at a format that already failed.
+        request.addOption("--no-playlist")
+        request.addOption("--no-check-formats")
+        request.addOption("--socket-timeout", "10")
+        request.addOption("--extractor-retries", "1")
         // runInterruptible, not a bare call: getInfo blocks on a subprocess,
         // and a plain blocking call ignores coroutine cancellation entirely —
         // which would make resolve()'s timeout decorative. Interrupting the
         // thread makes Process.waitFor throw, so the timeout is real.
         val info = runInterruptible { YoutubeDL.getInfo(request) }
+        Log.i(TAG, "extracted $videoId in ${System.currentTimeMillis() - started}ms")
         val fallbackHeaders = info.httpHeaders.orEmpty()
-        info.formats.orEmpty().mapNotNull { format ->
+        val audio = info.formats.orEmpty().mapNotNull { format ->
             val url = format.url ?: return@mapNotNull null
-            val itag = format.formatId?.toIntOrNull() ?: return@mapNotNull null
+            // Leading digits, not a strict Int parse: some clients label the
+            // same itag "251-drc" or similar, and requiring a pure number threw
+            // every audio format away and left nothing playable.
+            val itag = format.formatId.orEmpty().takeWhile(Char::isDigit).toIntOrNull() ?: 0
             val isAudioOnly = format.vcodec == "none" && !format.acodec.isNullOrBlank() &&
                 format.acodec != "none"
             if (!isAudioOnly) return@mapNotNull null
@@ -230,5 +247,13 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
                 headers = format.httpHeaders ?: fallbackHeaders,
             )
         }
+        if (audio.isEmpty()) {
+            Log.w(
+                TAG,
+                "no audio-only formats for $videoId; saw " +
+                    info.formats.orEmpty().joinToString { "${it.formatId}/${it.acodec}/${it.vcodec}" },
+            )
+        }
+        audio
     }
 }

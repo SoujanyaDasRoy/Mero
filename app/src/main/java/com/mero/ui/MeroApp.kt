@@ -77,7 +77,9 @@ import com.mero.ui.search.SearchScreen
 import com.mero.ui.settings.SettingsScreen
 import com.mero.ui.theme.MeroAccent
 import com.mero.ui.theme.MeroTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
@@ -179,7 +181,22 @@ private fun MeroContent(
     var query by remember { mutableStateOf("") }
     var searchTab by remember { mutableStateOf("Songs") }
     var libraryTab by remember { mutableStateOf("Liked") }
-    var recentSearches by remember { mutableStateOf(emptyList<String>()) }
+    // Recent searches survive the process, not just the composition: the point
+    // of a recent list is the search you ran yesterday.
+    val searchPrefs = remember {
+        context.getSharedPreferences("search", android.content.Context.MODE_PRIVATE)
+    }
+    var recentSearches by remember {
+        mutableStateOf(
+            searchPrefs.getString("recent", "")
+                .orEmpty()
+                .split(SEARCH_SEP)
+                .filter { it.isNotBlank() },
+        )
+    }
+    LaunchedEffect(recentSearches) {
+        searchPrefs.edit().putString("recent", recentSearches.joinToString(SEARCH_SEP)).apply()
+    }
     var submittedQuery by remember { mutableStateOf("") }
     var suggestions by remember { mutableStateOf(com.mero.data.Suggestions(emptyList(), emptyList())) }
     var homeSections by remember { mutableStateOf(emptyList<HomeSection>()) }
@@ -356,8 +373,18 @@ private fun MeroContent(
     val nextId = queue.firstOrNull()?.id
     LaunchedEffect(nextId) {
         if (nextId == null) return@LaunchedEffect
-        delay(4_000)
+        delay(2_000)
         container.streamRepository.prefetch(nextId)
+        // Then pull the opening bytes down too, so pressing next is instant
+        // rather than merely "already knows the URL".
+        withContext(Dispatchers.IO) {
+            runCatching {
+                com.mero.playback.MediaCache.warm(
+                    container.mediaDataSourceFactory(context),
+                    nextId,
+                )
+            }
+        }
     }
 
     // Lyrics are fetched lazily — only when the sheet is actually open.
@@ -385,7 +412,7 @@ private fun MeroContent(
             suggestions = com.mero.data.Suggestions(emptyList(), emptyList())
             return@LaunchedEffect
         }
-        delay(250)
+        delay(150)
         container.searchRepository.suggest(query)
             .onSuccess { suggestions = it }
     }
@@ -669,6 +696,7 @@ private fun MeroContent(
                         onClearCache = {
                             scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                 context.cacheDir.resolve("artwork").deleteRecursively()
+                                context.cacheDir.resolve("media").deleteRecursively()
                             }
                         },
                         playerVariant = playerVariant,
@@ -818,3 +846,6 @@ private data class NavItem(
     val route: Any,
     val routeClass: kotlin.reflect.KClass<*>,
 )
+
+/** Recent-search list separator; queries never contain a newline. */
+private const val SEARCH_SEP = "\n"

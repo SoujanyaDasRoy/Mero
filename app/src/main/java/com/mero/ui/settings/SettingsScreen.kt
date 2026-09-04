@@ -233,8 +233,8 @@ fun SettingsScreen(
                 }
                 PreferenceRow(
                     Icons.Rounded.Storage,
-                    "Clear artwork cache",
-                    "Frees space used by cover art. It re-downloads as needed.",
+                    "Clear cache",
+                    "Frees cached audio and cover art. Both re-download as needed.",
                     onClick = onClearCache,
                 ) {
                     Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
@@ -277,10 +277,10 @@ fun SettingsScreen(
                     "Updates",
                     "Delivered through Obtainium",
                 ) {
-                    Text("1.2.1", fontSize = 13.sp, color = scheme.onSurfaceVariant)
+                    Text("1.3.0", fontSize = 13.sp, color = scheme.onSurfaceVariant)
                 }
                 Text(
-                    "Mero 1.2.1 · GPL-3.0 · updates via Obtainium",
+                    "Mero 1.3.0 · GPL-3.0 · updates via Obtainium",
                     Modifier.padding(20.dp),
                     fontSize = 12.sp,
                     lineHeight = 18.sp,

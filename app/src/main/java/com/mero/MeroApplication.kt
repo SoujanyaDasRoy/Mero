@@ -9,7 +9,12 @@ import coil3.memory.MemoryCache
 import coil3.request.crossfade
 import okio.Path.Companion.toOkioPath
 import android.content.Context
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.datasource.cache.CacheDataSource
 import androidx.room.Room
+import com.mero.playback.MediaCache
+import com.mero.playback.StreamResolver
 import com.mero.data.HomeRepository
 import com.mero.data.InnerTubeSearchApi
 import com.mero.data.LibraryRepository
@@ -59,6 +64,23 @@ class AppContainer(context: Context) {
     val ytDlpApi: YtDlpPlayerApi by lazy { YtDlpPlayerApi(context.applicationContext) }
 
     val streamRepository: StreamRepository by lazy { StreamRepository(ytDlpApi) }
+
+    /**
+     * HTTP -> resolve mero:// to a live CDN URL -> cache the bytes on disk.
+     * Shared by the player and by the next-track warm-up so both fill and read
+     * the same cache. See playback/MediaCache.kt.
+     */
+    fun mediaDataSourceFactory(ctx: Context): CacheDataSource.Factory {
+        val resolving = ResolvingDataSource.Factory(
+            DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true),
+            StreamResolver(streamRepository),
+        )
+        return CacheDataSource.Factory()
+            .setCache(MediaCache.get(ctx))
+            .setUpstreamDataSourceFactory(resolving)
+            .setCacheKeyFactory(MediaCache.keyFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+    }
 }
 
 class MeroApplication : Application(), SingletonImageLoader.Factory {
