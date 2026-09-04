@@ -6,10 +6,13 @@ YouTube, plays offline, ships a real DSP suite. Private distribution to ~10
 friends. Non-commercial.
 
 **Spec:** `docs/superpowers/specs/2026-09-04-mero-v1-prd.md`
+**Architecture and rationale:** `docs/architecture.md`
 **Plans:** `docs/superpowers/plans/`
 
-Read the spec before proposing anything architectural. It records decisions and
-their costs; several look wrong without the rationale.
+Read `docs/architecture.md` before proposing anything structural. Every decision
+there records its alternatives and a revisit trigger; several look wrong without
+the rationale, and a few look like ceremony worth deleting until you read why
+they exist.
 
 ## Hard constraints
 
@@ -39,6 +42,12 @@ Violating any of these is a bug, not a style disagreement.
 
 6. **Spotify is metadata only.** Its audio is Widevine-protected and Mero does
    not touch it. Playlist import resolves each track to a YouTube video.
+
+7. **The player is never a navigation destination.** `NavHost` owns browse
+   screens only; the mini-player/Now Playing sheet lives outside it at app
+   scope. Making the player a destination breaks back-stack behaviour
+   irrecoverably — back would navigate *away from playback*, and the player
+   would unmount on every navigation. (`docs/architecture.md`, Part 1)
 
 ## Build
 
