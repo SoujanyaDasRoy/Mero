@@ -21,15 +21,19 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.media3.common.Player
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
@@ -37,9 +41,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.mero.MeroApplication
 import com.mero.data.SampleData
 import com.mero.domain.RepeatMode
 import com.mero.domain.Song
+import com.mero.playback.PlayerConnection
 import com.mero.ui.equalizer.EqualizerScreen
 import com.mero.ui.home.HomeScreen
 import com.mero.ui.importer.ImportScreen
@@ -57,6 +63,7 @@ import com.mero.ui.settings.SettingsScreen
 import com.mero.ui.theme.MeroAccent
 import com.mero.ui.theme.MeroTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
 /* ---- Navigation destinations. Browse screens only — the player is never one. ---- */
@@ -110,6 +117,13 @@ private fun MeroContent(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val destination = backStackEntry?.destination
 
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val container = remember { (context.applicationContext as MeroApplication).container }
+    val connection = remember { PlayerConnection() }
+    LaunchedEffect(Unit) { connection.connect(context) }
+    DisposableEffect(Unit) { onDispose { connection.release() } }
+
     var current by remember { mutableStateOf<Song?>(null) }
     var playing by remember { mutableStateOf(false) }
     var positionSec by remember { mutableIntStateOf(0) }
@@ -132,19 +146,34 @@ private fun MeroContent(
     var importStep by remember { mutableIntStateOf(1) }
     var importPicked by remember { mutableStateOf(setOf(0, 1, 3)) }
 
-    // Fake transport so the design's progress bar moves. Dies with the real player.
-    LaunchedEffect(playing, current) {
+    // Mirrors the real MediaController rather than owning playback state itself —
+    // docs/architecture.md, "Playback state is not screen state" (this is the
+    // walking-skeleton version of that wrapper; see PlayerConnection's own note).
+    DisposableEffect(connection.controller) {
+        val controller = connection.controller ?: return@DisposableEffect onDispose {}
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                playing = isPlaying
+            }
+        }
+        controller.addListener(listener)
+        playing = controller.isPlaying
+        onDispose { controller.removeListener(listener) }
+    }
+
+    // Media3 has no continuous position stream — poll while playing, same as any
+    // other player UI (system Now Playing, browser <audio> controls, etc).
+    LaunchedEffect(playing, current, connection.controller) {
         while (playing && current != null) {
-            delay(1000)
-            val duration = current?.durationSec ?: 0
-            positionSec = if (positionSec + 1 >= duration) 0 else positionSec + 1
+            positionSec = ((connection.controller?.currentPosition ?: 0L) / 1000).toInt()
+            delay(500)
         }
     }
 
     fun play(song: Song) {
         current = song
         positionSec = 0
-        playing = true
+        connection.play(song)
     }
 
     // Scaffold measures the bottom bar and pads the NavHost by it, so the
@@ -168,7 +197,9 @@ private fun MeroContent(
                                 positionSec.toFloat() / song.durationSec
                             },
                             onExpand = { expanded = true },
-                            onPlayPause = { playing = !playing },
+                            onPlayPause = {
+                                connection.controller?.let { if (it.isPlaying) it.pause() else it.play() }
+                            },
                             onNext = { queue.firstOrNull()?.let(::play) },
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         )
@@ -216,17 +247,16 @@ private fun MeroContent(
                 }
 
                 composable<SearchRoute> {
-                    val results = remember(query, searchTab) {
-                        SampleData.songs.filter {
-                            query.isBlank() ||
-                                it.title.contains(query, ignoreCase = true) ||
-                                it.artist.contains(query, ignoreCase = true)
-                        }
-                    }
+                    var results by remember { mutableStateOf<List<Song>>(emptyList()) }
                     SearchScreen(
                         query = query,
                         onQueryChange = { query = it },
-                        onSearch = {},
+                        onSearch = {
+                            scope.launch {
+                                results = container.searchRepository.search(query)
+                                    .getOrElse { emptyList() }
+                            }
+                        },
                         selectedTab = searchTab,
                         onTabChange = { searchTab = it },
                         results = results,
@@ -348,10 +378,19 @@ private fun MeroContent(
                         ),
                         actions = PlayerActions(
                             onCollapse = { expanded = false },
-                            onPlayPause = { playing = !playing },
-                            onPrev = { positionSec = 0 },
+                            onPlayPause = {
+                                connection.controller?.let { if (it.isPlaying) it.pause() else it.play() }
+                            },
+                            onPrev = {
+                                positionSec = 0
+                                connection.controller?.seekTo(0)
+                            },
                             onNext = { queue.firstOrNull()?.let(::play) },
-                            onSeek = { positionSec = (it * song.durationSec).toInt() },
+                            onSeek = {
+                                val newPosSec = (it * song.durationSec).toInt()
+                                positionSec = newPosSec
+                                connection.controller?.seekTo(newPosSec * 1000L)
+                            },
                             onLike = { liked = !liked },
                             onShuffle = { shuffle = !shuffle },
                             onRepeat = {
