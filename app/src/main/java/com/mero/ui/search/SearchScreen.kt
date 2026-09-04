@@ -56,6 +56,9 @@ fun SearchScreen(
     selectedTab: String,
     onTabChange: (String) -> Unit,
     results: List<Song>,
+    suggestions: List<String>,
+    suggestedSongs: List<Song>,
+    onSuggestionClick: (String) -> Unit,
     nowPlayingId: String?,
     onSongClick: (Song) -> Unit,
     contentPadding: PaddingValues,
@@ -109,7 +112,59 @@ fun SearchScreen(
             }
         }
 
-        if (query.isBlank()) {
+        val showingSuggestions = suggestions.isNotEmpty() || suggestedSongs.isNotEmpty()
+
+        if (showingSuggestions) {
+            // Live suggestions while typing — the user shouldn't have to finish
+            // the word and hit search to see what YouTube would match.
+            LazyColumn(
+                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+            ) {
+                items(suggestions, key = { "q-$it" }) { term ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .clickable { onSuggestionClick(term) }
+                            .padding(start = 16.dp, end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Icon(
+                            Icons.Rounded.Search,
+                            contentDescription = null,
+                            tint = scheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(
+                            term,
+                            Modifier.weight(1f),
+                            fontSize = 16.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (suggestedSongs.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Songs",
+                            Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = scheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                items(suggestedSongs, key = { it.id }) { song ->
+                    SongRow(
+                        song = song,
+                        highlighted = song.id == nowPlayingId,
+                        onClick = { onSongClick(song) },
+                    )
+                }
+            }
+        } else if (query.isBlank()) {
             SearchIdle(
                 recentSearches = recentSearches,
                 onRemoveRecent = onRemoveRecent,

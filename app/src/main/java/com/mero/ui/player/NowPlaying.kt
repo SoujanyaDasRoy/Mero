@@ -84,7 +84,16 @@ data class PlayerUi(
     val qualityLabel: String? = null,
     /** Extraction/buffering in flight — the play button shows a spinner. */
     val buffering: Boolean = false,
-)
+    /**
+     * Duration reported by the player itself. InnerTube's metadata duration
+     * disagrees with the real stream often enough to visibly desync the
+     * progress bar, so this wins whenever it's known.
+     */
+    val durationSec: Int = 0,
+) {
+    val effectiveDurationSec: Int
+        get() = if (durationSec > 0) durationSec else song.durationSec
+}
 
 data class PlayerActions(
     val onCollapse: () -> Unit,
@@ -592,10 +601,11 @@ private fun SeekBar(
     timeSize: Int = 12,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val pct = if (ui.song.durationSec == 0) {
+    val duration = ui.effectiveDurationSec
+    val pct = if (duration == 0) {
         0f
     } else {
-        (ui.positionSec.toFloat() / ui.song.durationSec).coerceIn(0f, 1f)
+        (ui.positionSec.toFloat() / duration).coerceIn(0f, 1f)
     }
     Column {
         Box(
@@ -653,7 +663,7 @@ private fun SeekBar(
                 color = scheme.onSurfaceVariant,
             )
             Text(
-                ui.song.durationSec.asClock(),
+                duration.asClock(),
                 fontSize = timeSize.sp,
                 color = scheme.onSurfaceVariant,
             )

@@ -42,9 +42,9 @@ class AppContainer(context: Context) {
 
     // YtDlpPlayerApi, not InnerTubePlayerApi — see StreamRepository.kt's note
     // on InnerTubePlayerApi for why.
-    val streamRepository: StreamRepository by lazy {
-        StreamRepository(YtDlpPlayerApi(context.applicationContext))
-    }
+    val ytDlpApi: YtDlpPlayerApi by lazy { YtDlpPlayerApi(context.applicationContext) }
+
+    val streamRepository: StreamRepository by lazy { StreamRepository(ytDlpApi) }
 }
 
 class MeroApplication : Application() {
@@ -53,6 +53,8 @@ class MeroApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         initInnerTube()
+        // Warm yt-dlp off the playback path — see YtDlpPlayerApi.prepare().
+        CoroutineScope(Dispatchers.IO).launch { container.ytDlpApi.prepare() }
     }
 
     /**

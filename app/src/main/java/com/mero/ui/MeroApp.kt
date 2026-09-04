@@ -159,6 +159,7 @@ private fun MeroContent(
     var current by remember { mutableStateOf<Song?>(null) }
     var playing by remember { mutableStateOf(false) }
     var buffering by remember { mutableStateOf(false) }
+    var playerDurationSec by remember { mutableIntStateOf(0) }
     var positionSec by remember { mutableIntStateOf(0) }
     var expanded by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf<String?>(null) }
@@ -172,11 +173,14 @@ private fun MeroContent(
     var searchTab by remember { mutableStateOf("Songs") }
     var libraryTab by remember { mutableStateOf("Liked") }
     var recentSearches by remember { mutableStateOf(emptyList<String>()) }
+    var submittedQuery by remember { mutableStateOf("") }
+    var suggestions by remember { mutableStateOf(com.mero.data.Suggestions(emptyList(), emptyList())) }
     var homeSections by remember { mutableStateOf(emptyList<HomeSection>()) }
     var homeLoading by remember { mutableStateOf(true) }
     var homeLoadingMore by remember { mutableStateOf(false) }
     var seedQueue by remember { mutableStateOf(emptyList<String>()) }
     var endedTick by remember { mutableIntStateOf(0) }
+    var retriedForError by remember { mutableStateOf(0L) }
     var playSource by remember { mutableStateOf("Mero") }
 
     // Same slice LibraryScreen shows, so tapping a row queues its siblings.
@@ -210,6 +214,18 @@ private fun MeroContent(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 buffering = playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_ENDED) endedTick++
+            }
+
+            // A failed load leaves the player IDLE, where play() does nothing —
+            // which is why a second press "worked". Re-prepare once so the
+            // retry is automatic, and drop the spinner either way.
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                buffering = false
+                if (retriedForError != error.timestampMs) {
+                    retriedForError = error.timestampMs
+                    controller.prepare()
+                    controller.play()
+                }
             }
         }
         controller.addListener(listener)
@@ -259,7 +275,12 @@ private fun MeroContent(
     // other player UI (system Now Playing, browser <audio> controls, etc).
     LaunchedEffect(playing, current, connection.controller) {
         while (playing && current != null) {
-            positionSec = ((connection.controller?.currentPosition ?: 0L) / 1000).toInt()
+            val c = connection.controller
+            positionSec = ((c?.currentPosition ?: 0L) / 1000).toInt()
+            // C.TIME_UNSET shows up as a negative duration until the stream is
+            // actually loaded, hence the guard.
+            val reported = c?.duration ?: 0L
+            if (reported > 0) playerDurationSec = (reported / 1000).toInt()
             delay(500)
         }
     }
@@ -278,6 +299,7 @@ private fun MeroContent(
     fun start(song: Song) {
         current = song
         positionSec = 0
+        playerDurationSec = 0
         playing = true
         buffering = true
         connection.play(song)
@@ -305,6 +327,19 @@ private fun MeroContent(
     // Auto-advance when a track finishes; nothing else moves the queue along.
     LaunchedEffect(endedTick) { if (endedTick > 0) playNext() }
 
+    // Suggestions as you type. Debounced so a fast typist doesn't fire a
+    // request per keystroke, and skipped once the query has been submitted
+    // (at that point the results list is what matters).
+    LaunchedEffect(query) {
+        if (query.isBlank() || query == submittedQuery) {
+            suggestions = com.mero.data.Suggestions(emptyList(), emptyList())
+            return@LaunchedEffect
+        }
+        delay(250)
+        container.searchRepository.suggest(query)
+            .onSuccess { suggestions = it }
+    }
+
     // Scaffold measures the bottom bar and pads the NavHost by it, so the
     // mini-player lives in that slot rather than being positioned by hand — the
     // player still sits outside the NavHost, which is the actual constraint.
@@ -321,10 +356,13 @@ private fun MeroContent(
                             song = song,
                             playing = playing,
                             buffering = buffering,
-                            progress = if (song.durationSec == 0) {
-                                0f
-                            } else {
-                                positionSec.toFloat() / song.durationSec
+                            progress = run {
+                                val d = if (playerDurationSec > 0) {
+                                    playerDurationSec
+                                } else {
+                                    song.durationSec
+                                }
+                                if (d == 0) 0f else (positionSec.toFloat() / d).coerceIn(0f, 1f)
                             },
                             onExpand = { expanded = true },
                             onPlayPause = {
@@ -400,8 +438,22 @@ private fun MeroContent(
                         onRemoveRecent = { term -> recentSearches = recentSearches - term },
                         query = query,
                         onQueryChange = { query = it },
+                        suggestions = suggestions.queries,
+                        suggestedSongs = suggestions.songs,
+                        onSuggestionClick = { term ->
+                            query = term
+                            submittedQuery = term
+                            recentSearches = (listOf(term) + (recentSearches - term)).take(10)
+                            scope.launch {
+                                container.searchRepository.search(term).fold(
+                                    onSuccess = { songs -> results = songs; searchError = null },
+                                    onFailure = { e -> searchError = e.message ?: e.toString() },
+                                )
+                            }
+                        },
                         onSearch = {
                             val term = query.trim()
+                            submittedQuery = term
                             if (term.isNotEmpty()) {
                                 recentSearches = (listOf(term) + (recentSearches - term)).take(10)
                             }
@@ -549,6 +601,7 @@ private fun MeroContent(
                             upNext = queue,
                             qualityLabel = resolved?.label,
                             buffering = buffering,
+                            durationSec = playerDurationSec,
                         ),
                         actions = PlayerActions(
                             onCollapse = { expanded = false },

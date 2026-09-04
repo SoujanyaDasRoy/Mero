@@ -1,6 +1,7 @@
 package com.mero.data
 
 import android.content.Context
+import android.util.Log
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import com.zionhuang.innertube.YouTube
@@ -11,6 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+
+private const val TAG = "MeroStream"
 
 /** A playable stream plus the headers required to actually fetch it. */
 data class ResolvedStream(
@@ -121,19 +124,32 @@ object InnerTubePlayerApi : PlayerApi {
  */
 class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
 
-    private val updateAttempted = AtomicBoolean(false)
+    private val prepared = AtomicBoolean(false)
+
+    /**
+     * Unpacks the bundled Python runtime and pulls a current yt-dlp binary.
+     *
+     * Called once from MeroApplication on a background thread — deliberately
+     * NOT from [formatsFor]. Extraction runs on ExoPlayer's loading thread via
+     * runBlocking, so doing a network download here would stall the very first
+     * play until it timed out. Keeping it off the playback path is the whole
+     * fix: by the time anything is played, the runtime is already warm.
+     *
+     * Best effort. If the update fails (offline, GitHub unreachable) the
+     * bundled binary is still there and extraction proceeds with it.
+     */
+    suspend fun prepare() = withContext(Dispatchers.IO) {
+        if (!prepared.compareAndSet(false, true)) return@withContext
+        runCatching { YoutubeDL.init(appContext) }
+            .onFailure { Log.e(TAG, "yt-dlp init failed", it) }
+        runCatching { YoutubeDL.updateYoutubeDL(appContext) }
+            .onFailure { Log.w(TAG, "yt-dlp update skipped: ${it.message}") }
+    }
 
     override suspend fun formatsFor(videoId: String): List<AudioFormat> = withContext(Dispatchers.IO) {
-        YoutubeDL.init(appContext) // idempotent — safe before every request
-
-        // The yt-dlp binary shipped inside the library goes stale quickly, and
-        // YouTube breaks old versions fast. Updating at runtime is the whole
-        // reason this escape hatch was chosen (PRD §9): extraction breakage is
-        // fixable without shipping a new APK. Best-effort — if the update fails
-        // (offline, etc.) fall through and try the bundled version anyway.
-        if (updateAttempted.compareAndSet(false, true)) {
-            runCatching { YoutubeDL.updateYoutubeDL(appContext) }
-        }
+        // Idempotent and cheap once prepare() has run; still called as a guard
+        // in case a play somehow beats startup.
+        YoutubeDL.init(appContext)
 
         val request = YoutubeDLRequest("https://www.youtube.com/watch?v=$videoId")
         // yt-dlp writes advisories (e.g. "your version is older than 90 days")
