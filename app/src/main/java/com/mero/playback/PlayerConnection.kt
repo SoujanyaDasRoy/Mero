@@ -30,11 +30,35 @@ class PlayerConnection {
         controller = MediaController.Builder(context, token).buildAsync().await()
     }
 
-    fun play(song: Song) {
+    /**
+     * Hands the player the whole queue, not one track at a time.
+     *
+     * This is the difference between a real timeline and a single item, and it
+     * is load-bearing: with one item the player advertises no next/previous
+     * command, so the notification, lock screen, Bluetooth buttons, watch and
+     * car controls all collapse to play/pause, repeat and shuffle have nothing
+     * to act on, and auto-advance has to be re-implemented in the composition
+     * (where it stops working the moment the UI is gone). Media3 does all of
+     * that natively once it can see more than one item.
+     */
+    fun play(songs: List<Song>, startIndex: Int) {
         val c = controller ?: return
-        c.setMediaItem(mediaItemFor(song))
+        if (songs.isEmpty()) return
+        c.setMediaItems(songs.map(::mediaItemFor), startIndex.coerceIn(songs.indices), 0L)
         c.prepare()
         c.play()
+    }
+
+    /** Appends without disturbing what is playing. */
+    fun addToQueue(songs: List<Song>) {
+        val c = controller ?: return
+        c.addMediaItems(songs.map(::mediaItemFor))
+    }
+
+    /** Inserts immediately after the current track. */
+    fun playNextInQueue(song: Song) {
+        val c = controller ?: return
+        c.addMediaItem(c.currentMediaItemIndex + 1, mediaItemFor(song))
     }
 
     fun release() {

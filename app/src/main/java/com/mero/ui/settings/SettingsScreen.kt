@@ -17,7 +17,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AllInclusive
 import androidx.compose.material.icons.rounded.BatteryAlert
+import androidx.compose.material.icons.rounded.MotionPhotosPause
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -206,6 +208,26 @@ fun SettingsScreen(
                     onClick = onSleepTimerClick,
                 ) {
                     Text(sleepSummary, fontSize = 13.sp, color = scheme.onSurfaceVariant)
+                }
+                PreferenceRow(
+                    Icons.Rounded.AllInclusive,
+                    "Infinite playback",
+                    "Keep going with similar tracks when the queue runs out",
+                ) {
+                    Switch(
+                        checked = toggles["infinite"] == true,
+                        onCheckedChange = { onToggle("infinite", it) },
+                    )
+                }
+                PreferenceRow(
+                    Icons.Rounded.MotionPhotosPause,
+                    "Pause when idle",
+                    "Stops after an hour with no interaction",
+                ) {
+                    Switch(
+                        checked = toggles["autopause"] == true,
+                        onCheckedChange = { onToggle("autopause", it) },
+                    )
                 }
                 PreferenceRow(Icons.Rounded.Hd, "Streaming quality", "Opus ~160 kbps") {
                     Text("High", fontSize = 13.sp, color = scheme.onSurfaceVariant)

@@ -34,6 +34,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -59,6 +61,7 @@ import com.mero.data.HomeSection
 import com.mero.domain.RepeatMode
 import com.mero.domain.Song
 import com.mero.playback.PlayerConnection
+import com.mero.playback.mediaItemFor
 import com.mero.ui.equalizer.EqualizerScreen
 import com.mero.ui.home.HomeScreen
 import com.mero.ui.importer.ImportScreen
@@ -71,6 +74,7 @@ import com.mero.ui.player.PlayerUi
 import com.mero.ui.player.PlayerVariant
 import com.mero.ui.player.QueueSheet
 import com.mero.ui.player.SleepTimerSheet
+import com.mero.ui.components.SongMenuSheet
 import com.mero.ui.playlist.AddToPlaylistSheet
 import com.mero.ui.playlist.PlaylistDetailScreen
 import com.mero.ui.search.SearchScreen
@@ -103,6 +107,9 @@ fun MeroApp() {
             mapOf(
                 "dynamic" to false, "amoled" to false, "wifi" to true,
                 "norm" to false, "silence" to false, "gapless" to true, "spatial" to false,
+                // On by default: music that stops dead at the end of a queue is
+                // the more surprising behaviour of the two.
+                "infinite" to true, "autopause" to true,
             ),
         )
     }
@@ -176,6 +183,9 @@ private fun MeroContent(
     var shuffle by remember { mutableStateOf(false) }
     var repeat by remember { mutableStateOf(RepeatMode.Off) }
     var queue by remember { mutableStateOf(emptyList<Song>()) }
+    // MediaItem only carries ids and display metadata, so the domain objects
+    // the UI needs are looked up by the id the player reports back.
+    var songsById by remember { mutableStateOf(emptyMap<String, Song>()) }
     var playerVariant by remember { mutableStateOf(PlayerVariant.Standard) }
 
     var query by remember { mutableStateOf("") }
@@ -190,12 +200,12 @@ private fun MeroContent(
         mutableStateOf(
             searchPrefs.getString("recent", "")
                 .orEmpty()
-                .split(SEARCH_SEP)
+                .split(NL)
                 .filter { it.isNotBlank() },
         )
     }
     LaunchedEffect(recentSearches) {
-        searchPrefs.edit().putString("recent", recentSearches.joinToString(SEARCH_SEP)).apply()
+        searchPrefs.edit().putString("recent", recentSearches.joinToString(NL)).apply()
     }
     var submittedQuery by remember { mutableStateOf("") }
     var suggestions by remember { mutableStateOf(com.mero.data.Suggestions(emptyList(), emptyList())) }
@@ -208,6 +218,9 @@ private fun MeroContent(
     var lyrics by remember { mutableStateOf(com.mero.data.Lyrics(emptyList(), false)) }
     var lyricsLoading by remember { mutableStateOf(false) }
     var addingToPlaylist by remember { mutableStateOf<Song?>(null) }
+    var menuSong by remember { mutableStateOf<Song?>(null) }
+    // Any touch anywhere counts as "still listening" for the inactivity pause.
+    var lastInteractionMs by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
     var playSource by remember { mutableStateOf("Mero") }
 
     // Same slice LibraryScreen shows, so tapping a row queues its siblings.
@@ -241,6 +254,31 @@ private fun MeroContent(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 buffering = playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_ENDED) endedTick++
+            }
+
+            // The player owns the queue now, so the UI follows it rather than
+            // driving it. Auto-advance, repeat and shuffle all land here.
+            override fun onMediaItemTransition(item: androidx.media3.common.MediaItem?, reason: Int) {
+                val id = item?.mediaId ?: return
+                current = songsById[id] ?: current
+                positionSec = 0
+                playerDurationSec = 0
+            }
+
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                queue = upcomingFrom(controller, songsById)
+            }
+
+            override fun onRepeatModeChanged(repeatMode: Int) {
+                repeat = when (repeatMode) {
+                    Player.REPEAT_MODE_ONE -> RepeatMode.One
+                    Player.REPEAT_MODE_ALL -> RepeatMode.All
+                    else -> RepeatMode.Off
+                }
+            }
+
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                shuffle = shuffleModeEnabled
             }
 
             // A failed load leaves the player IDLE, where play() does nothing —
@@ -304,8 +342,12 @@ private fun MeroContent(
         liked = current?.id?.let { id -> likedSongs.any { it.id == id } } == true
     }
 
-    // The queue lives in the DB now, so the UI reads it back rather than owning it.
-    LaunchedEffect(persistedQueue) { queue = persistedQueue }
+    // The DB copy is for surviving a cold start, not for driving playback —
+    // the player's timeline is the source of truth while the app is running.
+    LaunchedEffect(persistedQueue) {
+        if (current == null && queue.isEmpty()) queue = persistedQueue
+        songsById = songsById + persistedQueue.associateBy { it.id }
+    }
 
     // Media3 has no continuous position stream — poll while playing, same as any
     // other player UI (system Now Playing, browser <audio> controls, etc).
@@ -325,44 +367,42 @@ private fun MeroContent(
     // which reads as "went to the previous song" because the browse screen
     // underneath changes. The player is not a destination (architecture.md
     // Part 1), so its dismissal has to be handled here.
-    BackHandler(enabled = addingToPlaylist != null || overlay != null || expanded) {
+    BackHandler(enabled = menuSong != null || addingToPlaylist != null || overlay != null || expanded) {
         when {
+            menuSong != null -> menuSong = null
             addingToPlaylist != null -> addingToPlaylist = null
             overlay != null -> overlay = null
             else -> expanded = false
         }
     }
 
-    fun start(song: Song) {
+    /**
+     * Playing a track from a list makes that whole list the player's timeline,
+     * starting at the tapped track. Everything the player can then do for
+     * itself — advance, repeat, shuffle, expose next/previous to the
+     * notification and to Bluetooth — it does, instead of the composition
+     * re-implementing it.
+     */
+    fun playFrom(song: Song, context: List<Song>, source: String = playSource) {
+        playSource = source
+        val list = if (context.any { it.id == song.id }) context else listOf(song) + context
+        songsById = songsById + list.associateBy { it.id }
         current = song
         positionSec = 0
         playerDurationSec = 0
         playing = true
         buffering = true
-        connection.play(song)
-        scope.launch { library.onPlayed(song) }
-    }
-
-    /**
-     * Playing a track from a list makes the rest of that list the queue, which
-     * is what gives shuffle and auto-advance something to work with.
-     */
-    fun playFrom(song: Song, context: List<Song>, source: String = playSource) {
-        playSource = source
-        start(song)
-        scope.launch { library.setQueue(context.filterNot { it.id == song.id }) }
+        connection.play(list, list.indexOfFirst { it.id == song.id })
+        queue = list.drop(list.indexOfFirst { it.id == song.id } + 1)
+        scope.launch {
+            library.onPlayed(song)
+            library.setQueue(queue)
+        }
     }
 
     fun playNext() {
-        val q = queue
-        if (q.isEmpty()) return
-        val next = if (shuffle) q.random() else q.first()
-        start(next)
-        scope.launch { library.setQueue(q.filterNot { it.id == next.id }) }
+        connection.controller?.seekToNextMediaItem()
     }
-
-    // Auto-advance when a track finishes; nothing else moves the queue along.
-    LaunchedEffect(endedTick) { if (endedTick > 0) playNext() }
 
     // Resolve the next track's URL while the current one plays, so skipping
     // doesn't pay the extraction cost. StreamRepository caches the result, so
@@ -404,6 +444,41 @@ private fun MeroContent(
     }
     LaunchedEffect(endedTick) { if (endedTick > 0) container.sleepTimer.trackEnded() }
 
+    // Infinite playback: when the queue runs dry, continue with YouTube's own
+    // radio for whatever just played rather than falling silent. Off means the
+    // queue is the queue.
+    LaunchedEffect(current?.id, queue.isEmpty(), toggles["infinite"]) {
+        val seed = current ?: return@LaunchedEffect
+        if (!queue.isEmpty()) return@LaunchedEffect
+        if (toggles["infinite"] != true) return@LaunchedEffect
+        container.radioRepository.radioFor(seed.id).onSuccess { more ->
+            if (more.isNotEmpty()) {
+                songsById = songsById + more.associateBy { it.id }
+                connection.addToQueue(more)
+            }
+        }
+    }
+
+    // Stop playing to an empty room. Any touch resets the clock; the check runs
+    // once a minute rather than on a timer per interaction.
+    LaunchedEffect(toggles["autopause"]) {
+        if (toggles["autopause"] != true) return@LaunchedEffect
+        while (true) {
+            delay(60_000)
+            val idleMs = android.os.SystemClock.elapsedRealtime() - lastInteractionMs
+            if (idleMs >= INACTIVITY_PAUSE_MS && connection.controller?.isPlaying == true) {
+                connection.controller?.pause()
+            }
+        }
+    }
+
+    // The first track of a session is the one that feels slow, so resolve the
+    // most recently played one before anybody presses anything.
+    LaunchedEffect(Unit) {
+        val warm = recentlyPlayed.firstOrNull() ?: return@LaunchedEffect
+        container.streamRepository.prefetch(warm.id)
+    }
+
     // Suggestions as you type. Debounced so a fast typist doesn't fire a
     // request per keystroke, and skipped once the query has been submitted
     // (at that point the results list is what matters).
@@ -422,7 +497,20 @@ private fun MeroContent(
     // player still sits outside the NavHost, which is the actual constraint.
     val contentPadding = PaddingValues(bottom = 0.dp)
 
-    Box(Modifier.fillMaxSize()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            // Initial pass and no consumption: this observes touches, it does
+            // not take them from whatever is underneath.
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                        lastInteractionMs = android.os.SystemClock.elapsedRealtime()
+                    }
+                }
+            },
+    ) {
 
         Scaffold(
             bottomBar = {
@@ -552,7 +640,7 @@ private fun MeroContent(
                         results = results,
                         nowPlayingId = current?.id,
                         onSongClick = { song -> playFrom(song, results, "Search") },
-                        onSongMore = { addingToPlaylist = it },
+                        onSongMore = { menuSong = it },
                         contentPadding = contentPadding,
                     )
                     // ponytail: plain overlay, not proper SearchScreen error UI —
@@ -581,7 +669,7 @@ private fun MeroContent(
                         playlists = playlists,
                         onOpenPlaylist = { navController.navigate(PlaylistRoute(it)) },
                         onCreatePlaylist = { name -> scope.launch { library.createPlaylist(name) } },
-                        onSongMore = { addingToPlaylist = it },
+                        onSongMore = { menuSong = it },
                         nowPlayingId = current?.id,
                         onSongClick = { song -> playFrom(song, librarySongs, libraryTab) },
                         onSettingsClick = { navController.navigate(SettingsRoute) },
@@ -708,6 +796,44 @@ private fun MeroContent(
             }
         }
 
+        menuSong?.let { song ->
+            SongMenuSheet(
+                song = song,
+                liked = likedSongs.any { it.id == song.id },
+                onPlayNext = { connection.playNextInQueue(song) },
+                onAddToQueue = { connection.addToQueue(listOf(song)) },
+                onAddToPlaylist = { menuSong = null; addingToPlaylist = song },
+                onToggleLike = { scope.launch { library.toggleLiked(song) } },
+                onStartRadio = {
+                    scope.launch {
+                        container.radioRepository.radioFor(song.id)
+                            .onSuccess { playFrom(song, listOf(song) + it, "Radio") }
+                    }
+                },
+                onGoToArtist = {
+                    query = song.artist
+                    submittedQuery = ""
+                    navController.navigate(SearchRoute)
+                },
+                onShare = {
+                    context.startActivity(
+                        android.content.Intent.createChooser(
+                            android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(
+                                    android.content.Intent.EXTRA_TEXT,
+                                    "${song.title} - ${song.artist}" + NL +
+                                        "https://music.youtube.com/watch?v=${song.id}",
+                                )
+                            },
+                            "Share",
+                        ),
+                    )
+                },
+                onClose = { menuSong = null },
+            )
+        }
+
         addingToPlaylist?.let { song ->
             AddToPlaylistSheet(
                 song = song,
@@ -761,8 +887,17 @@ private fun MeroContent(
                                 connection.controller?.let { if (it.isPlaying) it.pause() else it.play() }
                             },
                             onPrev = {
-                                positionSec = 0
-                                connection.controller?.seekTo(0)
+                                // Below three seconds, "previous" means the
+                                // previous track; after that it means restart —
+                                // the convention every music player uses.
+                                connection.controller?.let {
+                                    if (it.currentPosition < 3_000 && it.hasPreviousMediaItem()) {
+                                        it.seekToPreviousMediaItem()
+                                    } else {
+                                        positionSec = 0
+                                        it.seekTo(0)
+                                    }
+                                }
                             },
                             onNext = { playNext() },
                             onSeek = {
@@ -775,12 +910,18 @@ private fun MeroContent(
                                     scope.launch { liked = library.toggleLiked(song) }
                                 }
                             },
-                            onShuffle = { shuffle = !shuffle },
+                            onShuffle = {
+                                connection.controller?.let {
+                                    it.shuffleModeEnabled = !it.shuffleModeEnabled
+                                }
+                            },
                             onRepeat = {
-                                repeat = when (repeat) {
-                                    RepeatMode.Off -> RepeatMode.All
-                                    RepeatMode.All -> RepeatMode.One
-                                    RepeatMode.One -> RepeatMode.Off
+                                connection.controller?.let {
+                                    it.repeatMode = when (it.repeatMode) {
+                                        Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                                        Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                                        else -> Player.REPEAT_MODE_OFF
+                                    }
                                 }
                             },
                             onQueue = { overlay = "queue" },
@@ -801,10 +942,38 @@ private fun MeroContent(
                     positionSec = positionSec,
                     queue = queue,
                     onClose = { overlay = null },
-                    onClear = { scope.launch { library.clearQueue() } },
-                    onPlay = { playFrom(it, queue, playSource); overlay = null },
-                    onRemove = { removed -> scope.launch { library.removeFromQueue(removed.id) } },
+                    // Queue edits go to the player's timeline; the DB copy
+                    // follows so the queue survives a cold start.
+                    onClear = {
+                        connection.controller?.let { c ->
+                            for (i in c.mediaItemCount - 1 downTo c.currentMediaItemIndex + 1) {
+                                c.removeMediaItem(i)
+                            }
+                        }
+                        scope.launch { library.clearQueue() }
+                    },
+                    onPlay = { picked ->
+                        connection.controller?.let { c ->
+                            val at = (c.currentMediaItemIndex + 1 until c.mediaItemCount)
+                                .firstOrNull { c.getMediaItemAt(it).mediaId == picked.id }
+                            if (at != null) c.seekTo(at, 0L) else playFrom(picked, queue, playSource)
+                        }
+                        overlay = null
+                    },
+                    onRemove = { removed ->
+                        connection.controller?.let { c ->
+                            (c.currentMediaItemIndex + 1 until c.mediaItemCount)
+                                .firstOrNull { c.getMediaItemAt(it).mediaId == removed.id }
+                                ?.let(c::removeMediaItem)
+                        }
+                        scope.launch { library.removeFromQueue(removed.id) }
+                    },
                     onReorder = { reordered ->
+                        connection.controller?.let { c ->
+                            val base = c.currentMediaItemIndex + 1
+                            for (i in c.mediaItemCount - 1 downTo base) c.removeMediaItem(i)
+                            c.addMediaItems(reordered.map { mediaItemFor(it) })
+                        }
                         queue = reordered
                         scope.launch { library.reorderQueue(reordered) }
                     },
@@ -847,5 +1016,30 @@ private data class NavItem(
     val routeClass: kotlin.reflect.KClass<*>,
 )
 
-/** Recent-search list separator; queries never contain a newline. */
-private const val SEARCH_SEP = "\n"
+/**
+ * The tracks after the current one. Read straight off the player's timeline in
+ * index order; when shuffle is on the timeline itself is what the player will
+ * follow, so this stays an honest picture of what is coming.
+ */
+private fun upcomingFrom(
+    controller: androidx.media3.session.MediaController,
+    known: Map<String, Song>,
+): List<Song> = buildList {
+    for (i in (controller.currentMediaItemIndex + 1) until controller.mediaItemCount) {
+        val item = controller.getMediaItemAt(i)
+        add(
+            known[item.mediaId] ?: Song(
+                id = item.mediaId,
+                title = item.mediaMetadata.title?.toString().orEmpty(),
+                artist = item.mediaMetadata.artist?.toString().orEmpty(),
+                thumbnailUrl = item.mediaMetadata.artworkUri?.toString(),
+            ),
+        )
+    }
+}
+
+/** Newline. Separates persisted recent searches, which never contain one. */
+private const val NL = "\n"
+
+/** One hour of no interaction. */
+private const val INACTIVITY_PAUSE_MS = 60L * 60 * 1000

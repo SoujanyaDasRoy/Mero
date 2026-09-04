@@ -18,6 +18,7 @@ import com.mero.playback.StreamResolver
 import com.mero.data.HomeRepository
 import com.mero.data.InnerTubeSearchApi
 import com.mero.data.LibraryRepository
+import com.mero.data.RadioRepository
 import com.mero.data.SearchRepository
 import com.mero.data.LyricsRepository
 import com.mero.data.db.MIGRATION_1_2
@@ -50,6 +51,7 @@ class AppContainer(context: Context) {
 
     val searchRepository: SearchRepository by lazy { SearchRepository(InnerTubeSearchApi) }
     val homeRepository: HomeRepository by lazy { HomeRepository() }
+    val radioRepository: RadioRepository by lazy { RadioRepository() }
 
     /** Shared between the equalizer screen and the playback service. */
     val audioEffects: AudioEffects by lazy { AudioEffects() }
