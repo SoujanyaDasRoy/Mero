@@ -61,6 +61,7 @@ fun SearchScreen(
     onSuggestionClick: (String) -> Unit,
     nowPlayingId: String?,
     onSongClick: (Song) -> Unit,
+    onSongMore: (Song) -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -195,7 +196,7 @@ fun SearchScreen(
                         },
                         highlighted = song.id == nowPlayingId,
                         onClick = { onSongClick(song) },
-                        onMore = {},
+                        onMore = { onSongMore(song) },
                     )
                 }
             }

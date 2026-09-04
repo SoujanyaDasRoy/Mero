@@ -1,6 +1,7 @@
 package com.mero.ui.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,9 +13,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
@@ -34,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,17 +90,17 @@ fun MiniPlayer(
             ) {
                 Text(
                     song.title,
+                    Modifier.basicMarquee(iterations = Int.MAX_VALUE),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     song.artist,
+                    Modifier.basicMarquee(iterations = Int.MAX_VALUE),
                     fontSize = 12.sp,
                     color = scheme.onSurfaceVariant,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
             IconButton(onClick = onPlayPause) {
@@ -317,12 +319,26 @@ fun LyricsSheet(
     song: Song,
     positionSec: Int,
     lines: List<LyricLine>,
+    synced: Boolean,
+    loading: Boolean,
     onClose: () -> Unit,
     onSeek: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val activeIndex = lines.indexOfLast { it.atSec <= positionSec }.coerceAtLeast(0)
+    val activeIndex = if (synced) {
+        lines.indexOfLast { it.atSec <= positionSec }.coerceAtLeast(0)
+    } else {
+        -1
+    }
+    val listState = rememberLazyListState()
+
+    // Keep the current line near the middle of the screen as the song plays.
+    LaunchedEffect(activeIndex) {
+        if (activeIndex >= 0 && lines.isNotEmpty()) {
+            listState.animateScrollToItem(maxOf(0, activeIndex - 2))
+        }
+    }
 
     Column(
         modifier
@@ -352,27 +368,43 @@ fun LyricsSheet(
             }
         }
 
-        LazyColumn(
-            Modifier
-                .weight(1f)
-                .padding(horizontal = 24.dp),
-        ) {
-            itemsIndexed(lines) { index, line ->
+        if (loading) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = scheme.primary)
+            }
+        } else if (lines.isEmpty()) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 Text(
-                    line.text,
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { onSeek(line.atSec) }
-                        .padding(vertical = 11.dp),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Medium,
-                    lineHeight = 28.sp,
-                    color = when {
-                        index == activeIndex -> scheme.onSurface
-                        index < activeIndex -> scheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        else -> scheme.onSurfaceVariant
-                    },
+                    "No lyrics found for this track.",
+                    Modifier.padding(32.dp),
+                    color = scheme.onSurfaceVariant,
                 )
+            }
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 24.dp),
+            ) {
+                itemsIndexed(lines) { index, line ->
+                    Text(
+                        line.text,
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = synced) { onSeek(line.atSec) }
+                            .padding(vertical = 11.dp),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 28.sp,
+                        color = when {
+                            !synced -> scheme.onSurface
+                            index == activeIndex -> scheme.onSurface
+                            index < activeIndex -> scheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            else -> scheme.onSurfaceVariant
+                        },
+                    )
+                }
             }
         }
 
@@ -385,7 +417,11 @@ fun LyricsSheet(
         ) {
             Icon(Icons.Rounded.SyncAlt, null, Modifier.size(16.dp), tint = scheme.onSurfaceVariant)
             Text(
-                "Synced lyrics from LRCLIB · tap a line to seek",
+                if (synced) {
+                    "Synced lyrics from LRCLIB · tap a line to seek"
+                } else {
+                    "Unsynced lyrics from LRCLIB"
+                },
                 Modifier.weight(1f),
                 fontSize = 11.sp,
                 color = scheme.onSurfaceVariant,

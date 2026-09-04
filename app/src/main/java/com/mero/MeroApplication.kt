@@ -1,13 +1,23 @@
 package com.mero
 
 import android.app.Application
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.disk.DiskCache
+import coil3.memory.MemoryCache
+import coil3.request.crossfade
+import okio.Path.Companion.toOkioPath
 import android.content.Context
 import androidx.room.Room
 import com.mero.data.HomeRepository
 import com.mero.data.InnerTubeSearchApi
 import com.mero.data.LibraryRepository
 import com.mero.data.SearchRepository
+import com.mero.data.LyricsRepository
+import com.mero.data.db.MIGRATION_1_2
 import com.mero.data.db.MeroDatabase
+import com.mero.playback.SleepTimer
 import com.mero.playback.AudioEffects
 import com.mero.data.StreamRepository
 import com.mero.data.YtDlpPlayerApi
@@ -30,7 +40,7 @@ class AppContainer(context: Context) {
             context.applicationContext,
             MeroDatabase::class.java,
             "mero.db",
-        ).build()
+        ).addMigrations(MIGRATION_1_2).build()
     }
 
     val searchRepository: SearchRepository by lazy { SearchRepository(InnerTubeSearchApi) }
@@ -38,6 +48,10 @@ class AppContainer(context: Context) {
 
     /** Shared between the equalizer screen and the playback service. */
     val audioEffects: AudioEffects by lazy { AudioEffects() }
+
+    val lyricsRepository: LyricsRepository by lazy { LyricsRepository() }
+
+    val sleepTimer: SleepTimer by lazy { SleepTimer() }
     val libraryRepository: LibraryRepository by lazy { LibraryRepository(database.dao()) }
 
     // YtDlpPlayerApi, not InnerTubePlayerApi — see StreamRepository.kt's note
@@ -47,8 +61,27 @@ class AppContainer(context: Context) {
     val streamRepository: StreamRepository by lazy { StreamRepository(ytDlpApi) }
 }
 
-class MeroApplication : Application() {
+class MeroApplication : Application(), SingletonImageLoader.Factory {
     val container: AppContainer by lazy { AppContainer(this) }
+
+    /**
+     * Cover art is the bulk of Mero's network traffic, and the same covers come
+     * back constantly — home shelves, search, queue, player. Coil's defaults
+     * keep no disk cache worth the name, so scrolling re-downloaded artwork.
+     */
+    override fun newImageLoader(context: PlatformContext): ImageLoader =
+        ImageLoader.Builder(context)
+            .memoryCache {
+                MemoryCache.Builder().maxSizePercent(context, 0.25).build()
+            }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(cacheDir.resolve("artwork").toOkioPath())
+                    .maxSizeBytes(192L * 1024 * 1024)
+                    .build()
+            }
+            .crossfade(true)
+            .build()
 
     override fun onCreate() {
         super.onCreate()

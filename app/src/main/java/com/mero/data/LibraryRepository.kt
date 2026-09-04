@@ -1,6 +1,9 @@
 package com.mero.data
 
 import com.mero.data.db.MeroDao
+import com.mero.data.db.PlaylistEntity
+import com.mero.data.db.PlaylistSongEntity
+import com.mero.data.db.PlaylistSummary
 import com.mero.data.db.QueueEntity
 import com.mero.data.db.SongEntity
 import com.mero.domain.Song
@@ -75,4 +78,45 @@ class LibraryRepository(private val dao: MeroDao) {
     suspend fun removeFromQueue(songId: String) = dao.removeFromQueue(songId)
 
     suspend fun clearQueue() = dao.clearQueue()
+
+    /* ---------------------------- playlists ---------------------------- */
+
+    val playlists: Flow<List<PlaylistSummary>> = dao.playlists()
+
+    fun playlistSongs(playlistId: String): Flow<List<Song>> =
+        dao.playlistSongs(playlistId).map { rows -> rows.map { it.toDomain() } }
+
+    fun playlist(playlistId: String): Flow<PlaylistEntity?> = dao.playlist(playlistId)
+
+    suspend fun createPlaylist(name: String): String {
+        val id = "pl-" + System.currentTimeMillis().toString(36)
+        dao.insertPlaylist(PlaylistEntity(id, name.trim(), System.currentTimeMillis()))
+        return id
+    }
+
+    suspend fun renamePlaylist(id: String, name: String) = dao.renamePlaylist(id, name.trim())
+
+    suspend fun deletePlaylist(id: String) = dao.deletePlaylist(id)
+
+    /** Appends to the end. Re-adding an existing track is a no-op by primary key. */
+    suspend fun addToPlaylist(playlistId: String, song: Song) {
+        ensure(song)
+        dao.insertPlaylistSong(
+            PlaylistSongEntity(playlistId, song.id, dao.nextPositionIn(playlistId)),
+        )
+    }
+
+    suspend fun addToPlaylist(playlistId: String, songs: List<Song>) {
+        songs.forEach { addToPlaylist(playlistId, it) }
+    }
+
+    suspend fun removeFromPlaylist(playlistId: String, songId: String) =
+        dao.removeFromPlaylist(playlistId, songId)
+
+    suspend fun reorderPlaylist(playlistId: String, songs: List<Song>) {
+        dao.deletePlaylistSongs(playlistId)
+        dao.insertPlaylistSongs(
+            songs.mapIndexed { index, song -> PlaylistSongEntity(playlistId, song.id, index) },
+        )
+    }
 }

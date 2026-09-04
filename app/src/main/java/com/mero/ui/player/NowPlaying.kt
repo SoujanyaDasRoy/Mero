@@ -1,6 +1,7 @@
 package com.mero.ui.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -45,9 +46,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -127,13 +135,24 @@ fun NowPlayingScreen(
 @Composable
 private fun StandardPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modifier) {
     val scheme = MaterialTheme.colorScheme
-    val tint = LocalMeroExtras.current.playerTint
+    val fallbackTint = LocalMeroExtras.current.playerTint
+
+    // Take the backdrop from the artwork, falling back to the accent tint until
+    // (or unless) a colour can be pulled from the cover.
+    var coverTint by remember { mutableStateOf<Color?>(null) }
+    LaunchedEffect(ui.song.thumbnailUrl) {
+        coverTint = coverAccentColor(ui.song.thumbnailUrl)?.asPlayerBackdrop()
+    }
+    val tint by animateColorAsState(
+        targetValue = coverTint ?: fallbackTint,
+        animationSpec = tween(600),
+        label = "playerBackdrop",
+    )
 
     Column(
         modifier
             .fillMaxSize()
             .background(
-                // playerTint at the top, settling into surf2 by 46% down.
                 Brush.verticalGradient(
                     0f to tint,
                     0.46f to scheme.surfaceContainer,
@@ -560,22 +579,24 @@ private fun TitleBlock(
         verticalAlignment = Alignment.Top,
     ) {
         Column(Modifier.weight(1f)) {
+            // Long titles and credit lists scroll rather than being cut off,
+            // the way other music players handle it.
             Text(
                 song.title,
+                Modifier.basicMarquee(iterations = Int.MAX_VALUE),
                 fontSize = titleSize.sp,
                 lineHeight = titleLineHeight.sp,
                 letterSpacing = titleLetterSpacing.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 song.artist,
+                Modifier.basicMarquee(iterations = Int.MAX_VALUE),
                 fontSize = artistSize.sp,
                 lineHeight = 24.sp,
                 color = scheme.onSurfaceVariant,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
             )
         }
         IconButton(onClick = onLike) {

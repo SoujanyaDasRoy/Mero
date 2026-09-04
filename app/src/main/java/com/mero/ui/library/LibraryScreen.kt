@@ -30,7 +30,7 @@ import com.mero.domain.Song
 import com.mero.ui.components.MeroChip
 import com.mero.ui.components.SongRow
 
-val LIBRARY_TABS = listOf("Liked", "Recent", "Most played")
+val LIBRARY_TABS = listOf("Playlists", "Liked", "Recent", "Most played")
 
 @Composable
 fun LibraryScreen(
@@ -39,6 +39,10 @@ fun LibraryScreen(
     liked: List<Song>,
     recentlyPlayed: List<Song>,
     mostPlayed: List<Song>,
+    playlists: List<com.mero.data.db.PlaylistSummary>,
+    onOpenPlaylist: (String) -> Unit,
+    onCreatePlaylist: (String) -> Unit,
+    onSongMore: (Song) -> Unit,
     nowPlayingId: String?,
     onSongClick: (Song) -> Unit,
     onSettingsClick: () -> Unit,
@@ -77,7 +81,14 @@ fun LibraryScreen(
             }
         }
 
-        if (songs.isEmpty()) {
+        if (selectedTab == "Playlists") {
+            com.mero.ui.playlist.PlaylistsTab(
+                playlists = playlists,
+                onOpen = onOpenPlaylist,
+                onCreate = onCreatePlaylist,
+                contentPadding = contentPadding,
+            )
+        } else if (songs.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     when (selectedTab) {
@@ -99,6 +110,7 @@ fun LibraryScreen(
                         song = song,
                         highlighted = song.id == nowPlayingId,
                         onClick = { onSongClick(song) },
+                        onMore = { onSongMore(song) },
                     )
                 }
             }

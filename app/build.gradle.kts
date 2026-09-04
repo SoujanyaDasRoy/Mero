@@ -14,8 +14,8 @@ android {
         applicationId = "com.mero"
         minSdk = 28
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.1.0"
+        versionCode = 4
+        versionName = "1.2.0"
     }
 
     // yt-dlp ships a Python runtime and ffmpeg per architecture, so a universal
@@ -81,6 +81,7 @@ dependencies {
     // Drag-to-reorder for the queue. InnerTune uses this same library.
     implementation(libs.reorderable)
     implementation(libs.androidx.core.splashscreen)
+    implementation(libs.androidx.palette)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

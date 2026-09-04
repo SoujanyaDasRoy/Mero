@@ -70,6 +70,9 @@ import com.mero.ui.player.PlayerActions
 import com.mero.ui.player.PlayerUi
 import com.mero.ui.player.PlayerVariant
 import com.mero.ui.player.QueueSheet
+import com.mero.ui.player.SleepTimerSheet
+import com.mero.ui.playlist.AddToPlaylistSheet
+import com.mero.ui.playlist.PlaylistDetailScreen
 import com.mero.ui.search.SearchScreen
 import com.mero.ui.settings.SettingsScreen
 import com.mero.ui.theme.MeroAccent
@@ -86,6 +89,7 @@ import kotlinx.serialization.Serializable
 @Serializable object Import
 @Serializable object Equalizer
 @Serializable object SettingsRoute
+@Serializable data class PlaylistRoute(val playlistId: String)
 
 @Composable
 fun MeroApp() {
@@ -153,6 +157,9 @@ private fun MeroContent(
     val recentlyPlayed by library.recentlyPlayed.collectAsStateWithLifecycle(emptyList())
     val mostPlayed by library.mostPlayed.collectAsStateWithLifecycle(emptyList())
     val persistedQueue by library.queue.collectAsStateWithLifecycle(emptyList())
+    val playlists by library.playlists.collectAsStateWithLifecycle(emptyList())
+    val sleepRemaining by container.sleepTimer.remainingSec.collectAsStateWithLifecycle(null)
+    val sleepAfterTrack by container.sleepTimer.stopAfterTrack.collectAsStateWithLifecycle(false)
 
     DisposableEffect(Unit) { onDispose { connection.release() } }
 
@@ -181,6 +188,9 @@ private fun MeroContent(
     var seedQueue by remember { mutableStateOf(emptyList<String>()) }
     var endedTick by remember { mutableIntStateOf(0) }
     var retriedForError by remember { mutableStateOf(0L) }
+    var lyrics by remember { mutableStateOf(com.mero.data.Lyrics(emptyList(), false)) }
+    var lyricsLoading by remember { mutableStateOf(false) }
+    var addingToPlaylist by remember { mutableStateOf<Song?>(null) }
     var playSource by remember { mutableStateOf("Mero") }
 
     // Same slice LibraryScreen shows, so tapping a row queues its siblings.
@@ -289,8 +299,9 @@ private fun MeroContent(
     // which reads as "went to the previous song" because the browse screen
     // underneath changes. The player is not a destination (architecture.md
     // Part 1), so its dismissal has to be handled here.
-    BackHandler(enabled = overlay != null || expanded) {
+    BackHandler(enabled = addingToPlaylist != null || overlay != null || expanded) {
         when {
+            addingToPlaylist != null -> addingToPlaylist = null
             overlay != null -> overlay = null
             else -> expanded = false
         }
@@ -326,6 +337,32 @@ private fun MeroContent(
 
     // Auto-advance when a track finishes; nothing else moves the queue along.
     LaunchedEffect(endedTick) { if (endedTick > 0) playNext() }
+
+    // Resolve the next track's URL while the current one plays, so skipping
+    // doesn't pay the extraction cost. StreamRepository caches the result, so
+    // the actual skip is then instant.
+    LaunchedEffect(current?.id, queue) {
+        val next = queue.firstOrNull() ?: return@LaunchedEffect
+        delay(4_000)
+        runCatching { container.streamRepository.resolve(next.id) }
+    }
+
+    // Lyrics are fetched lazily — only when the sheet is actually open.
+    LaunchedEffect(current?.id, overlay) {
+        val song = current
+        if (overlay != "lyrics" || song == null) return@LaunchedEffect
+        lyricsLoading = true
+        lyrics = container.lyricsRepository.lyricsFor(song)
+        lyricsLoading = false
+    }
+
+    // The sleep timer lives at app scope so it keeps counting with the player
+    // closed. When it fires, pause rather than tearing the session down.
+    DisposableEffect(connection.controller) {
+        container.sleepTimer.onExpired = { connection.controller?.pause() }
+        onDispose { container.sleepTimer.onExpired = {} }
+    }
+    LaunchedEffect(endedTick) { if (endedTick > 0) container.sleepTimer.trackEnded() }
 
     // Suggestions as you type. Debounced so a fast typist doesn't fire a
     // request per keystroke, and skipped once the query has been submitted
@@ -475,6 +512,7 @@ private fun MeroContent(
                         results = results,
                         nowPlayingId = current?.id,
                         onSongClick = { song -> playFrom(song, results, "Search") },
+                        onSongMore = { addingToPlaylist = it },
                         contentPadding = contentPadding,
                     )
                     // ponytail: plain overlay, not proper SearchScreen error UI —
@@ -500,6 +538,10 @@ private fun MeroContent(
                         liked = likedSongs,
                         recentlyPlayed = recentlyPlayed,
                         mostPlayed = mostPlayed,
+                        playlists = playlists,
+                        onOpenPlaylist = { navController.navigate(PlaylistRoute(it)) },
+                        onCreatePlaylist = { name -> scope.launch { library.createPlaylist(name) } },
+                        onSongMore = { addingToPlaylist = it },
                         nowPlayingId = current?.id,
                         onSongClick = { song -> playFrom(song, librarySongs, libraryTab) },
                         onSettingsClick = { navController.navigate(SettingsRoute) },
@@ -559,6 +601,45 @@ private fun MeroContent(
                     )
                 }
 
+                composable<PlaylistRoute> { entry ->
+                    val route: PlaylistRoute = entry.toRoute()
+                    val meta by library.playlist(route.playlistId)
+                        .collectAsStateWithLifecycle(null)
+                    val songs by library.playlistSongs(route.playlistId)
+                        .collectAsStateWithLifecycle(emptyList())
+
+                    PlaylistDetailScreen(
+                        name = meta?.name ?: "Playlist",
+                        songs = songs,
+                        nowPlayingId = current?.id,
+                        onBack = { navController.popBackStack() },
+                        onPlay = { song -> playFrom(song, songs, meta?.name ?: "Playlist") },
+                        onPlayAll = {
+                            songs.firstOrNull()?.let {
+                                playFrom(it, songs, meta?.name ?: "Playlist")
+                            }
+                        },
+                        onShuffle = {
+                            val shuffledQueue = songs.shuffled()
+                            shuffledQueue.firstOrNull()?.let {
+                                shuffle = true
+                                playFrom(it, shuffledQueue, meta?.name ?: "Playlist")
+                            }
+                        },
+                        onRemove = { song ->
+                            scope.launch { library.removeFromPlaylist(route.playlistId, song.id) }
+                        },
+                        onRename = { name ->
+                            scope.launch { library.renamePlaylist(route.playlistId, name) }
+                        },
+                        onDelete = {
+                            scope.launch { library.deletePlaylist(route.playlistId) }
+                            navController.popBackStack()
+                        },
+                        contentPadding = contentPadding,
+                    )
+                }
+
                 composable<SettingsRoute> {
                     SettingsScreen(
                         accent = accent,
@@ -566,6 +647,17 @@ private fun MeroContent(
                         toggles = toggles,
                         onToggle = onToggle,
                         onEqualizerClick = { navController.navigate(Equalizer) },
+                        onSleepTimerClick = { overlay = "sleep" },
+                        sleepSummary = when {
+                            sleepRemaining != null -> "Active"
+                            sleepAfterTrack -> "Stops at end of track"
+                            else -> "Off"
+                        },
+                        onClearCache = {
+                            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                context.cacheDir.resolve("artwork").deleteRecursively()
+                            }
+                        },
                         playerVariant = playerVariant,
                         onPlayerVariantChange = { playerVariant = it },
                         onBack = { navController.popBackStack() },
@@ -573,6 +665,25 @@ private fun MeroContent(
                     )
                 }
             }
+        }
+
+        addingToPlaylist?.let { song ->
+            AddToPlaylistSheet(
+                song = song,
+                playlists = playlists,
+                onAdd = { playlistId ->
+                    scope.launch { library.addToPlaylist(playlistId, song) }
+                    addingToPlaylist = null
+                },
+                onCreateAndAdd = { name ->
+                    scope.launch {
+                        val id = library.createPlaylist(name)
+                        library.addToPlaylist(id, song)
+                    }
+                    addingToPlaylist = null
+                },
+                onClose = { addingToPlaylist = null },
+            )
         }
 
         /* ---- Expanded player and its sheets. Outside the NavHost by design. ---- */
@@ -637,6 +748,7 @@ private fun MeroContent(
                                 expanded = false
                                 navController.navigate(Equalizer)
                             },
+                            onSleepTimer = { overlay = "sleep" },
                         ),
                     )
                 }
@@ -657,14 +769,26 @@ private fun MeroContent(
                     },
                 )
 
+                "sleep" -> SleepTimerSheet(
+                    remainingSec = sleepRemaining,
+                    stopAfterTrack = sleepAfterTrack,
+                    onPick = { minutes -> container.sleepTimer.start(minutes) },
+                    onStopAfterTrack = { container.sleepTimer.stopAfterCurrentTrack() },
+                    onCancel = { container.sleepTimer.cancel() },
+                    onClose = { overlay = null },
+                )
+
                 "lyrics" -> LyricsSheet(
                     song = song,
                     positionSec = positionSec,
-                    // Real synced lyrics arrive with LRCLIB in M6; an empty
-                    // state beats inventing lines.
-                    lines = emptyList(),
+                    lines = lyrics.lines,
+                    synced = lyrics.synced,
+                    loading = lyricsLoading,
                     onClose = { overlay = null },
-                    onSeek = { positionSec = it },
+                    onSeek = { sec ->
+                        positionSec = sec
+                        connection.controller?.seekTo(sec * 1000L)
+                    },
                 )
             }
         }

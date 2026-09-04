@@ -27,6 +27,7 @@ youtubedlAndroid = "0.18.1"
 room = "2.6.1"
 reorderable = "3.1.0"
 splashscreen = "1.2.0"
+palette = "1.0.0"
 ksp = "2.1.0-1.0.29"
 
 [libraries]
@@ -72,6 +73,7 @@ androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = 
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
+androidx-palette = { group = "androidx.palette", name = "palette-ktx", version.ref = "palette" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

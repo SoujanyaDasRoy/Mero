@@ -13,5 +13,5 @@ fun SongItem.toDomain(): Song = Song(
     artist = artists.joinToString(", ") { it.name },
     album = album?.name.orEmpty(),
     durationSec = duration ?: 0,
-    thumbnailUrl = thumbnail,
+    thumbnailUrl = thumbnail.atArtworkSize(),
 )

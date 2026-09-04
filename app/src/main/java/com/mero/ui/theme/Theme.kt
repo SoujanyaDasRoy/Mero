@@ -30,6 +30,10 @@ enum class MeroAccent(val label: String, val swatch: Color) {
     Blue("Blue", Color(0xFFA8C7FA)),
     Peach("Peach", Color(0xFFFFB59D)),
     Green("Green", Color(0xFFA6D3A0)),
+    Amber("Amber", Color(0xFFFED703)),
+    Rose("Rose", Color(0xFFFFB1C8)),
+    Teal("Teal", Color(0xFF7FD8CA)),
+    Lime("Lime", Color(0xFFC6E77D)),
 }
 
 /** `--playerTint` has no Material 3 equivalent, so it travels separately. */
@@ -92,6 +96,43 @@ private fun schemeFor(accent: MeroAccent): ColorScheme = when (accent) {
         secondaryContainer = Color(0xFF3F4A3D),
         onSecondaryContainer = Color(0xFFE6E0E9),
     )
+
+    // Mero's own brand yellow, for people who want the app to match its icon.
+    MeroAccent.Amber -> NeutralDark.copy(
+        primary = Color(0xFFFED703),
+        onPrimary = Color(0xFF3A2F00),
+        primaryContainer = Color(0xFF5A4A00),
+        onPrimaryContainer = Color(0xFFFFF0A8),
+        secondaryContainer = Color(0xFF4C4636),
+        onSecondaryContainer = Color(0xFFE6E0E9),
+    )
+
+    MeroAccent.Rose -> NeutralDark.copy(
+        primary = Color(0xFFFFB1C8),
+        onPrimary = Color(0xFF5E1133),
+        primaryContainer = Color(0xFF7B2949),
+        onPrimaryContainer = Color(0xFFFFD9E2),
+        secondaryContainer = Color(0xFF574149),
+        onSecondaryContainer = Color(0xFFE6E0E9),
+    )
+
+    MeroAccent.Teal -> NeutralDark.copy(
+        primary = Color(0xFF7FD8CA),
+        onPrimary = Color(0xFF00382F),
+        primaryContainer = Color(0xFF005045),
+        onPrimaryContainer = Color(0xFF9BF5E6),
+        secondaryContainer = Color(0xFF3A4B48),
+        onSecondaryContainer = Color(0xFFE6E0E9),
+    )
+
+    MeroAccent.Lime -> NeutralDark.copy(
+        primary = Color(0xFFC6E77D),
+        onPrimary = Color(0xFF2C3400),
+        primaryContainer = Color(0xFF414C00),
+        onPrimaryContainer = Color(0xFFE2FF96),
+        secondaryContainer = Color(0xFF454B39),
+        onSecondaryContainer = Color(0xFFE6E0E9),
+    )
 }
 
 private fun playerTintFor(accent: MeroAccent): Color = when (accent) {
@@ -99,6 +140,10 @@ private fun playerTintFor(accent: MeroAccent): Color = when (accent) {
     MeroAccent.Blue -> Color(0xFF1E2532)
     MeroAccent.Peach -> Color(0xFF2E211C)
     MeroAccent.Green -> Color(0xFF1C2620)
+    MeroAccent.Amber -> Color(0xFF2C2718)
+    MeroAccent.Rose -> Color(0xFF2F2027)
+    MeroAccent.Teal -> Color(0xFF162725)
+    MeroAccent.Lime -> Color(0xFF25291A)
 }
 
 /** Pure black for AMOLED panels — real battery saving, not decoration. */

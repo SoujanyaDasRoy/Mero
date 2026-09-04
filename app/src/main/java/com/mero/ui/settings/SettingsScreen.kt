@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BatteryAlert
+import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Code
@@ -60,6 +61,9 @@ fun SettingsScreen(
     toggles: Map<String, Boolean>,
     onToggle: (String, Boolean) -> Unit,
     onEqualizerClick: () -> Unit,
+    onSleepTimerClick: () -> Unit,
+    sleepSummary: String,
+    onClearCache: () -> Unit,
     playerVariant: PlayerVariant,
     onPlayerVariantChange: (PlayerVariant) -> Unit,
     onBack: () -> Unit,
@@ -195,6 +199,14 @@ fun SettingsScreen(
                 ) {
                     Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
                 }
+                PreferenceRow(
+                    Icons.Rounded.Bedtime,
+                    "Sleep timer",
+                    "Pause playback after a set time",
+                    onClick = onSleepTimerClick,
+                ) {
+                    Text(sleepSummary, fontSize = 13.sp, color = scheme.onSurfaceVariant)
+                }
                 PreferenceRow(Icons.Rounded.Hd, "Streaming quality", "Opus ~160 kbps") {
                     Text("High", fontSize = 13.sp, color = scheme.onSurfaceVariant)
                 }
@@ -221,9 +233,9 @@ fun SettingsScreen(
                 }
                 PreferenceRow(
                     Icons.Rounded.Storage,
-                    "Storage",
-                    "1.1 GB downloads · 240 MB cache",
-                    onClick = {},
+                    "Clear artwork cache",
+                    "Frees space used by cover art. It re-downloads as needed.",
+                    onClick = onClearCache,
                 ) {
                     Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
                 }
