@@ -9,6 +9,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -47,38 +51,76 @@ class StreamRepository(private val api: PlayerApi) {
      */
     private val cache = ConcurrentHashMap<String, Cached>()
 
+    /** Serialises yt-dlp subprocesses. See [resolve]. */
+    private val extractionLock = Mutex()
+
     /**
      * Never cache or persist the result — the URL expires in roughly six hours.
      * Callers resolve fresh at playback-open time. See CLAUDE.md constraint 2
      * and playback/StreamResolver.kt.
      */
-    suspend fun resolve(videoId: String, quality: Quality = Quality.HIGH): ResolvedStream {
+    suspend fun resolve(
+        videoId: String,
+        quality: Quality = Quality.HIGH,
+        forUi: Boolean = true,
+    ): ResolvedStream {
         val key = "$videoId:${quality.name}"
-        cache[key]?.let { hit ->
-            if (System.currentTimeMillis() - hit.atMs < URL_TTL_MS) {
-                _lastResolved.value = hit.stream
-                return hit.stream
-            }
-            cache.remove(key)
+        cached(key)?.let {
+            if (forUi) _lastResolved.value = it
+            return it
         }
 
-        val formats = api.formatsFor(videoId)
-        val chosen = selectAudioFormat(formats, quality)
-            ?: error("No playable audio format for $videoId")
-        return ResolvedStream(
-            url = chosen.url,
-            headers = chosen.headers,
-            bitrateKbps = chosen.bitrate / 1000,
-            codec = chosen.codecLabel(),
-        ).also {
-            _lastResolved.value = it
-            cache[key] = Cached(it, System.currentTimeMillis())
+        // One extraction at a time. Each one spawns a Python subprocess; two
+        // running together on a phone starve each other and the track that is
+        // supposed to be playing sits in BUFFERING indefinitely.
+        val stream = extractionLock.withLock {
+            cached(key) ?: run {
+                // Without this the loading thread can block forever on a hung
+                // subprocess: no error, no retry, just a spinner. Spec §9 wants
+                // failure visible and retryable, which needs it to fail first.
+                val formats = withTimeout(EXTRACT_TIMEOUT_MS) { api.formatsFor(videoId) }
+                val chosen = selectAudioFormat(formats, quality)
+                    ?: error("No playable audio format for $videoId")
+                ResolvedStream(
+                    url = chosen.url,
+                    headers = chosen.headers,
+                    bitrateKbps = chosen.bitrate / 1000,
+                    codec = chosen.codecLabel(),
+                ).also { cache[key] = Cached(it, System.currentTimeMillis()) }
+            }
         }
+        if (forUi) _lastResolved.value = stream
+        return stream
+    }
+
+    /**
+     * Warms the next track's URL. Gives up the moment an extraction is already
+     * running — the playing track must never queue behind the next one — and
+     * never touches [lastResolved], which describes what is playing now.
+     */
+    suspend fun prefetch(videoId: String, quality: Quality = Quality.HIGH) {
+        if (cached("$videoId:${quality.name}") != null) return
+        if (extractionLock.isLocked) return
+        runCatching { resolve(videoId, quality, forUi = false) }
+            .onFailure { Log.w(TAG, "prefetch of $videoId skipped: ${it.message}") }
+    }
+
+    private fun cached(key: String): ResolvedStream? {
+        val hit = cache[key] ?: return null
+        if (System.currentTimeMillis() - hit.atMs < URL_TTL_MS) return hit.stream
+        cache.remove(key)
+        return null
     }
 
     private companion object {
         /** Comfortably inside YouTube's ~6h signed-URL lifetime. */
         const val URL_TTL_MS = 5L * 60 * 60 * 1000
+
+        /**
+         * Generous — a cold extraction on a slow phone is genuinely ~20s — but
+         * finite. Past this, failing is better than a spinner that never ends.
+         */
+        const val EXTRACT_TIMEOUT_MS = 45_000L
     }
 }
 
@@ -142,8 +184,21 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
         if (!prepared.compareAndSet(false, true)) return@withContext
         runCatching { YoutubeDL.init(appContext) }
             .onFailure { Log.e(TAG, "yt-dlp init failed", it) }
+
+        // Once a day, not once a launch. The update rewrites the same directory
+        // getInfo reads from, so doing it on every start meant the first play
+        // after opening the app could race a half-written binary and hang.
+        val prefs = appContext.getSharedPreferences("ytdlp", Context.MODE_PRIVATE)
+        val last = prefs.getLong(KEY_LAST_UPDATE, 0L)
+        if (System.currentTimeMillis() - last < UPDATE_INTERVAL_MS) return@withContext
         runCatching { YoutubeDL.updateYoutubeDL(appContext) }
+            .onSuccess { prefs.edit().putLong(KEY_LAST_UPDATE, System.currentTimeMillis()).apply() }
             .onFailure { Log.w(TAG, "yt-dlp update skipped: ${it.message}") }
+    }
+
+    private companion object {
+        const val KEY_LAST_UPDATE = "last_update_ms"
+        const val UPDATE_INTERVAL_MS = 24L * 60 * 60 * 1000
     }
 
     override suspend fun formatsFor(videoId: String): List<AudioFormat> = withContext(Dispatchers.IO) {
@@ -155,7 +210,11 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
         // yt-dlp writes advisories (e.g. "your version is older than 90 days")
         // to stderr, and the wrapper turns any stderr into an exception.
         request.addOption("--no-warnings")
-        val info = YoutubeDL.getInfo(request)
+        // runInterruptible, not a bare call: getInfo blocks on a subprocess,
+        // and a plain blocking call ignores coroutine cancellation entirely —
+        // which would make resolve()'s timeout decorative. Interrupting the
+        // thread makes Process.waitFor throw, so the timeout is real.
+        val info = runInterruptible { YoutubeDL.getInfo(request) }
         val fallbackHeaders = info.httpHeaders.orEmpty()
         info.formats.orEmpty().mapNotNull { format ->
             val url = format.url ?: return@mapNotNull null

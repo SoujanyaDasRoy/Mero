@@ -6,6 +6,22 @@ import com.zionhuang.innertube.models.SongItem
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
+/**
+ * Shelf headings read as titles, not sentences: "Bollywood Hits", not
+ * "Bollywood hits". Hyphens count as word breaks ("lo-fi" -> "Lo-Fi"), and a
+ * short override list covers the words that aren't just capitalised initials.
+ */
+internal fun String.titleCase(): String = split(" ").joinToString(" ") { word ->
+    ACRONYMS[word] ?: word.split("-").joinToString("-") { part ->
+        ACRONYMS[part] ?: part.replaceFirstChar { it.uppercase() }
+    }
+}
+
+private val ACRONYMS = mapOf(
+    "edm" to "EDM", "r&b" to "R&B", "k" to "K", "lo" to "Lo", "fi" to "Fi",
+    "dj" to "DJ", "90s" to "90s", "80s" to "80s", "2000s" to "2000s",
+)
+
 /** One horizontal shelf on the home screen. */
 data class HomeSection(
     val title: String,
@@ -55,7 +71,7 @@ class HomeRepository {
                         if (songs.isEmpty()) {
                             null
                         } else {
-                            HomeSection(seed.replaceFirstChar { it.uppercase() }, songs)
+                            HomeSection(seed.titleCase(), songs)
                         }
                     }
                 }

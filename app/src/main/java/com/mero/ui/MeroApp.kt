@@ -235,7 +235,16 @@ private fun MeroContent(
                     retriedForError = error.timestampMs
                     controller.prepare()
                     controller.play()
+                    return
                 }
+                // Second failure on the same error: stop retrying and say so.
+                // Spec §9 — extraction failure is visible and retryable, never
+                // an indefinite spinner. Retrying is pressing play again.
+                android.widget.Toast.makeText(
+                    context,
+                    "Couldn't load that track. Tap play to try again.",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
             }
         }
         controller.addListener(listener)
@@ -341,10 +350,14 @@ private fun MeroContent(
     // Resolve the next track's URL while the current one plays, so skipping
     // doesn't pay the extraction cost. StreamRepository caches the result, so
     // the actual skip is then instant.
-    LaunchedEffect(current?.id, queue) {
-        val next = queue.firstOrNull() ?: return@LaunchedEffect
+    // Keyed on the id, not the list: `queue` is a fresh List on every DB emit,
+    // so keying on it restarted this effect constantly and fired an extraction
+    // each time — which is what left the playing track stuck buffering.
+    val nextId = queue.firstOrNull()?.id
+    LaunchedEffect(nextId) {
+        if (nextId == null) return@LaunchedEffect
         delay(4_000)
-        runCatching { container.streamRepository.resolve(next.id) }
+        container.streamRepository.prefetch(nextId)
     }
 
     // Lyrics are fetched lazily — only when the sheet is actually open.
