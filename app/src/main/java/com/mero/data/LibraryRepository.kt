@@ -62,6 +62,16 @@ class LibraryRepository(private val dao: MeroDao) {
         dao.addToQueue(songs.mapIndexed { index, song -> QueueEntity(song.id, index) })
     }
 
+    /**
+     * Rewrites queue order only. Unlike [setQueue] it skips the per-song upsert,
+     * since reordering can't introduce a song that isn't already stored — which
+     * matters because this runs on drop, not once per drag.
+     */
+    suspend fun reorderQueue(songs: List<Song>) {
+        dao.clearQueue()
+        dao.addToQueue(songs.mapIndexed { index, song -> QueueEntity(song.id, index) })
+    }
+
     suspend fun removeFromQueue(songId: String) = dao.removeFromQueue(songId)
 
     suspend fun clearQueue() = dao.clearQueue()

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,9 +34,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,6 +50,8 @@ import com.mero.domain.LyricLine
 import com.mero.domain.Song
 import com.mero.domain.asClock
 import com.mero.ui.components.Artwork
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 /** Docked 64dp bar. Tapping anywhere but the buttons expands to Now Playing. */
 @Composable
@@ -134,9 +142,23 @@ fun QueueSheet(
     onClear: () -> Unit,
     onPlay: (Song) -> Unit,
     onRemove: (Song) -> Unit,
+    onReorder: (List<Song>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
+
+    // Local copy so dragging stays smooth; the new order is persisted on drop
+    // rather than on every swap.
+    var items by remember(queue) { mutableStateOf(queue) }
+    val listState = rememberLazyListState()
+    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+        // Matched on key rather than index: the footer row is not reorderable.
+        val fromIndex = items.indexOfFirst { it.id == from.key }
+        val toIndex = items.indexOfFirst { it.id == to.key }
+        if (fromIndex != -1 && toIndex != -1) {
+            items = items.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+        }
+    }
     Column(
         modifier
             .fillMaxSize()
@@ -208,7 +230,7 @@ fun QueueSheet(
                 .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
         ) {
             Text(
-                "NEXT UP · ${queue.size}",
+                "NEXT UP · ${items.size}",
                 Modifier.weight(1f),
                 fontSize = 11.sp,
                 letterSpacing = 0.5.sp,
@@ -217,54 +239,64 @@ fun QueueSheet(
             Text("drag to reorder", fontSize = 11.sp, color = scheme.onSurfaceVariant)
         }
 
-        LazyColumn(Modifier.weight(1f)) {
-            items(queue, key = { it.id }) { song ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(60.dp)
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    // ponytail: reorder handle is decorative until the queue is backed
-                    // by a real MediaController — drag lands with M2.
-                    Icon(
-                        Icons.Rounded.DragIndicator,
-                        contentDescription = null,
-                        tint = scheme.outline,
-                    )
+        LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
+            items(items, key = { it.id }) { song ->
+                ReorderableItem(reorderState, key = song.id) { isDragging ->
                     Row(
                         Modifier
-                            .weight(1f)
-                            .clickable { onPlay(song) },
+                            .fillMaxWidth()
+                            .height(60.dp)
+                            .background(
+                                if (isDragging) scheme.surfaceContainerHigh else Color.Transparent,
+                            )
+                            .padding(horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Artwork(song.thumbnailUrl, 44)
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                song.title,
-                                fontSize = 15.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                song.artist,
-                                fontSize = 12.sp,
-                                color = scheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                        IconButton(
+                            onClick = {},
+                            modifier = Modifier.draggableHandle(
+                                onDragStopped = { onReorder(items) },
+                            ),
+                        ) {
+                            Icon(
+                                Icons.Rounded.DragIndicator,
+                                contentDescription = "Reorder",
+                                tint = if (isDragging) scheme.primary else scheme.outline,
                             )
                         }
-                    }
-                    IconButton(onClick = { onRemove(song) }) {
-                        Icon(
-                            Icons.Rounded.Close,
-                            "Remove",
-                            Modifier.size(20.dp),
-                            tint = scheme.onSurfaceVariant,
-                        )
+                        Row(
+                            Modifier
+                                .weight(1f)
+                                .clickable { onPlay(song) },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Artwork(song.thumbnailUrl, 44)
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    song.title,
+                                    fontSize = 15.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    song.artist,
+                                    fontSize = 12.sp,
+                                    color = scheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        IconButton(onClick = { onRemove(song) }) {
+                            Icon(
+                                Icons.Rounded.Close,
+                                "Remove",
+                                Modifier.size(20.dp),
+                                tint = scheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

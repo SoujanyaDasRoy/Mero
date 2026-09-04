@@ -570,6 +570,10 @@ private fun MeroContent(
                     onClear = { scope.launch { library.clearQueue() } },
                     onPlay = { playFrom(it, queue, playSource); overlay = null },
                     onRemove = { removed -> scope.launch { library.removeFromQueue(removed.id) } },
+                    onReorder = { reordered ->
+                        queue = reordered
+                        scope.launch { library.reorderQueue(reordered) }
+                    },
                 )
 
                 "lyrics" -> LyricsSheet(
