@@ -5,6 +5,12 @@ data class AudioFormat(
     val url: String,
     val mimeType: String,
     val bitrate: Int,
+    /**
+     * Headers the extractor used when it resolved this URL. YouTube's CDN
+     * returns 403 if the media request doesn't carry the same User-Agent the
+     * extraction was performed with, so these must be forwarded to the player.
+     */
+    val headers: Map<String, String> = emptyMap(),
 )
 
 enum class Quality(val preferredItag: Int) {

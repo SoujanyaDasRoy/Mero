@@ -15,6 +15,11 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
+
+        // youtubedl-android bundles a native yt-dlp/python runtime per ABI.
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+        }
     }
 
     buildTypes {
@@ -52,6 +57,14 @@ dependencies {
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.datasource)
     implementation(libs.kotlinx.coroutines.guava)
+
+    // Escape hatch: innertube's /player is currently rejected by YouTube
+    // (missing PO token support, upstream issue z-huang/InnerTune#1748, open
+    // since Dec 2024). yt-dlp actively maintains PO token generation, so it's
+    // the primary stream-URL source until that's fixed upstream. See
+    // .claude/skills/resync-innertube and PRD §9.
+    implementation(libs.youtubedl.library)
+    implementation(libs.youtubedl.ffmpeg)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

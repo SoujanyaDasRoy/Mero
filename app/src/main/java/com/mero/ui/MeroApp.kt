@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -248,13 +249,22 @@ private fun MeroContent(
 
                 composable<SearchRoute> {
                     var results by remember { mutableStateOf<List<Song>>(emptyList()) }
+                    var searchError by remember { mutableStateOf<String?>(null) }
                     SearchScreen(
                         query = query,
                         onQueryChange = { query = it },
                         onSearch = {
                             scope.launch {
-                                results = container.searchRepository.search(query)
-                                    .getOrElse { emptyList() }
+                                container.searchRepository.search(query).fold(
+                                    onSuccess = { songs ->
+                                        results = songs
+                                        searchError = null
+                                    },
+                                    onFailure = { e ->
+                                        android.util.Log.e("MeroSearch", "search failed for '$query'", e)
+                                        searchError = e.message ?: e.toString()
+                                    },
+                                )
                             }
                         },
                         selectedTab = searchTab,
@@ -264,6 +274,20 @@ private fun MeroContent(
                         onSongClick = ::play,
                         contentPadding = contentPadding,
                     )
+                    // ponytail: plain overlay, not proper SearchScreen error UI —
+                    // this is a diagnostic scaffold to see the real exception, not
+                    // the final error surface. Replace with SearchScreen's own
+                    // error state once the actual failure is known.
+                    searchError?.let { msg ->
+                        androidx.compose.material3.Text(
+                            "Search failed: $msg",
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .background(androidx.compose.ui.graphics.Color.Red.copy(alpha = 0.85f))
+                                .padding(12.dp),
+                            color = androidx.compose.ui.graphics.Color.White,
+                        )
+                    }
                 }
 
                 composable<Library> {
