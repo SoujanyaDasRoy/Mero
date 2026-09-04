@@ -27,6 +27,7 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Hd
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.SdCard
+import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Wifi
@@ -44,8 +45,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import com.mero.ui.components.GroupHeader
+import com.mero.ui.components.MeroChip
 import com.mero.ui.components.PreferenceRow
+import com.mero.ui.player.PlayerVariant
 import com.mero.ui.theme.MeroAccent
 
 @Composable
@@ -55,6 +60,8 @@ fun SettingsScreen(
     toggles: Map<String, Boolean>,
     onToggle: (String, Boolean) -> Unit,
     onEqualizerClick: () -> Unit,
+    playerVariant: PlayerVariant,
+    onPlayerVariantChange: (PlayerVariant) -> Unit,
     onBack: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -149,6 +156,28 @@ fun SettingsScreen(
                         checked = toggles["amoled"] == true,
                         onCheckedChange = { onToggle("amoled", it) },
                     )
+                }
+                // The design ships three Now Playing directions and no decision.
+                // Exposing the switch here is how that decision gets made — by
+                // living with each one — rather than by picking from a mockup.
+                PreferenceRow(
+                    Icons.Rounded.Smartphone,
+                    "Now Playing layout",
+                    "Three directions from the design — try each",
+                )
+                Row(
+                    Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .padding(start = 54.dp, end = 16.dp, bottom = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    PlayerVariant.entries.forEach { option ->
+                        MeroChip(
+                            label = option.label,
+                            selected = option == playerVariant,
+                            onClick = { onPlayerVariantChange(option) },
+                        )
+                    }
                 }
                 HorizontalDivider(
                     Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),

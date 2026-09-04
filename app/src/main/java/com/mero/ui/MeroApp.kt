@@ -47,6 +47,9 @@ import com.mero.ui.library.LibraryScreen
 import com.mero.ui.player.LyricsSheet
 import com.mero.ui.player.MiniPlayer
 import com.mero.ui.player.NowPlayingScreen
+import com.mero.ui.player.PlayerActions
+import com.mero.ui.player.PlayerUi
+import com.mero.ui.player.PlayerVariant
 import com.mero.ui.player.QueueSheet
 import com.mero.ui.playlist.PlaylistScreen
 import com.mero.ui.search.SearchScreen
@@ -116,6 +119,7 @@ private fun MeroContent(
     var shuffle by remember { mutableStateOf(false) }
     var repeat by remember { mutableStateOf(RepeatMode.Off) }
     var queue by remember { mutableStateOf(SampleData.songs.drop(1)) }
+    var playerVariant by remember { mutableStateOf(PlayerVariant.Standard) }
 
     var query by remember { mutableStateOf("") }
     var searchTab by remember { mutableStateOf("Songs") }
@@ -308,6 +312,8 @@ private fun MeroContent(
                         toggles = toggles,
                         onToggle = onToggle,
                         onEqualizerClick = { navController.navigate(Equalizer) },
+                        playerVariant = playerVariant,
+                        onPlayerVariantChange = { playerVariant = it },
                         onBack = { navController.popBackStack() },
                         contentPadding = contentPadding,
                     )
@@ -329,30 +335,39 @@ private fun MeroContent(
             ) {
                 Surface(Modifier.fillMaxSize()) {
                     NowPlayingScreen(
-                        song = song,
-                        source = "Search results",
-                        positionSec = positionSec,
-                        playing = playing,
-                        liked = liked,
-                        shuffle = shuffle,
-                        repeat = repeat,
-                        upNext = queue.firstOrNull()?.title,
-                        onCollapse = { expanded = false },
-                        onPlayPause = { playing = !playing },
-                        onPrev = { positionSec = 0 },
-                        onNext = { queue.firstOrNull()?.let(::play) },
-                        onSeek = { positionSec = (it * song.durationSec).toInt() },
-                        onLike = { liked = !liked },
-                        onShuffle = { shuffle = !shuffle },
-                        onRepeat = {
-                            repeat = when (repeat) {
-                                RepeatMode.Off -> RepeatMode.All
-                                RepeatMode.All -> RepeatMode.One
-                                RepeatMode.One -> RepeatMode.Off
-                            }
-                        },
-                        onQueue = { overlay = "queue" },
-                        onLyrics = { overlay = "lyrics" },
+                        variant = playerVariant,
+                        ui = PlayerUi(
+                            song = song,
+                            source = "Liked songs",
+                            positionSec = positionSec,
+                            playing = playing,
+                            liked = liked,
+                            shuffle = shuffle,
+                            repeat = repeat,
+                            upNext = queue,
+                        ),
+                        actions = PlayerActions(
+                            onCollapse = { expanded = false },
+                            onPlayPause = { playing = !playing },
+                            onPrev = { positionSec = 0 },
+                            onNext = { queue.firstOrNull()?.let(::play) },
+                            onSeek = { positionSec = (it * song.durationSec).toInt() },
+                            onLike = { liked = !liked },
+                            onShuffle = { shuffle = !shuffle },
+                            onRepeat = {
+                                repeat = when (repeat) {
+                                    RepeatMode.Off -> RepeatMode.All
+                                    RepeatMode.All -> RepeatMode.One
+                                    RepeatMode.One -> RepeatMode.Off
+                                }
+                            },
+                            onQueue = { overlay = "queue" },
+                            onLyrics = { overlay = "lyrics" },
+                            onEqualizer = {
+                                expanded = false
+                                navController.navigate(Equalizer)
+                            },
+                        ),
                     )
                 }
             }
