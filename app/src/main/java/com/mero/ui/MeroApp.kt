@@ -145,6 +145,7 @@ private fun MeroContent(
 
     var current by remember { mutableStateOf<Song?>(null) }
     var playing by remember { mutableStateOf(false) }
+    var buffering by remember { mutableStateOf(false) }
     var positionSec by remember { mutableIntStateOf(0) }
     var expanded by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf<String?>(null) }
@@ -175,12 +176,20 @@ private fun MeroContent(
     DisposableEffect(connection.controller) {
         val controller = connection.controller ?: return@DisposableEffect onDispose {}
         val listener = object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                playing = isPlaying
+            // playWhenReady, not isPlaying: it flips the instant play/pause is
+            // pressed, whereas isPlaying stays false through the (multi-second)
+            // extraction + buffering, which made the button look dead.
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                playing = playWhenReady
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                buffering = playbackState == Player.STATE_BUFFERING
             }
         }
         controller.addListener(listener)
-        playing = controller.isPlaying
+        playing = controller.playWhenReady
+        buffering = controller.playbackState == Player.STATE_BUFFERING
         onDispose { controller.removeListener(listener) }
     }
 
@@ -226,6 +235,8 @@ private fun MeroContent(
     fun play(song: Song) {
         current = song
         positionSec = 0
+        playing = true
+        buffering = true
         connection.play(song)
         scope.launch { library.onPlayed(song) }
     }
@@ -245,6 +256,7 @@ private fun MeroContent(
                         MiniPlayer(
                             song = song,
                             playing = playing,
+                            buffering = buffering,
                             progress = if (song.durationSec == 0) {
                                 0f
                             } else {
@@ -455,6 +467,7 @@ private fun MeroContent(
                             repeat = repeat,
                             upNext = queue,
                             qualityLabel = resolved?.label,
+                            buffering = buffering,
                         ),
                         actions = PlayerActions(
                             onCollapse = { expanded = false },

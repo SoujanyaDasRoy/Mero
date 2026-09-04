@@ -38,7 +38,9 @@ import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -80,6 +82,8 @@ data class PlayerUi(
     val upNext: List<Song>,
     /** e.g. "Opus · 160 kbps" — what the stream actually resolved to. */
     val qualityLabel: String? = null,
+    /** Extraction/buffering in flight — the play button shows a spinner. */
+    val buffering: Boolean = false,
 )
 
 data class PlayerActions(
@@ -178,7 +182,7 @@ private fun StandardPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modif
         ) {
             ShuffleButton(ui.shuffle, actions.onShuffle, 48)
             SkipButton(Icons.Rounded.SkipPrevious, "Previous", actions.onPrev, 56, 40)
-            PlayButton(ui.playing, actions.onPlayPause, size = 76, icon = 42, CircleShape)
+            PlayButton(ui.playing, actions.onPlayPause, 76, 42, CircleShape, ui.buffering)
             SkipButton(Icons.Rounded.SkipNext, "Next", actions.onNext, 56, 40)
             RepeatButton(ui.repeat, actions.onRepeat, 48)
         }
@@ -307,7 +311,7 @@ private fun FullBleedPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modi
                 // Rounded square, not a circle — the one shape difference between variants.
                 PlayButton(
                     ui.playing, actions.onPlayPause,
-                    size = 64, icon = 36, shape = RoundedCornerShape(20.dp),
+                    64, 36, RoundedCornerShape(20.dp), ui.buffering,
                 )
                 SkipButton(Icons.Rounded.SkipNext, "Next", actions.onNext, 56, 36)
                 RepeatButton(ui.repeat, actions.onRepeat, 48)
@@ -398,7 +402,7 @@ private fun QueueForwardPlayer(ui: PlayerUi, actions: PlayerActions, modifier: M
                 )
             }
             SkipButton(Icons.Rounded.SkipPrevious, "Previous", actions.onPrev, 48, 32)
-            PlayButton(ui.playing, actions.onPlayPause, size = 60, icon = 34, CircleShape)
+            PlayButton(ui.playing, actions.onPlayPause, 60, 34, CircleShape, ui.buffering)
             SkipButton(Icons.Rounded.SkipNext, "Next", actions.onNext, 48, 32)
             IconButton(onClick = actions.onLyrics, modifier = Modifier.size(44.dp)) {
                 Icon(
@@ -664,6 +668,7 @@ private fun PlayButton(
     size: Int,
     icon: Int,
     shape: androidx.compose.ui.graphics.Shape,
+    buffering: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     Box(
@@ -674,12 +679,20 @@ private fun PlayButton(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-            contentDescription = if (playing) "Pause" else "Play",
-            modifier = Modifier.size(icon.dp),
-            tint = scheme.onPrimary,
-        )
+        if (buffering) {
+            CircularProgressIndicator(
+                Modifier.size((icon - 6).dp),
+                color = scheme.onPrimary,
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Icon(
+                if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                contentDescription = if (playing) "Pause" else "Play",
+                modifier = Modifier.size(icon.dp),
+                tint = scheme.onPrimary,
+            )
+        }
     }
 }
 

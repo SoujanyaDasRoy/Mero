@@ -25,6 +25,7 @@ import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SyncAlt
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -49,6 +50,7 @@ import com.mero.ui.components.Artwork
 fun MiniPlayer(
     song: Song,
     playing: Boolean,
+    buffering: Boolean = false,
     progress: Float,
     onExpand: () -> Unit,
     onPlayPause: () -> Unit,
@@ -92,11 +94,19 @@ fun MiniPlayer(
                 )
             }
             IconButton(onClick = onPlayPause) {
-                Icon(
-                    if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    contentDescription = if (playing) "Pause" else "Play",
-                    modifier = Modifier.size(26.dp),
-                )
+                if (buffering) {
+                    CircularProgressIndicator(
+                        Modifier.size(20.dp),
+                        color = scheme.primary,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                        contentDescription = if (playing) "Pause" else "Play",
+                        modifier = Modifier.size(26.dp),
+                    )
+                }
             }
             IconButton(onClick = onNext) {
                 Icon(Icons.Rounded.SkipNext, "Next", Modifier.size(26.dp))

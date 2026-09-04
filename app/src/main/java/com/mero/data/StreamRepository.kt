@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** A playable stream plus the headers required to actually fetch it. */
@@ -33,12 +34,31 @@ class StreamRepository(private val api: PlayerApi) {
     /** What the currently playing track actually resolved to, for the UI. */
     val lastResolved: StateFlow<ResolvedStream?> = _lastResolved.asStateFlow()
 
+    private class Cached(val stream: ResolvedStream, val atMs: Long)
+
+    /**
+     * In-memory only, and deliberately so: resolving costs a yt-dlp subprocess
+     * (seconds), so replaying a track in the same session shouldn't pay it
+     * twice. Nothing is written to disk, and entries expire well inside the
+     * ~6h URL lifetime — CLAUDE.md constraint 2 still holds.
+     */
+    private val cache = ConcurrentHashMap<String, Cached>()
+
     /**
      * Never cache or persist the result — the URL expires in roughly six hours.
      * Callers resolve fresh at playback-open time. See CLAUDE.md constraint 2
      * and playback/StreamResolver.kt.
      */
     suspend fun resolve(videoId: String, quality: Quality = Quality.HIGH): ResolvedStream {
+        val key = "$videoId:${quality.name}"
+        cache[key]?.let { hit ->
+            if (System.currentTimeMillis() - hit.atMs < URL_TTL_MS) {
+                _lastResolved.value = hit.stream
+                return hit.stream
+            }
+            cache.remove(key)
+        }
+
         val formats = api.formatsFor(videoId)
         val chosen = selectAudioFormat(formats, quality)
             ?: error("No playable audio format for $videoId")
@@ -47,7 +67,15 @@ class StreamRepository(private val api: PlayerApi) {
             headers = chosen.headers,
             bitrateKbps = chosen.bitrate / 1000,
             codec = chosen.codecLabel(),
-        ).also { _lastResolved.value = it }
+        ).also {
+            _lastResolved.value = it
+            cache[key] = Cached(it, System.currentTimeMillis())
+        }
+    }
+
+    private companion object {
+        /** Comfortably inside YouTube's ~6h signed-URL lifetime. */
+        const val URL_TTL_MS = 5L * 60 * 60 * 1000
     }
 }
 
