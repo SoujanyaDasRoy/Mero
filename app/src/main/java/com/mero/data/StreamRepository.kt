@@ -247,6 +247,8 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
                 headers = format.httpHeaders ?: fallbackHeaders,
             )
         }
+        Log.i(TAG, "audio formats for $videoId: " +
+            audio.joinToString { "${it.itag}/${it.mimeType}/${it.bitrate / 1000}k" })
         if (audio.isEmpty()) {
             Log.w(
                 TAG,
