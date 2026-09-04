@@ -58,6 +58,7 @@ import androidx.navigation.toRoute
 import com.mero.MeroApplication
 import com.mero.data.EqPresets
 import com.mero.data.HomeSection
+import com.mero.data.titleCase
 import com.mero.domain.RepeatMode
 import com.mero.domain.Song
 import com.mero.playback.PlayerConnection
@@ -167,6 +168,7 @@ private fun MeroContent(
     val mostPlayed by library.mostPlayed.collectAsStateWithLifecycle(emptyList())
     val persistedQueue by library.queue.collectAsStateWithLifecycle(emptyList())
     val playlists by library.playlists.collectAsStateWithLifecycle(emptyList())
+    val downloadedSongs by library.downloads.collectAsStateWithLifecycle(emptyList())
     val sleepRemaining by container.sleepTimer.remainingSec.collectAsStateWithLifecycle(null)
     val sleepAfterTrack by container.sleepTimer.stopAfterTrack.collectAsStateWithLifecycle(false)
 
@@ -207,6 +209,11 @@ private fun MeroContent(
     LaunchedEffect(recentSearches) {
         searchPrefs.edit().putString("recent", recentSearches.joinToString(NL)).apply()
     }
+    // A stable handful of the home seeds, Title Cased the same way the shelf
+    // headings are, so an empty search box offers somewhere to start.
+    val browseTopics = remember {
+        container.homeRepository.seeds.shuffled().take(14).map { it.titleCase() }
+    }
     var submittedQuery by remember { mutableStateOf("") }
     var suggestions by remember { mutableStateOf(com.mero.data.Suggestions(emptyList(), emptyList())) }
     var homeSections by remember { mutableStateOf(emptyList<HomeSection>()) }
@@ -219,6 +226,9 @@ private fun MeroContent(
     var lyricsLoading by remember { mutableStateOf(false) }
     var addingToPlaylist by remember { mutableStateOf<Song?>(null) }
     var menuSong by remember { mutableStateOf<Song?>(null) }
+    fun toast(text: String) {
+        android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
+    }
     // Any touch anywhere counts as "still listening" for the inactivity pause.
     var lastInteractionMs by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
     var playSource by remember { mutableStateOf("Mero") }
@@ -227,6 +237,7 @@ private fun MeroContent(
     val librarySongs = when (libraryTab) {
         "Recent" -> recentlyPlayed
         "Most played" -> mostPlayed
+        "Downloads" -> downloadedSongs
         else -> likedSongs
     }
     var homeError by remember { mutableStateOf<String?>(null) }
@@ -600,6 +611,7 @@ private fun MeroContent(
                     var searchError by remember { mutableStateOf<String?>(null) }
                     SearchScreen(
                         recentSearches = recentSearches,
+                        browseTopics = browseTopics,
                         onRemoveRecent = { term -> recentSearches = recentSearches - term },
                         query = query,
                         onQueryChange = { query = it },
@@ -666,6 +678,7 @@ private fun MeroContent(
                         liked = likedSongs,
                         recentlyPlayed = recentlyPlayed,
                         mostPlayed = mostPlayed,
+                        downloads = downloadedSongs,
                         playlists = playlists,
                         onOpenPlaylist = { navController.navigate(PlaylistRoute(it)) },
                         onCreatePlaylist = { name -> scope.launch { library.createPlaylist(name) } },
@@ -804,6 +817,37 @@ private fun MeroContent(
                 onAddToQueue = { connection.addToQueue(listOf(song)) },
                 onAddToPlaylist = { menuSong = null; addingToPlaylist = song },
                 onToggleLike = { scope.launch { library.toggleLiked(song) } },
+                downloaded = downloadedSongs.any { it.id == song.id },
+                onDownload = {
+                    val already = downloadedSongs.any { it.id == song.id }
+                    // A download takes a minute and the only feedback available
+                    // without a progress UI is saying so at both ends.
+                    toast(if (already) "Removing download" else "Downloading ${song.title}")
+                    scope.launch(Dispatchers.IO) {
+                        if (already) {
+                            com.mero.playback.MediaCache.removeDownload(song.id)
+                            library.markDownloaded(song, false)
+                        } else {
+                            runCatching {
+                                com.mero.playback.MediaCache.download(
+                                    container.downloadDataSourceFactory(context),
+                                    song.id,
+                                ) {}
+                            }.fold(
+                                onSuccess = {
+                                    library.markDownloaded(song, true)
+                                    withContext(Dispatchers.Main) { toast("Downloaded ${song.title}") }
+                                },
+                                onFailure = {
+                                    com.mero.playback.MediaCache.removeDownload(song.id)
+                                    withContext(Dispatchers.Main) {
+                                        toast("Download failed: ${it.message}")
+                                    }
+                                },
+                            )
+                        }
+                    }
+                },
                 onStartRadio = {
                     scope.launch {
                         container.radioRepository.radioFor(song.id)

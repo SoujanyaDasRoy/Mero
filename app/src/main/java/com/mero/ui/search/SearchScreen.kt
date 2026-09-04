@@ -49,6 +49,7 @@ private val SEARCH_TABS = listOf("Songs", "Albums", "Artists", "Playlists")
 @Composable
 fun SearchScreen(
     recentSearches: List<String>,
+    browseTopics: List<String>,
     onRemoveRecent: (String) -> Unit,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -168,6 +169,7 @@ fun SearchScreen(
         } else if (query.isBlank()) {
             SearchIdle(
                 recentSearches = recentSearches,
+                browseTopics = browseTopics,
                 onRemoveRecent = onRemoveRecent,
                 onQueryChange = { onQueryChange(it); onSearch() },
                 contentPadding = contentPadding,
@@ -204,15 +206,44 @@ fun SearchScreen(
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SearchIdle(
     recentSearches: List<String>,
+    browseTopics: List<String>,
     onRemoveRecent: (String) -> Unit,
     onQueryChange: (String) -> Unit,
     contentPadding: PaddingValues,
 ) {
     val scheme = MaterialTheme.colorScheme
     LazyColumn(contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding())) {
+        // An empty search box used to be an empty screen for anyone who had not
+        // searched before. Somewhere to start beats a blank page.
+        if (browseTopics.isNotEmpty()) {
+            item {
+                Text(
+                    "Browse",
+                    Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = scheme.onSurfaceVariant,
+                )
+                androidx.compose.foundation.layout.FlowRow(
+                    Modifier.padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    browseTopics.forEach { topic ->
+                        com.mero.ui.components.MeroChip(
+                            label = topic,
+                            selected = false,
+                            onClick = { onQueryChange(topic) },
+                        )
+                    }
+                }
+            }
+        }
+        if (recentSearches.isEmpty()) return@LazyColumn
         item {
             Text(
                 "Recent searches",

@@ -36,6 +36,7 @@ private fun Song.toEntity() = SongEntity(
 class LibraryRepository(private val dao: MeroDao) {
 
     val liked: Flow<List<Song>> = dao.likedSongs().map { rows -> rows.map { it.toDomain() } }
+    val downloads: Flow<List<Song>> = dao.downloads().map { rows -> rows.map { it.toDomain() } }
     val recentlyPlayed: Flow<List<Song>> = dao.recentlyPlayed().map { rows -> rows.map { it.toDomain() } }
     val mostPlayed: Flow<List<Song>> = dao.mostPlayed().map { rows -> rows.map { it.toDomain() } }
     val queue: Flow<List<Song>> = dao.queue().map { rows -> rows.map { it.toDomain() } }
@@ -45,6 +46,11 @@ class LibraryRepository(private val dao: MeroDao) {
     /** Songs only exist in the DB once they're touched, so upsert before mutating. */
     private suspend fun ensure(song: Song) {
         if (dao.song(song.id) == null) dao.upsertSong(song.toEntity())
+    }
+
+    suspend fun markDownloaded(song: Song, downloaded: Boolean) {
+        ensure(song)
+        dao.setDownloaded(song.id, if (downloaded) System.currentTimeMillis() else null)
     }
 
     suspend fun onPlayed(song: Song) {

@@ -30,7 +30,7 @@ import com.mero.domain.Song
 import com.mero.ui.components.MeroChip
 import com.mero.ui.components.SongRow
 
-val LIBRARY_TABS = listOf("Playlists", "Liked", "Recent", "Most played")
+val LIBRARY_TABS = listOf("Playlists", "Liked", "Downloads", "Recent", "Most played")
 
 @Composable
 fun LibraryScreen(
@@ -39,6 +39,7 @@ fun LibraryScreen(
     liked: List<Song>,
     recentlyPlayed: List<Song>,
     mostPlayed: List<Song>,
+    downloads: List<Song>,
     playlists: List<com.mero.data.db.PlaylistSummary>,
     onOpenPlaylist: (String) -> Unit,
     onCreatePlaylist: (String) -> Unit,
@@ -53,6 +54,7 @@ fun LibraryScreen(
     val songs = when (selectedTab) {
         "Recent" -> recentlyPlayed
         "Most played" -> mostPlayed
+        "Downloads" -> downloads
         else -> liked
     }
 
@@ -94,6 +96,8 @@ fun LibraryScreen(
                     when (selectedTab) {
                         "Recent" -> "Nothing played yet."
                         "Most played" -> "No listening history yet."
+                        "Downloads" -> "Nothing downloaded yet." + NL +
+                            "Use the menu on a track to keep it offline."
                         else -> "No liked songs yet.\nTap the heart on a track to save it here."
                     },
                     Modifier.padding(32.dp),
@@ -117,3 +121,5 @@ fun LibraryScreen(
         }
     }
 }
+
+private const val NL = "\n"

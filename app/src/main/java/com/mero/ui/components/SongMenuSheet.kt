@@ -15,7 +15,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.LibraryAdd
 import androidx.compose.material.icons.rounded.Person
@@ -56,6 +60,8 @@ fun SongMenuSheet(
     onAddToQueue: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onToggleLike: () -> Unit,
+    onDownload: () -> Unit,
+    downloaded: Boolean,
     onStartRadio: () -> Unit,
     onGoToArtist: () -> Unit,
     onShare: () -> Unit,
@@ -130,6 +136,10 @@ fun SongMenuSheet(
             if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
             if (liked) "Remove from liked" else "Add to liked",
         ) { onClose(); onToggleLike() }
+        MenuRow(
+            if (downloaded) Icons.Rounded.DownloadDone else Icons.Rounded.Download,
+            if (downloaded) "Remove download" else "Download",
+        ) { onClose(); onDownload() }
         MenuRow(Icons.Rounded.Radio, "Start radio") { onClose(); onStartRadio() }
         MenuRow(Icons.Rounded.Person, "Go to artist") { onClose(); onGoToArtist() }
         MenuRow(Icons.Rounded.Share, "Share") { onClose(); onShare() }

@@ -33,12 +33,56 @@ object MediaCache {
     @Volatile
     private var instance: SimpleCache? = null
 
+    @Volatile
+    private var downloads: SimpleCache? = null
+
     fun get(context: Context): SimpleCache = instance ?: synchronized(this) {
         instance ?: SimpleCache(
             File(context.applicationContext.cacheDir, "media"),
             LeastRecentlyUsedCacheEvictor(MAX_BYTES),
             StandaloneDatabaseProvider(context.applicationContext),
         ).also { instance = it }
+    }
+
+    /**
+     * Downloads live in their own cache with no evictor, and under filesDir
+     * rather than cacheDir: content the user asked to keep must not be thrown
+     * away to make room for something streamed, and Android is entitled to
+     * delete cacheDir whenever it likes.
+     */
+    fun downloads(context: Context): SimpleCache = downloads ?: synchronized(this) {
+        downloads ?: SimpleCache(
+            File(context.applicationContext.filesDir, "downloads"),
+            androidx.media3.datasource.cache.NoOpCacheEvictor(),
+            StandaloneDatabaseProvider(context.applicationContext),
+        ).also { downloads = it }
+    }
+
+    fun isDownloaded(videoId: String): Boolean =
+        downloads?.getCachedSpans(videoId)?.isNotEmpty() == true
+
+    fun removeDownload(videoId: String) {
+        val cache = downloads ?: return
+        cache.getCachedSpans(videoId).toList().forEach { runCatching { cache.removeSpan(it) } }
+    }
+
+    /**
+     * Pulls a whole track into the download cache. Blocking, and reports
+     * progress as a fraction so the UI can show something moving.
+     */
+    fun download(
+        factory: CacheDataSource.Factory,
+        videoId: String,
+        onProgress: (Float) -> Unit,
+    ) {
+        val spec = DataSpec.Builder().setUri("mero://" + videoId).build()
+        CacheWriter(
+            factory.createDataSource(),
+            spec,
+            null,
+        ) { requestLength, bytesCached, _ ->
+            if (requestLength > 0) onProgress(bytesCached.toFloat() / requestLength)
+        }.cache()
     }
 
     val keyFactory = CacheKeyFactory { spec -> spec.key ?: spec.uri.host ?: spec.uri.toString() }

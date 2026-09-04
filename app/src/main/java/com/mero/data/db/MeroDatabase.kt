@@ -29,6 +29,8 @@ data class SongEntity(
     val likedAt: Long? = null,
     val lastPlayedAt: Long? = null,
     val playCount: Int = 0,
+    /** When the audio was pinned to the download cache; null means streaming only. */
+    val downloadedAt: Long? = null,
 )
 
 /** Persisted playback queue; `position` is the order within it. */
@@ -79,6 +81,12 @@ interface MeroDao {
 
     @Query("SELECT * FROM songs WHERE lastPlayedAt IS NOT NULL ORDER BY lastPlayedAt DESC LIMIT 50")
     fun recentlyPlayed(): Flow<List<SongEntity>>
+
+    @Query("SELECT * FROM songs WHERE downloadedAt IS NOT NULL ORDER BY downloadedAt DESC")
+    fun downloads(): Flow<List<SongEntity>>
+
+    @Query("UPDATE songs SET downloadedAt = :at WHERE id = :id")
+    suspend fun setDownloaded(id: String, at: Long?)
 
     @Query("SELECT * FROM songs WHERE playCount > 0 ORDER BY playCount DESC LIMIT 50")
     fun mostPlayed(): Flow<List<SongEntity>>
@@ -204,6 +212,12 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE songs ADD COLUMN downloadedAt INTEGER")
+    }
+}
+
 @Database(
     entities = [
         SongEntity::class,
@@ -211,7 +225,7 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         PlaylistEntity::class,
         PlaylistSongEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class MeroDatabase : RoomDatabase() {

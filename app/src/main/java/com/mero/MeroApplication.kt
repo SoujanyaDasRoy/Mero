@@ -22,6 +22,7 @@ import com.mero.data.RadioRepository
 import com.mero.data.SearchRepository
 import com.mero.data.LyricsRepository
 import com.mero.data.db.MIGRATION_1_2
+import com.mero.data.db.MIGRATION_2_3
 import com.mero.data.db.MeroDatabase
 import com.mero.playback.SleepTimer
 import com.mero.playback.AudioEffects
@@ -46,7 +47,7 @@ class AppContainer(context: Context) {
             context.applicationContext,
             MeroDatabase::class.java,
             "mero.db",
-        ).addMigrations(MIGRATION_1_2).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
     }
 
     val searchRepository: SearchRepository by lazy { SearchRepository(InnerTubeSearchApi) }
@@ -77,11 +78,31 @@ class AppContainer(context: Context) {
             DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true),
             StreamResolver(streamRepository),
         )
-        return CacheDataSource.Factory()
+        val streaming = CacheDataSource.Factory()
             .setCache(MediaCache.get(ctx))
             .setUpstreamDataSourceFactory(resolving)
             .setCacheKeyFactory(MediaCache.keyFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+        // Downloads are checked first, so a downloaded track never touches the
+        // network — which is the entire point of having downloaded it.
+        return CacheDataSource.Factory()
+            .setCache(MediaCache.downloads(ctx))
+            .setUpstreamDataSourceFactory(streaming)
+            .setCacheKeyFactory(MediaCache.keyFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+    }
+
+    /** Writes into the download cache rather than reading through it. */
+    fun downloadDataSourceFactory(ctx: Context): CacheDataSource.Factory {
+        val resolving = ResolvingDataSource.Factory(
+            DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true),
+            StreamResolver(streamRepository),
+        )
+        return CacheDataSource.Factory()
+            .setCache(MediaCache.downloads(ctx))
+            .setUpstreamDataSourceFactory(resolving)
+            .setCacheKeyFactory(MediaCache.keyFactory)
     }
 }
 
