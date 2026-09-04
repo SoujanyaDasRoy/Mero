@@ -16,10 +16,18 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
+    }
 
-        // youtubedl-android bundles a native yt-dlp/python runtime per ABI.
-        ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+    // yt-dlp ships a Python runtime and ffmpeg per architecture, so a universal
+    // APK lands around 263 MB. Splitting by ABI gets a real phone down to one
+    // architecture's worth. arm64-v8a is what every modern handset needs;
+    // x86_64 exists for the emulator.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = false
         }
     }
 
@@ -65,7 +73,6 @@ dependencies {
     // the primary stream-URL source until that's fixed upstream. See
     // .claude/skills/resync-innertube and PRD §9.
     implementation(libs.youtubedl.library)
-    implementation(libs.youtubedl.ffmpeg)
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
