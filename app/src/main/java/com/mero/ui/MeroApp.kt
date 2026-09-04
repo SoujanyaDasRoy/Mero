@@ -220,7 +220,7 @@ private fun MeroContent(
     var eqEnabled by remember { mutableStateOf(true) }
     var preset by remember { mutableStateOf("Flat") }
     var bands by remember { mutableStateOf(EqPresets.presets.getValue("Flat")) }
-    var preamp by remember { mutableStateOf(0.6f) }
+    var preamp by remember { mutableStateOf(audioEffects.preamp) }
     var crossfade by remember { mutableStateOf(0.5f) }
     var importStep by remember { mutableIntStateOf(1) }
     var importPicked by remember { mutableStateOf(setOf(0, 1, 3)) }

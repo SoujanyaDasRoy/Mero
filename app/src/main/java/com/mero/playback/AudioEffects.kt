@@ -44,6 +44,25 @@ class AudioEffects {
     var spatialSupported: Boolean = false
         private set
 
+    /**
+     * True when the settings ask for nothing: flat bands, unity preamp, no
+     * normalization, no spatial widening.
+     *
+     * Worth its own concept because "enabled but transparent" is the common
+     * case — most listening happens on the Flat preset — and running audio
+     * through a 10-band processor and a 20:1 limiter to achieve nothing is
+     * strictly worse than not running it at all.
+     */
+    private val isTransparent: Boolean
+        get() = !enabled || (
+            bands.all { it == 0 } &&
+                preampDb() == 0f &&
+                !normalization &&
+                !(spatial && spatialSupported)
+            )
+
+    private fun preampDb(): Float = (preamp * 24f) - 12f
+
     /** Called by the playback service once ExoPlayer has an audio session. */
     fun attach(audioSessionId: Int) {
         if (audioSessionId == 0 || audioSessionId == sessionId) return
@@ -119,7 +138,7 @@ class AudioEffects {
                 )
             }
 
-            val preampDb = if (enabled) (preamp * 24f) - 12f else 0f
+            val preampDb = if (enabled) preampDb() else 0f
             dp.setInputGainAllChannelsTo(preampDb - maxBoost)
 
             dp.setLimiterAllChannelsTo(
@@ -134,7 +153,10 @@ class AudioEffects {
                     /* postGain = */ 0f,
                 ),
             )
-            dp.enabled = enabled
+            // Bypass rather than process-to-no-effect. A flat pre-EQ still
+            // costs a multiband pass and a limiter stage on every sample, and
+            // the limiter is not transparent by construction.
+            dp.enabled = !isTransparent
         }.onFailure { Log.e(TAG, "failed to apply equalizer", it) }
 
         runCatching {

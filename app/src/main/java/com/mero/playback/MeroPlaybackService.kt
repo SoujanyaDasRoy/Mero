@@ -4,6 +4,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.Player
 import androidx.media3.common.C
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
@@ -44,6 +45,12 @@ class MeroPlaybackService : MediaSessionService() {
                     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                     .build(),
                 /* handleAudioFocus = */ true,
+            )
+            .setRenderersFactory(
+                // 32-bit float through the effects chain instead of 16-bit.
+                // With the equalizer active the signal is scaled and summed;
+                // doing that in 16-bit quantises at every stage.
+                DefaultRenderersFactory(this).setEnableAudioFloatOutput(true),
             )
             .setHandleAudioBecomingNoisy(true)
             .build()
