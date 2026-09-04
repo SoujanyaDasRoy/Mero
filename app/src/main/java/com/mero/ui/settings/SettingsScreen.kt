@@ -267,7 +267,7 @@ fun SettingsScreen(
                 PreferenceRow(
                     Icons.Rounded.Code,
                     "Source",
-                    "github.com/mero/mero · GPL-3.0",
+                    "github.com/SoujanyaDasRoy/Mero · GPL-3.0",
                     onClick = {},
                 ) {
                     Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
@@ -277,10 +277,10 @@ fun SettingsScreen(
                     "Updates",
                     "Delivered through Obtainium",
                 ) {
-                    Text("1.0.0", fontSize = 13.sp, color = scheme.onSurfaceVariant)
+                    Text("1.2.0", fontSize = 13.sp, color = scheme.onSurfaceVariant)
                 }
                 Text(
-                    "Mero 1.0.0 · GPL-3.0 · updates via Obtainium",
+                    "Mero 1.2.0 · GPL-3.0 · updates via Obtainium",
                     Modifier.padding(20.dp),
                     fontSize = 12.sp,
                     lineHeight = 18.sp,
