@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.MotionPhotosPause
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Contrast
 import androidx.compose.material.icons.rounded.FormatPaint
@@ -66,6 +67,7 @@ fun SettingsScreen(
     onSleepTimerClick: () -> Unit,
     sleepSummary: String,
     onClearCache: () -> Unit,
+    onImportClick: () -> Unit,
     playerVariant: PlayerVariant,
     onPlayerVariantChange: (PlayerVariant) -> Unit,
     onBack: () -> Unit,
@@ -242,6 +244,22 @@ fun SettingsScreen(
             }
 
             item {
+                GroupHeader("LIBRARY")
+                PreferenceRow(
+                    Icons.Rounded.CloudDownload,
+                    "Import a playlist",
+                    "From YouTube Music or Spotify",
+                    onClick = onImportClick,
+                ) {
+                    Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
+                }
+                HorizontalDivider(
+                    Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                    color = scheme.outlineVariant,
+                )
+            }
+
+            item {
                 GroupHeader("STORAGE")
                 PreferenceRow(
                     Icons.Rounded.Wifi,
@@ -299,10 +317,10 @@ fun SettingsScreen(
                     "Updates",
                     "Delivered through Obtainium",
                 ) {
-                    Text("1.3.0", fontSize = 13.sp, color = scheme.onSurfaceVariant)
+                    Text("1.4.0", fontSize = 13.sp, color = scheme.onSurfaceVariant)
                 }
                 Text(
-                    "Mero 1.3.0 · GPL-3.0 · updates via Obtainium",
+                    "Mero 1.4.0 · GPL-3.0 · updates via Obtainium",
                     Modifier.padding(20.dp),
                     fontSize = 12.sp,
                     lineHeight = 18.sp,

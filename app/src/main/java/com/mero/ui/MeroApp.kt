@@ -77,6 +77,7 @@ import com.mero.ui.player.QueueSheet
 import com.mero.ui.player.SleepTimerSheet
 import com.mero.ui.components.SongMenuSheet
 import com.mero.ui.playlist.AddToPlaylistSheet
+import com.mero.ui.playlist.ImportScreen
 import com.mero.ui.playlist.PlaylistDetailScreen
 import com.mero.ui.search.SearchScreen
 import com.mero.ui.settings.SettingsScreen
@@ -96,6 +97,7 @@ import kotlinx.serialization.Serializable
 @Serializable object Import
 @Serializable object Equalizer
 @Serializable object SettingsRoute
+@Serializable object ImportRoute
 @Serializable data class PlaylistRoute(val playlistId: String)
 
 @Composable
@@ -226,6 +228,18 @@ private fun MeroContent(
     var lyricsLoading by remember { mutableStateOf(false) }
     var addingToPlaylist by remember { mutableStateOf<Song?>(null) }
     var menuSong by remember { mutableStateOf<Song?>(null) }
+    var importSource by remember { mutableStateOf("YouTube") }
+    var importUrl by remember { mutableStateOf("") }
+    var importBusy by remember { mutableStateOf(false) }
+    var importStatus by remember { mutableStateOf<String?>(null) }
+    // The user's own Spotify app credentials. Mero ships none: a key baked into
+    // an APK handed round a group of friends is a key that leaks, and it would
+    // put every import in the group behind one rate limit.
+    val spotifyPrefs = remember {
+        context.getSharedPreferences("spotify", android.content.Context.MODE_PRIVATE)
+    }
+    var spotifyId by remember { mutableStateOf(spotifyPrefs.getString("id", "").orEmpty()) }
+    var spotifySecret by remember { mutableStateOf(spotifyPrefs.getString("secret", "").orEmpty()) }
     fun toast(text: String) {
         android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
     }
@@ -781,6 +795,69 @@ private fun MeroContent(
                     )
                 }
 
+                composable<ImportRoute> {
+                    ImportScreen(
+                        source = importSource,
+                        onSourceChange = { importSource = it; importStatus = null },
+                        url = importUrl,
+                        onUrlChange = { importUrl = it },
+                        clientId = spotifyId,
+                        onClientIdChange = {
+                            spotifyId = it
+                            spotifyPrefs.edit().putString("id", it).apply()
+                        },
+                        clientSecret = spotifySecret,
+                        onClientSecretChange = {
+                            spotifySecret = it
+                            spotifyPrefs.edit().putString("secret", it).apply()
+                        },
+                        busy = importBusy,
+                        status = importStatus,
+                        onImport = {
+                            importBusy = true
+                            importStatus = "Reading the playlist..."
+                            scope.launch {
+                                val result = if (importSource == "YouTube") {
+                                    container.importRepository.importYouTube(importUrl)
+                                } else {
+                                    container.importRepository.importSpotify(
+                                        importUrl,
+                                        spotifyId,
+                                        spotifySecret,
+                                    ) { done, total ->
+                                        importStatus = "Matching track $done of $total..."
+                                    }
+                                }
+                                importBusy = false
+                                result.fold(
+                                    onSuccess = { imported ->
+                                        val id = library.createPlaylist(imported.name)
+                                        library.addToPlaylist(id, imported.songs)
+                                        importStatus = buildString {
+                                            append("Imported ")
+                                            append(imported.songs.size)
+                                            append(" tracks into \"")
+                                            append(imported.name)
+                                            append("\".")
+                                            if (imported.unmatched.isNotEmpty()) {
+                                                append(NL)
+                                                append(NL)
+                                                append("Could not find on YouTube:")
+                                                append(NL)
+                                                append(imported.unmatched.joinToString(NL))
+                                            }
+                                        }
+                                        importUrl = ""
+                                    },
+                                    onFailure = { importStatus = it.message ?: it.toString() },
+                                )
+                            }
+                        },
+                        onBack = { navController.popBackStack() },
+                        contentPadding = contentPadding,
+                    )
+                }
+
                 composable<SettingsRoute> {
                     SettingsScreen(
                         accent = accent,
@@ -788,6 +865,7 @@ private fun MeroContent(
                         toggles = toggles,
                         onToggle = onToggle,
                         onEqualizerClick = { navController.navigate(Equalizer) },
+                        onImportClick = { navController.navigate(ImportRoute) },
                         onSleepTimerClick = { overlay = "sleep" },
                         sleepSummary = when {
                             sleepRemaining != null -> "Active"
