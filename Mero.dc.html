@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=block" />
+<script src="./image-slot.js"></script>
+<style>
+  body { margin: 0; background: #0E0E10; }
+  a { color: #D0BCFF; text-decoration: none; }
+  a:hover { color: #EADDFF; }
+  ::-webkit-scrollbar { width: 0; height: 0; }
+  image-slot#mero-live-art::part(empty) { display: none !important; }
+</style>
+</helmet>
+<div ref="{{ rootRef }}" style="--bg:#141218;--surf1:#1D1B20;--surf2:#211F26;--surf3:#2B2930;--surf4:#36343B;--on:#E6E0E9;--onv:#CAC4D0;--outline:#938F99;--outlinev:#49454F;--accent:#D0BCFF;--onAccent:#381E72;--accentC:#4F378B;--onAccentC:#EADDFF;--secContainer:#4A4458;--playerTint:#2A2233;background:#0E0E10;color:#E6E0E9;font-family:Roboto,system-ui,sans-serif;padding:56px 64px 96px;box-sizing:border-box;min-height:100vh">
+
+  <section style="display:flex;flex-direction:column;gap:40px">
+    <div style="max-width:720px;display:flex;flex-direction:column;gap:12px">
+      <div style="font-size:12px;letter-spacing:1.6px;text-transform:uppercase;color:#938F99">Mero · Android music player · turn 1</div>
+      <div style="font-size:40px;font-weight:500;line-height:46px;letter-spacing:-0.5px">Stock Material 3, dark grey, artwork-led</div>
+      <div style="font-size:15px;line-height:24px;color:#CAC4D0;text-wrap:pretty">Ten screens on the M3 baseline scheme with a violet dynamic-colour palette. <a href="#1a">1a</a> is live: bottom nav switches Home / Search / Library, list rows play, the mini-player expands to Now Playing with the artwork carrying across, and Queue, Lyrics, Playlist, Import, Equalizer and Settings are all reachable. <a href="#1b">1b</a>, <a href="#1c">1c</a> and <a href="#1d">1d</a> are the three Now Playing directions at rest — the switcher above <a href="#1a">1a</a> swaps which one the live player uses — and <a href="#1e">1e</a> is Search with the keyboard up. Drag cover art onto any placeholder to fill it.</div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start">
+
+      <div id="1a" style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:12px;font-weight:700;letter-spacing:0.6px;background:#4F378B;color:#EADDFF;padding:4px 10px;border-radius:6px">1a</span>
+          <span style="font-size:15px;font-weight:500">Live prototype</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;color:#938F99;padding-right:4px">Player</span>
+          <button type="button" onClick="{{ setVarA }}" style="height:32px;padding:0 14px;border-radius:8px;border:1px solid #49454F;background:{{ vaBg }};color:{{ vaFg }};font-family:Roboto,sans-serif;font-size:13px;font-weight:500;cursor:pointer">A · Standard</button>
+          <button type="button" onClick="{{ setVarB }}" style="height:32px;padding:0 14px;border-radius:8px;border:1px solid #49454F;background:{{ vbBg }};color:{{ vbFg }};font-family:Roboto,sans-serif;font-size:13px;font-weight:500;cursor:pointer">B · Full-bleed</button>
+          <button type="button" onClick="{{ setVarC }}" style="height:32px;padding:0 14px;border-radius:8px;border:1px solid #49454F;background:{{ vcBg }};color:{{ vcFg }};font-family:Roboto,sans-serif;font-size:13px;font-weight:500;cursor:pointer">C · Queue-forward</button>
+        </div>
+
+        <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" hint-size="412px,892px">
+          <div style="position:relative;height:100%;overflow:hidden;background:var(--bg,#141218);font-family:Roboto,system-ui,sans-serif;color:var(--on,#E6E0E9)">
+
+            <sc-if value="{{ onHome }}" hint-placeholder-val="{{ true }}">
+              <div style="position:absolute;left:0;right:0;top:0;bottom:144px;display:flex;flex-direction:column">
+                <div style="flex:none;height:64px;display:flex;align-items:center;padding:0 4px 0 16px">
+                  <div style="flex:1;font-size:22px;font-weight:500;letter-spacing:0">Mero</div>
+                  <button type="button" style="width:48px;height:48px;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:24px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:24px">history</span></button>
+                  <button type="button" onClick="{{ goSettings }}" style="width:48px;height:48px;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:24px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:24px">settings</span></button>
+                </div>
+                <div style="flex:1;min-height:0;overflow-y:auto">
+                  <div style="padding:4px 16px 8px;font-size:16px;font-weight:500;letter-spacing:0.1px">Quick picks</div>
+                  <div style="padding:0 16px 4px;font-size:12px;color:var(--onv,#CAC4D0)">From what you played this week</div>
+                  <div style="display:flex;gap:12px;overflow-x:auto;padding:12px 16px 4px">
+                    <div onClick="{{ goPlaylist }}" style="width:150px;flex:none;cursor:pointer">
+                      <div style="width:150px;height:150px"><image-slot id="mero-qp-1" shape="rounded" radius="12" placeholder="Cover"></image-slot></div>
+                      <div style="font-size:14px;font-weight:500;padding-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Mango Tree</div>
+                      <div style="font-size:12px;color:var(--onv,#CAC4D0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Angus &amp; Julia Stone</div>
+                    </div>
+                    <div onClick="{{ goPlaylist }}" style="width:150px;flex:none;cursor:pointer">
+                      <div style="width:150px;height:150px"><image-slot id="mero-qp-2" shape="rounded" radius="12" placeholder="Cover"></image-slot></div>
+                      <div style="font-size:14px;font-weight:500;padding-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Nightcall</div>
+                      <div style="font-size:12px;color:var(--onv,#CAC4D0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Kavinsky</div>
+                    </div>
+                    <div onClick="{{ goPlaylist }}" style="width:150px;flex:none;cursor:pointer">
+                      <div style="width:150px;height:150px"><image-slot id="mero-qp-3" shape="rounded" radius="12" placeholder="Cover"></image-slot></div>
+                      <div style="font-size:14px;font-weight:500;padding-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Redbone</div>
+                      <div style="font-size:12px;color:var(--onv,#CAC4D0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Childish Gambino</div>
+                    </div>
+                  </div>
+                  <div style="height:12px"></div>
+                  <div style="padding:4px 16px 8px;font-size:16px;font-weight:500;letter-spacing:0.1px">Recently played</div>
+                  <div style="display:flex;gap:12px;overflow-x:auto;padding:4px 16px">
+                    <div onClick="{{ goPlaylist }}" style="width:120px;flex:none;cursor:pointer">
+                      <div style="width:120px;height:120px"><image-slot id="mero-rp-1" shape="rounded" radius="10" placeholder="Cover"></image-slot></div>
+                      <div style="font-size:13px;padding-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Indie Chill</div>
+                      <div style="font-size:11px;color:var(--onv,#CAC4D0)">Playlist · 42</div>
+                    </div>
+                    <div onClick="{{ goPlaylist }}" style="width:120px;flex:none;cursor:pointer">
+                      <div style="width:120px;height:120px"><image-slot id="mero-rp-2" shape="rounded" radius="10" placeholder="Cover"></image-slot></div>
+                      <div style="font-size:13px;padding-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Snow</div>
+                      <div style="font-size:11px;color:var(--onv,#CAC4D0)">Album · Angus</div>
+                    </div>
+                    <div onClick="{{ goPlaylist }}" style="width:120px;flex:none;cursor:pointer">
+                      <div style="width:120px;height:120px"><image-slot id="mero-rp-3" shape="rounded" radius="10" placeholder="Cover"></image-slot></div>
+                      <div style="font-size:13px;padding-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Late Drive</div>
+                      <div style="font-size:11px;color:var(--onv,#CAC4D0)">Playlist · 18</div>
+                    </div>
+                  </div>
+                  <div style="height:20px"></div>
+                  <div style="padding:4px 16px 4px;font-size:16px;font-weight:500;letter-spacing:0.1px">Charts &amp; moods</div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 16px 24px">
+                    <sc-for list="{{ moods }}" as="m" hint-placeholder-count="6">
+                      <div style="height:72px;border-radius:12px;background:var(--surf3,#2B2930);display:flex;align-items:center;gap:10px;padding:0 14px;cursor:pointer" style-hover="background:var(--surf4,#36343B)">
+                        <span style="font-family:'Material Symbols Rounded';font-size:22px;color:var(--accent,#D0BCFF)">{{ m.icon }}</span>
+                        <div style="font-size:14px;font-weight:500;line-height:18px">{{ m.label }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ onSearch }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;left:0;right:0;top:0;bottom:144px;display:flex;flex-direction:column">
+                <div style="flex:none;padding:12px 16px 8px">
+                  <div style="height:56px;border-radius:28px;background:var(--surf3,#2B2930);display:flex;align-items:center;padding:0 8px 0 16px;gap:8px">
+                    <span style="font-family:'Material Symbols Rounded';font-size:24px;color:var(--onv,#CAC4D0)">search</span>
+                    <input value="{{ query }}" onChange="{{ onQuery }}" placeholder="Songs, albums, artists" style="flex:1;min-width:0;height:40px;border:0;outline:0;background:transparent;color:var(--on,#E6E0E9);font-family:Roboto,sans-serif;font-size:16px" />
+                    <button type="button" onClick="{{ clearQuery }}" style="width:40px;height:40px;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:20px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:22px">{{ searchTrailIcon }}</span></button>
+                  </div>
+                </div>
+                <sc-if value="{{ searchIdle }}" hint-placeholder-val="{{ true }}">
+                  <div style="flex:1;min-height:0;overflow-y:auto;padding-bottom:16px">
+                    <div style="padding:8px 16px 4px;font-size:14px;font-weight:500;color:var(--onv,#CAC4D0)">Recent searches</div>
+                    <sc-for list="{{ recentSearches }}" as="r" hint-placeholder-count="4">
+                      <div style="height:56px;display:flex;align-items:center;gap:16px;padding:0 8px 0 16px">
+                        <span style="font-family:'Material Symbols Rounded';font-size:22px;color:var(--onv,#CAC4D0);flex:none">history</span>
+                        <div onClick="{{ r.use }}" style="flex:1;min-width:0;font-size:16px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.text }}</div>
+                        <button type="button" onClick="{{ r.remove }}" style="width:44px;height:44px;flex:none;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:22px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:20px">close</span></button>
+                      </div>
+                    </sc-for>
+                    <div style="height:8px"></div>
+                    <div style="padding:8px 16px 4px;font-size:14px;font-weight:500;color:var(--onv,#CAC4D0)">Trending on YouTube Music</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;padding:8px 16px">
+                      <sc-for list="{{ trending }}" as="t" hint-placeholder-count="5">
+                        <div onClick="{{ t.use }}" style="height:32px;padding:0 14px;border-radius:8px;border:1px solid var(--outlinev,#49454F);display:flex;align-items:center;font-size:13px;cursor:pointer" style-hover="background:var(--surf3,#2B2930)">{{ t.text }}</div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ searchResultsMode }}" hint-placeholder-val="{{ false }}">
+                  <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+                    <div style="flex:none;display:flex;gap:8px;overflow-x:auto;padding:4px 16px 12px">
+                      <sc-for list="{{ searchTabs }}" as="tab" hint-placeholder-count="4">
+                        <div onClick="{{ tab.select }}" style="height:32px;flex:none;padding:0 14px;border-radius:8px;border:1px solid var(--outlinev,#49454F);display:flex;align-items:center;font-size:13px;font-weight:500;cursor:pointer;background:{{ tab.bg }};color:{{ tab.fg }}">{{ tab.label }}</div>
+                      </sc-for>
+                    </div>
+                    <div style="flex:1;min-height:0;overflow-y:auto;padding-bottom:16px">
+                      <sc-for list="{{ results }}" as="s" hint-placeholder-count="6">
+                        <div onClick="{{ s.play }}" style="height:64px;display:flex;align-items:center;gap:16px;padding:0 8px 0 16px;cursor:pointer" style-hover="background:var(--surf1,#1D1B20)">
+                          <div style="width:48px;height:48px;flex:none;border-radius:6px;background:var(--surf3,#2B2930);display:flex;align-items:center;justify-content:center;color:var(--outline,#938F99)"><span style="font-family:'Material Symbols Rounded';font-size:22px">{{ s.icon }}</span></div>
+                          <div style="flex:1;min-width:0">
+                            <div style="font-size:16px;line-height:22px;color:{{ s.titleColor }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.title }}</div>
+                            <div style="font-size:13px;line-height:18px;color:var(--onv,#CAC4D0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.sub }}</div>
+                          </div>
+                          <span style="font-family:'Material Symbols Rounded';font-size:18px;color:var(--accent,#D0BCFF);flex:none;opacity:{{ s.dlOpacity }}">download_done</span>
+                          <button type="button" style="width:44px;height:44px;flex:none;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:22px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:20px">more_vert</span></button>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ onLibrary }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;left:0;right:0;top:0;bottom:144px;display:flex;flex-direction:column">
+                <div style="flex:none;height:64px;display:flex;align-items:center;padding:0 4px 0 16px">
+                  <div style="flex:1;font-size:22px;font-weight:500">Library</div>
+                  <button type="button" style="width:48px;height:48px;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:24px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:24px">sort</span></button>
+                  <button type="button" onClick="{{ goSettings }}" style="width:48px;height:48px;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:24px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:24px">settings</span></button>
+                </div>
+                <div style="flex:1;min-height:0;overflow-y:auto;padding-bottom:16px">
+                  <div style="display:flex;gap:8px;overflow-x:auto;padding:0 16px 12px">
+                    <sc-for list="{{ libTabs }}" as="tab" hint-placeholder-count="5">
+                      <div onClick="{{ tab.select }}" style="height:32px;flex:none;padding:0 14px;border-radius:8px;border:1px solid var(--outlinev,#49454F);display:flex;align-items:center;font-size:13px;font-weight:500;cursor:pointer;background:{{ tab.bg }};color:{{ tab.fg }}">{{ tab.label }}</div>
+                    </sc-for>
+                  </div>
+                  <sc-for list="{{ libShortcuts }}" as="row" hint-placeholder-count="4">
+                    <div onClick="{{ row.open }}" style="height:64px;display:flex;align-items:center;gap:16px;padding:0 16px;cursor:pointer" style-hover="background:var(--surf1,#1D1B20)">
+                      <div style="width:44px;height:44px;flex:none;border-radius:8px;background:var(--accentC,#4F378B);display:flex;align-items:center;justify-content:center;color:var(--onAccentC,#EADDFF)"><span style="font-family:'Material Symbols Rounded';font-size:22px;font-variation-settings:'FILL' 1">{{ row.icon }}</span></div>
+                      <div style="flex:1;min-width:0">
+                        <div style="font-size:16px;line-height:22px">{{ row.label }}</div>
+                        <div style="font-size:13px;line-height:18px;color:var(--onv,#CAC4D0)">{{ row.sub }}</div>
+                      </div>
+                      <span style="font-family:'Material Symbols Rounded';font-size:20px;color:var(--onv,#CAC4D0)">chevron_right</span>
+                    </div>
+                  </sc-for>
+                  <div style="height:1px;background:var(--outlinev,#49454F);margin:12px 16px"></div>
+                  <div style="display:flex;align-items:center;padding:4px 8px 4px 16px">
+                    <div style="flex:1;font-size:14px;font-weight:500;color:var(--onv,#CAC4D0)">Your playlists</div>
+                    <button type="button" style="height:32px;padding:0 12px;border:1px solid var(--outlinev,#49454F);border-radius:8px;background:transparent;color:var(--on,#E6E0E9);font-family:Roboto,sans-serif;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-family:'Material Symbols Rounded';font-size:18px">add</span>New</button>
+                  </div>
+                  <div onClick="{{ goImport }}" style="height:64px;display:flex;align-items:center;gap:16px;padding:0 16px;cursor:pointer" style-hover="background:var(--surf1,#1D1B20)">
+                    <div style="width:48px;height:48px;flex:none;border-radius:8px;border:1px dashed var(--outline,#938F99);display:flex;align-items:center;justify-content:center;color:var(--accent,#D0BCFF)"><span style="font-family:'Material Symbols Rounded';font-size:22px">library_add</span></div>
+                    <div style="flex:1;min-width:0">
+                      <div style="font-size:16px;line-height:22px">Import from Spotify or YouTube</div>
+                      <div style="font-size:13px;line-height:18px;color:var(--onv,#CAC4D0)">Metadata only · resolves to YT Music</div>
+                    </div>
+                  </div>
+                  <sc-for list="{{ playlists }}" as="p" hint-placeholder-count="4">
+                    <div onClick="{{ p.open }}" style="height:64px;display:flex;align-items:center;gap:16px;padding:0 8px 0 16px;cursor:pointer" style-hover="background:var(--surf1,#1D1B20)">
+                      <div style="width:48px;height:48px;flex:none;border-radius:6px;background:var(--surf3,#2B2930);display:flex;align-items:center;justify-content:center;color:var(--outline,#938F99)"><span style="font-family:'Material Symbols Rounded';font-size:22px">queue_music</span></div>
+                      <div style="flex:1;min-width:0">
+                        <div style="font-size:16px;line-height:22px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.name }}</div>
+                        <div style="font-size:13px;line-height:18px;color:var(--onv,#CAC4D0)">{{ p.sub }}</div>
+                      </div>
+                      <span style="font-family:'Material Symbols Rounded';font-size:18px;color:var(--accent,#D0BCFF);flex:none;opacity:{{ p.dlOpacity }}">download_done</span>
+                      <button type="button" style="width:44px;height:44px;flex:none;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:22px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:20px">more_vert</span></button>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ onPlaylist }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;left:0;right:0;top:0;bottom:144px;display:flex;flex-direction:column;background:var(--bg,#141218)">
+                <div style="flex:none;height:56px;display:flex;align-items:center;padding:0 4px">
+                  <button type="button" onClick="{{ goBack }}" style="width:48px;height:48px;border:0;background:transparent;color:var(--on,#E6E0E9);border-radius:24px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:24px">arrow_back</span></button>
+                  <div style="flex:1"></div>
+                  <button type="button" style="width:48px;height:48px;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:24px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:22px">search</span></button>
+                  <button type="button" style="width:48px;height:48px;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:24px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:22px">more_vert</span></button>
+                </div>
+                <div style="flex:1;min-height:0;overflow-y:auto;padding-bottom:16px">
+                  <div style="display:flex;gap:16px;padding:0 16px 16px">
+                    <div style="width:140px;height:140px;flex:none"><image-slot id="mero-playlist-hero" shape="rounded" radius="12" placeholder="Cover art"></image-slot></div>
+                    <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:4px">
+                      <div style="font-size:24px;font-weight:500;line-height:30px;text-wrap:pretty">Indie Chill</div>
+                      <div style="font-size:13px;color:var(--onv,#CAC4D0);padding-top:6px">Playlist · 42 songs</div>
+                      <div style="font-size:13px;color:var(--onv,#CAC4D0)">2h 51m · 18 downloaded</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:0 16px 8px">
+                    <button type="button" onClick="{{ playFirst }}" style="height:40px;padding:0 20px;border:0;border-radius:20px;background:var(--accent,#D0BCFF);color:var(--onAccent,#381E72);font-family:Roboto,sans-serif;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:20px;font-variation-settings:'FILL' 1">play_arrow</span>Play</button>
+                    <button type="button" onClick="{{ shuffleAll }}" style="height:40px;padding:0 16px;border:0;border-radius:20px;background:var(--secContainer,#4A4458);color:var(--on,#E6E0E9);font-family:Roboto,sans-serif;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:20px">shuffle</span>Shuffle</button>
+                    <div style="flex:1"></div>
+                    <button type="button" style="width:44px;height:44px;border:0;background:transparent;color:var(--accent,#D0BCFF);border-radius:22px;cursor:pointer" style-hover="background:rgba(208,188,255,0.10)"><span style="font-family:'Material Symbols Rounded';font-size:22px">download_for_offline</span></button>
+                  </div>
+                  <sc-for list="{{ playlistTracks }}" as="s" hint-placeholder-count="8">
+                    <div onClick="{{ s.play }}" style="height:60px;display:flex;align-items:center;gap:14px;padding:0 8px 0 16px;cursor:pointer" style-hover="background:var(--surf1,#1D1B20)">
+                      <div style="width:24px;flex:none;text-align:center;font-size:13px;color:{{ s.titleColor }}">{{ s.n }}</div>
+                      <div style="width:44px;height:44px;flex:none;border-radius:6px;background:var(--surf3,#2B2930);display:flex;align-items:center;justify-content:center;color:var(--outline,#938F99)"><span style="font-family:'Material Symbols Rounded';font-size:20px">{{ s.icon }}</span></div>
+                      <div style="flex:1;min-width:0">
+                        <div style="font-size:15px;line-height:20px;color:{{ s.titleColor }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.title }}</div>
+                        <div style="font-size:12px;line-height:16px;color:var(--onv,#CAC4D0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.sub }}</div>
+                      </div>
+                      <span style="font-family:'Material Symbols Rounded';font-size:16px;color:var(--accent,#D0BCFF);flex:none;opacity:{{ s.dlOpacity }}">download_done</span>
+                      <button type="button" style="width:40px;height:40px;flex:none;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:20px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:20px">more_vert</span></button>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ onImport }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;left:0;right:0;top:0;bottom:144px;display:flex;flex-direction:column;background:var(--bg,#141218)">
+                <div style="flex:none;height:56px;display:flex;align-items:center;gap:4px;padding:0 4px">
+                  <button type="button" onClick="{{ importBack }}" style="width:48px;height:48px;border:0;background:transparent;color:var(--on,#E6E0E9);border-radius:24px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:24px">arrow_back</span></button>
+                  <div style="flex:1;font-size:18px;font-weight:500">Import playlists</div>
+                </div>
+                <div style="flex:none;display:flex;gap:6px;padding:0 16px 16px">
+                  <sc-for list="{{ importSteps }}" as="st" hint-placeholder-count="4">
+                    <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                      <div style="height:4px;border-radius:2px;background:{{ st.bar }}"></div>
+                      <div style="font-size:11px;color:{{ st.fg }}">{{ st.label }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="flex:1;min-height:0;overflow-y:auto">
+
+                  <sc-if value="{{ imp1 }}" hint-placeholder-val="{{ true }}">
+                    <div style="padding:16px;display:flex;flex-direction:column;gap:20px">
+                      <div style="background:var(--surf2,#211F26);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:12px">
+                        <span style="font-family:'Material Symbols Rounded';font-size:32px;color:var(--accent,#D0BCFF)">link</span>
+                        <div style="font-size:20px;font-weight:500;line-height:26px">Connect Spotify</div>
+                        <div style="font-size:14px;line-height:20px;color:var(--onv,#CAC4D0);text-wrap:pretty">Mero reads your playlists and saved albums through Spotify's Web API. It never plays Spotify audio — every track is matched to YouTube Music.</div>
+                        <div style="display:flex;gap:10px;align-items:flex-start;padding-top:4px">
+                          <span style="font-family:'Material Symbols Rounded';font-size:18px;color:var(--onv,#CAC4D0)">lock</span>
+                          <div style="font-size:12px;line-height:17px;color:var(--onv,#CAC4D0)">PKCE authorisation. No client secret ships in the APK, and no Google account is involved anywhere in Mero.</div>
+                        </div>
+                      </div>
+                      <button type="button" onClick="{{ importNext }}" style="height:48px;border:0;border-radius:24px;background:var(--accent,#D0BCFF);color:var(--onAccent,#381E72);font-family:Roboto,sans-serif;font-size:15px;font-weight:500;cursor:pointer">Connect Spotify</button>
+                      <div style="height:1px;background:var(--outlinev,#49454F)"></div>
+                      <div style="display:flex;flex-direction:column;gap:10px">
+                        <div style="font-size:14px;font-weight:500">Or paste a YouTube playlist link</div>
+                        <div style="height:56px;border-radius:4px;background:var(--surf2,#211F26);border-bottom:1px solid var(--outline,#938F99);display:flex;align-items:center;padding:0 16px;font-size:15px;color:var(--onv,#CAC4D0)">music.youtube.com/playlist?list=…</div>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ imp2 }}" hint-placeholder-val="{{ false }}">
+                    <div>
+                      <div style="padding:0 16px 8px;font-size:14px;color:var(--onv,#CAC4D0)">4 playlists · 2 albums found</div>
+                      <sc-for list="{{ importPicks }}" as="p" hint-placeholder-count="5">
+                        <div onClick="{{ p.toggle }}" style="height:64px;display:flex;align-items:center;gap:16px;padding:0 16px;cursor:pointer" style-hover="background:var(--surf1,#1D1B20)">
+                          <span style="font-family:'Material Symbols Rounded';font-size:22px;color:{{ p.checkColor }};flex:none;font-variation-settings:'FILL' 1">{{ p.check }}</span>
+                          <div style="width:44px;height:44px;flex:none;border-radius:6px;background:var(--surf3,#2B2930);display:flex;align-items:center;justify-content:center;color:var(--outline,#938F99)"><span style="font-family:'Material Symbols Rounded';font-size:20px">queue_music</span></div>
+                          <div style="flex:1;min-width:0">
+                            <div style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.name }}</div>
+                            <div style="font-size:12px;color:var(--onv,#CAC4D0)">{{ p.sub }}</div>
+                          </div>
+                        </div>
+                      </sc-for>
+                      <div style="padding:16px">
+                        <button type="button" onClick="{{ importNext }}" style="width:100%;height:48px;border:0;border-radius:24px;background:var(--accent,#D0BCFF);color:var(--onAccent,#381E72);font-family:Roboto,sans-serif;font-size:15px;font-weight:500;cursor:pointer">{{ importCta }}</button>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ imp3 }}" hint-placeholder-val="{{ false }}">
+                    <div>
+                      <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
+                        <div style="display:flex;justify-content:space-between;font-size:14px">
+                          <span>Resolving tracks</span>
+                          <span style="color:var(--onv,#CAC4D0)">37 / 50</span>
+                        </div>
+                        <div style="height:4px;border-radius:2px;background:var(--outlinev,#49454F);overflow:hidden">
+                          <div style="height:4px;width:74%;background:var(--accent,#D0BCFF)"></div>
+                        </div>
+                        <div style="font-size:12px;color:var(--onv,#CAC4D0)">Matching on duration, then title, then artist. Cached so re-imports are instant.</div>
+                      </div>
+                      <sc-for list="{{ importProgress }}" as="row" hint-placeholder-count="6">
+                        <div style="height:60px;display:flex;align-items:center;gap:16px;padding:0 16px">
+                          <span style="font-family:'Material Symbols Rounded';font-size:20px;color:{{ row.color }};flex:none">{{ row.icon }}</span>
+                          <div style="flex:1;min-width:0">
+                            <div style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.title }}</div>
+                            <div style="font-size:12px;color:var(--onv,#CAC4D0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.status }}</div>
+                          </div>
+                        </div>
+                      </sc-for>
+                      <div style="padding:16px">
+                        <button type="button" onClick="{{ importNext }}" style="width:100%;height:48px;border:1px solid var(--outline,#938F99);border-radius:24px;background:transparent;color:var(--on,#E6E0E9);font-family:Roboto,sans-serif;font-size:15px;font-weight:500;cursor:pointer">Skip to review</button>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ imp4 }}" hint-placeholder-val="{{ false }}">
+                    <div>
+                      <div style="margin:0 16px 16px;background:var(--surf2,#211F26);border-radius:16px;padding:16px">
+                        <div style="font-size:16px;font-weight:500">45 of 50 matched confidently</div>
+                        <div style="font-size:13px;color:var(--onv,#CAC4D0);padding-top:4px;text-wrap:pretty">Five need a look. Overrides are sticky — Mero never re-resolves a track you fixed.</div>
+                      </div>
+                      <sc-for list="{{ importReview }}" as="r" hint-placeholder-count="3">
+                        <div style="margin:0 16px 12px;border:1px solid {{ r.border }};border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+                          <div style="display:flex;align-items:center;gap:8px">
+                            <span style="font-family:'Material Symbols Rounded';font-size:18px;color:{{ r.flagColor }}">{{ r.flagIcon }}</span>
+                            <div style="flex:1;min-width:0;font-size:12px;color:var(--onv,#CAC4D0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.reason }}</div>
+                          </div>
+                          <div>
+                            <div style="font-size:11px;color:var(--onv,#CAC4D0)">Spotify</div>
+                            <div style="font-size:14px">{{ r.from }}</div>
+                          </div>
+                          <div>
+                            <div style="font-size:11px;color:var(--onv,#CAC4D0)">Matched to</div>
+                            <div style="font-size:14px;color:{{ r.toColor }}">{{ r.to }}</div>
+                          </div>
+                          <div style="display:flex;gap:8px;padding-top:2px">
+                            <button type="button" style="height:36px;padding:0 14px;border:1px solid var(--outlinev,#49454F);border-radius:18px;background:transparent;color:var(--on,#E6E0E9);font-family:Roboto,sans-serif;font-size:13px;font-weight:500;cursor:pointer">Change match</button>
+                            <button type="button" style="height:36px;padding:0 14px;border:0;border-radius:18px;background:transparent;color:var(--onv,#CAC4D0);font-family:Roboto,sans-serif;font-size:13px;font-weight:500;cursor:pointer">Keep</button>
+                          </div>
+                        </div>
+                      </sc-for>
+                      <div style="padding:4px 16px 16px">
+                        <button type="button" onClick="{{ importDone }}" style="width:100%;height:48px;border:0;border-radius:24px;background:var(--accent,#D0BCFF);color:var(--onAccent,#381E72);font-family:Roboto,sans-serif;font-size:15px;font-weight:500;cursor:pointer">Save 3 playlists</button>
+                      </div>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ onEq }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;left:0;right:0;top:0;bottom:144px;display:flex;flex-direction:column;background:var(--bg,#141218)">
+                <div style="flex:none;height:56px;display:flex;align-items:center;gap:4px;padding:0 4px">
+                  <button type="button" onClick="{{ goBack }}" style="width:48px;height:48px;border:0;background:transparent;color:var(--on,#E6E0E9);border-radius:24px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:24px">arrow_back</span></button>
+                  <div style="flex:1;font-size:18px;font-weight:500">Equalizer</div>
+                  <button type="button" onClick="{{ toggleEq }}" style="height:32px;padding:0 12px;margin-right:8px;border:1px solid var(--outlinev,#49454F);border-radius:8px;background:{{ eqOnBg }};color:{{ eqOnFg }};font-family:Roboto,sans-serif;font-size:13px;font-weight:500;cursor:pointer">{{ eqOnLabel }}</button>
+                </div>
+                <div style="flex:1;min-height:0;overflow-y:auto;padding-bottom:16px">
+                  <div style="display:flex;gap:8px;overflow-x:auto;padding:0 16px 16px">
+                    <sc-for list="{{ eqPresets }}" as="p" hint-placeholder-count="6">
+                      <div onClick="{{ p.select }}" style="height:32px;flex:none;padding:0 14px;border-radius:8px;border:1px solid var(--outlinev,#49454F);display:flex;align-items:center;font-size:13px;font-weight:500;cursor:pointer;background:{{ p.bg }};color:{{ p.fg }}">{{ p.label }}</div>
+                    </sc-for>
+                  </div>
+                  <div style="margin:0 16px;background:var(--surf2,#211F26);border-radius:16px;padding:16px 8px 12px">
+                    <div style="display:flex;justify-content:space-between;padding:0 8px 8px;font-size:11px;color:var(--onv,#CAC4D0)">
+                      <span>+12 dB</span><span>10-band · DynamicsProcessing</span><span>−12 dB</span>
+                    </div>
+                    <div style="display:flex;align-items:flex-end;justify-content:space-between;padding:0 2px">
+                      <sc-for list="{{ eqBands }}" as="b" hint-placeholder-count="10">
+                        <div onClick="{{ b.set }}" data-i="{{ b.i }}" style="width:32px;flex:none;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer">
+                          <div style="font-size:10px;color:var(--accent,#D0BCFF);height:12px">{{ b.db }}</div>
+                          <div style="position:relative;width:32px;height:150px;display:flex;justify-content:center">
+                            <div style="position:absolute;top:0;bottom:0;width:4px;border-radius:2px;background:var(--outlinev,#49454F)"></div>
+                            <div style="position:absolute;bottom:0;width:4px;border-radius:2px;background:var(--accent,#D0BCFF);height:{{ b.fill }}"></div>
+                            <div style="position:absolute;width:14px;height:14px;border-radius:7px;background:var(--accent,#D0BCFF);bottom:{{ b.handle }}"></div>
+                          </div>
+                          <div style="font-size:9px;color:var(--onv,#CAC4D0)">{{ b.hz }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <div style="padding:20px 16px 4px;font-size:14px;font-weight:500;color:var(--onv,#CAC4D0)">Output</div>
+                  <sc-for list="{{ eqSliders }}" as="s" hint-placeholder-count="2">
+                    <div onClick="{{ s.set }}" data-k="{{ s.key }}" style="padding:8px 16px 12px;cursor:pointer">
+                      <div style="display:flex;justify-content:space-between;font-size:14px;padding-bottom:6px">
+                        <span>{{ s.label }}</span>
+                        <span style="color:var(--onv,#CAC4D0)">{{ s.value }}</span>
+                      </div>
+                      <div style="position:relative;height:16px;display:flex;align-items:center">
+                        <div style="position:absolute;left:0;right:0;height:4px;border-radius:2px;background:var(--outlinev,#49454F)"></div>
+                        <div style="position:absolute;left:0;height:4px;border-radius:2px;background:var(--accent,#D0BCFF);width:{{ s.pct }}"></div>
+                        <div style="position:absolute;width:16px;height:16px;border-radius:8px;background:var(--accent,#D0BCFF);left:{{ s.pct }};margin-left:-8px"></div>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <sc-for list="{{ eqSwitches }}" as="s" hint-placeholder-count="3">
+                    <div onClick="{{ s.toggle }}" style="min-height:64px;display:flex;align-items:center;gap:16px;padding:8px 16px;cursor:pointer" style-hover="background:var(--surf1,#1D1B20)">
+                      <div style="flex:1;min-width:0">
+                        <div style="font-size:15px;line-height:20px">{{ s.label }}</div>
+                        <div style="font-size:12px;line-height:16px;color:var(--onv,#CAC4D0);text-wrap:pretty">{{ s.sub }}</div>
+                      </div>
+                      <div style="width:52px;height:32px;flex:none;border-radius:16px;border:2px solid {{ s.trackBorder }};background:{{ s.track }};position:relative;transition:background 160ms">
+                        <div style="position:absolute;top:{{ s.knobTop }};left:{{ s.knobLeft }};width:{{ s.knobSize }};height:{{ s.knobSize }};border-radius:50%;background:{{ s.knob }};transition:all 160ms"></div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ onSettings }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;left:0;right:0;top:0;bottom:144px;display:flex;flex-direction:column;background:var(--bg,#141218)">
+                <div style="flex:none;height:56px;display:flex;align-items:center;gap:4px;padding:0 4px">
+                  <button type="button" onClick="{{ goBack }}" style="width:48px;height:48px;border:0;background:transparent;color:var(--on,#E6E0E9);border-radius:24px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:24px">arrow_back</span></button>
+                  <div style="flex:1;font-size:18px;font-weight:500">Settings</div>
+                </div>
+                <div style="flex:1;min-height:0;overflow-y:auto;padding-bottom:16px">
+                  <div style="padding:16px 16px 4px;font-size:13px;font-weight:500;letter-spacing:0.4px;color:var(--accent,#D0BCFF)">ACCENT COLOUR</div>
+                  <div style="display:flex;align-items:center;gap:16px;padding:10px 16px 4px">
+                    <span style="font-family:'Material Symbols Rounded';font-size:22px;color:var(--onv,#CAC4D0);flex:none">format_paint</span>
+                    <div style="flex:1;min-width:0">
+                      <div style="font-size:15px;line-height:20px">Accent</div>
+                      <div style="font-size:12px;line-height:16px;color:var(--onv,#CAC4D0);text-wrap:pretty">{{ accentLabel }} · overridden when Material You is on</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:14px;padding:12px 16px 18px 54px">
+                    <sc-for list="{{ accentSwatches }}" as="sw" hint-placeholder-count="4">
+                      <div onClick="{{ sw.select }}" style="width:44px;height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:2px solid {{ sw.ring }}">
+                        <div style="width:32px;height:32px;border-radius:16px;background:{{ sw.color }};display:flex;align-items:center;justify-content:center;color:{{ sw.tick }}">
+                          <span style="font-family:'Material Symbols Rounded';font-size:20px;font-variation-settings:'FILL' 1">{{ sw.icon }}</span>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="height:1px;background:var(--outlinev,#49454F);margin:0 16px"></div>
+                  <sc-for list="{{ settingsGroups }}" as="g" hint-placeholder-count="5">
+                    <div>
+                      <div style="padding:16px 16px 4px;font-size:13px;font-weight:500;letter-spacing:0.4px;color:var(--accent,#D0BCFF)">{{ g.title }}</div>
+                      <sc-for list="{{ g.rows }}" as="row" hint-placeholder-count="3">
+                        <div onClick="{{ row.act }}" style="min-height:64px;display:flex;align-items:center;gap:16px;padding:10px 16px;cursor:pointer" style-hover="background:var(--surf1,#1D1B20)">
+                          <span style="font-family:'Material Symbols Rounded';font-size:22px;color:{{ row.iconColor }};flex:none">{{ row.icon }}</span>
+                          <div style="flex:1;min-width:0">
+                            <div style="font-size:15px;line-height:20px">{{ row.label }}</div>
+                            <div style="font-size:12px;line-height:16px;color:var(--onv,#CAC4D0);text-wrap:pretty">{{ row.sub }}</div>
+                          </div>
+                          <sc-if value="{{ row.isSwitch }}" hint-placeholder-val="{{ false }}">
+                            <div style="width:52px;height:32px;flex:none;border-radius:16px;border:2px solid {{ row.trackBorder }};background:{{ row.track }};position:relative;transition:background 160ms">
+                              <div style="position:absolute;top:{{ row.knobTop }};left:{{ row.knobLeft }};width:{{ row.knobSize }};height:{{ row.knobSize }};border-radius:50%;background:{{ row.knob }};transition:all 160ms"></div>
+                            </div>
+                          </sc-if>
+                          <sc-if value="{{ row.isNav }}" hint-placeholder-val="{{ false }}">
+                            <span style="font-family:'Material Symbols Rounded';font-size:20px;color:var(--onv,#CAC4D0);flex:none">chevron_right</span>
+                          </sc-if>
+                          <sc-if value="{{ row.isValue }}" hint-placeholder-val="{{ false }}">
+                            <div style="flex:none;font-size:13px;color:var(--onv,#CAC4D0)">{{ row.value }}</div>
+                          </sc-if>
+                        </div>
+                      </sc-for>
+                      <div style="height:1px;background:var(--outlinev,#49454F);margin:8px 16px 0"></div>
+                    </div>
+                  </sc-for>
+                  <div style="padding:20px 16px;font-size:12px;line-height:18px;color:var(--onv,#CAC4D0)">Mero 1.0.0 · GPL-3.0 · updates via Obtainium</div>
+                </div>
+              </div>
+            </sc-if>
+
+            <div style="position:absolute;left:0;right:0;bottom:0;height:80px;background:var(--surf2,#211F26);display:flex;align-items:center;z-index:2">
+              <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="3">
+                <div onClick="{{ n.go }}" style="flex:1;height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer">
+                  <div style="width:64px;height:32px;border-radius:16px;background:{{ n.pill }};display:flex;align-items:center;justify-content:center">
+                    <span style="font-family:'Material Symbols Rounded';font-size:24px;color:{{ n.iconColor }};font-variation-settings:'FILL' {{ n.fill }}">{{ n.icon }}</span>
+                  </div>
+                  <div style="font-size:12px;font-weight:500;color:{{ n.labelColor }}">{{ n.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div ref="{{ sheetRef }}" style="position:absolute;left:8px;right:8px;bottom:80px;height:64px;border-radius:16px;background:var(--surf3,#2B2930);overflow:hidden;z-index:4;box-shadow:0 2px 10px rgba(0,0,0,0.4);transition:left 420ms cubic-bezier(0.2,0,0,1),right 420ms cubic-bezier(0.2,0,0,1),bottom 420ms cubic-bezier(0.2,0,0,1),height 420ms cubic-bezier(0.2,0,0,1),border-radius 420ms cubic-bezier(0.2,0,0,1),box-shadow 300ms">
+              <div ref="{{ fullRef }}" style="position:absolute;inset:0;opacity:0;pointer-events:none;transition:opacity 260ms ease;z-index:1">
+                <dc-import name="Player" style="position:absolute;inset:0" hint-size="100%,100%" variant="{{ variant }}" own-art="{{ false }}" title="{{ title }}" artist="{{ artist }}" source="{{ source }}" position="{{ position }}" duration="{{ duration }}" pct="{{ pct }}" playing="{{ playing }}" liked="{{ liked }}" shuffle="{{ shuffle }}" repeat="{{ repeat }}" up-next="{{ upNext }}" on-play="{{ togglePlay }}" on-prev="{{ prevTrack }}" on-next="{{ nextTrack }}" on-seek="{{ seek }}" on-collapse="{{ collapse }}" on-queue="{{ openQueue }}" on-lyrics="{{ openLyrics }}" on-like="{{ toggleLike }}" on-shuffle="{{ toggleShuffle }}" on-repeat="{{ cycleRepeat }}"></dc-import>
+              </div>
+              <div ref="{{ miniRef }}" onClick="{{ expand }}" style="position:absolute;left:0;right:0;top:0;height:64px;display:flex;align-items:center;padding:0 4px 0 64px;opacity:1;transition:opacity 200ms ease;cursor:pointer;z-index:2">
+                <div style="flex:1;min-width:0;padding-left:8px">
+                  <div style="font-size:14px;font-weight:500;line-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ title }}</div>
+                  <div style="font-size:12px;line-height:16px;color:var(--onv,#CAC4D0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ artist }}</div>
+                </div>
+                <button type="button" onClick="{{ togglePlayStop }}" style="width:48px;height:48px;flex:none;border:0;background:transparent;color:var(--on,#E6E0E9);border-radius:24px;cursor:pointer;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:26px;font-variation-settings:'FILL' 1">{{ playIcon }}</span></button>
+                <button type="button" onClick="{{ nextStop }}" style="width:48px;height:48px;flex:none;border:0;background:transparent;color:var(--on,#E6E0E9);border-radius:24px;cursor:pointer;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:26px;font-variation-settings:'FILL' 1">skip_next</span></button>
+                <div style="position:absolute;left:12px;right:12px;bottom:0;height:2px;background:var(--outlinev,#49454F)">
+                  <div style="height:2px;background:var(--accent,#D0BCFF);width:{{ pct }}"></div>
+                </div>
+              </div>
+              <div ref="{{ artRef }}" style="position:absolute;left:8px;top:8px;width:48px;height:48px;border-radius:8px;overflow:hidden;z-index:3;background:var(--surf4,#36343B);transition:left 420ms cubic-bezier(0.2,0,0,1),top 420ms cubic-bezier(0.2,0,0,1),width 420ms cubic-bezier(0.2,0,0,1),height 420ms cubic-bezier(0.2,0,0,1),border-radius 420ms cubic-bezier(0.2,0,0,1)">
+                <image-slot id="mero-live-art" shape="rect" placeholder=""></image-slot>
+              </div>
+            </div>
+
+            <sc-if value="{{ queueOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;inset:0;z-index:6;background:var(--surf2,#211F26);display:flex;flex-direction:column">
+                <div style="flex:none;height:56px;display:flex;align-items:center;gap:4px;padding:0 4px">
+                  <button type="button" onClick="{{ closeSheets }}" style="width:48px;height:48px;border:0;background:transparent;color:var(--on,#E6E0E9);border-radius:24px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:24px">close</span></button>
+                  <div style="flex:1;font-size:18px;font-weight:500">Queue</div>
+                  <button type="button" style="width:48px;height:48px;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:24px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:22px">playlist_add</span></button>
+                  <button type="button" onClick="{{ clearQueue }}" style="height:36px;padding:0 14px;margin-right:8px;border:1px solid var(--outlinev,#49454F);border-radius:18px;background:transparent;color:var(--on,#E6E0E9);font-family:Roboto,sans-serif;font-size:13px;font-weight:500;cursor:pointer">Clear</button>
+                </div>
+                <div style="flex:none;padding:4px 16px 12px">
+                  <div style="font-size:11px;letter-spacing:0.5px;text-transform:uppercase;color:var(--onv,#CAC4D0);padding-bottom:8px">Now playing</div>
+                  <div style="height:56px;border-radius:12px;background:var(--surf3,#2B2930);display:flex;align-items:center;gap:12px;padding:0 12px">
+                    <span style="font-family:'Material Symbols Rounded';font-size:20px;color:var(--accent,#D0BCFF)">graphic_eq</span>
+                    <div style="flex:1;min-width:0">
+                      <div style="font-size:14px;font-weight:500;color:var(--accent,#D0BCFF);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ title }}</div>
+                      <div style="font-size:12px;color:var(--onv,#CAC4D0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ artist }}</div>
+                    </div>
+                    <div style="font-size:12px;color:var(--onv,#CAC4D0)">{{ position }}</div>
+                  </div>
+                </div>
+                <div style="flex:none;display:flex;align-items:center;padding:0 16px 8px">
+                  <div style="flex:1;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;color:var(--onv,#CAC4D0)">Next up · {{ queueCount }}</div>
+                  <div style="font-size:11px;color:var(--onv,#CAC4D0)">drag to reorder</div>
+                </div>
+                <div style="flex:1;min-height:0;overflow-y:auto;padding-bottom:16px">
+                  <sc-for list="{{ queueRows }}" as="row" hint-placeholder-count="6">
+                    <div style="height:60px;display:flex;align-items:center;gap:12px;padding:0 8px 0 8px">
+                      <span style="font-family:'Material Symbols Rounded';font-size:22px;color:var(--outline,#938F99);flex:none;cursor:grab">drag_indicator</span>
+                      <div onClick="{{ row.play }}" style="flex:1;min-width:0;display:flex;align-items:center;gap:12px;cursor:pointer">
+                        <div style="width:44px;height:44px;flex:none;border-radius:6px;background:var(--surf3,#2B2930);display:flex;align-items:center;justify-content:center;color:var(--outline,#938F99)"><span style="font-family:'Material Symbols Rounded';font-size:20px">music_note</span></div>
+                        <div style="flex:1;min-width:0">
+                          <div style="font-size:15px;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.title }}</div>
+                          <div style="font-size:12px;line-height:16px;color:var(--onv,#CAC4D0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.artist }}</div>
+                        </div>
+                      </div>
+                      <button type="button" onClick="{{ row.remove }}" style="width:44px;height:44px;flex:none;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:22px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:20px">close</span></button>
+                    </div>
+                  </sc-for>
+                  <div style="padding:16px;font-size:12px;color:var(--onv,#CAC4D0)">Autoplay radio continues when the queue runs dry.</div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ lyricsOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;inset:0;z-index:6;background:var(--surf2,#211F26);display:flex;flex-direction:column">
+                <div style="flex:none;height:56px;display:flex;align-items:center;gap:4px;padding:0 4px">
+                  <button type="button" onClick="{{ closeSheets }}" style="width:48px;height:48px;border:0;background:transparent;color:var(--on,#E6E0E9);border-radius:24px;cursor:pointer" style-hover="background:rgba(230,224,233,0.08)"><span style="font-family:'Material Symbols Rounded';font-size:24px">close</span></button>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:16px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ title }}</div>
+                    <div style="font-size:12px;color:var(--onv,#CAC4D0)">{{ artist }}</div>
+                  </div>
+                  <button type="button" style="width:48px;height:48px;border:0;background:transparent;color:var(--onv,#CAC4D0);border-radius:24px;cursor:pointer"><span style="font-family:'Material Symbols Rounded';font-size:22px">search</span></button>
+                </div>
+                <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 24px 8px;display:flex;flex-direction:column;gap:22px">
+                  <sc-for list="{{ lyricLines }}" as="l" hint-placeholder-count="8">
+                    <div onClick="{{ l.seek }}" style="font-size:22px;font-weight:500;line-height:28px;letter-spacing:-0.2px;color:{{ l.color }};cursor:pointer;text-wrap:pretty">{{ l.text }}</div>
+                  </sc-for>
+                </div>
+                <div style="flex:none;padding:12px 24px 20px;display:flex;align-items:center;gap:8px">
+                  <span style="font-family:'Material Symbols Rounded';font-size:16px;color:var(--onv,#CAC4D0)">sync_alt</span>
+                  <div style="flex:1;font-size:11px;color:var(--onv,#CAC4D0)">Synced lyrics from LRCLIB · tap a line to seek</div>
+                  <button type="button" style="height:32px;padding:0 12px;border:1px solid var(--outlinev,#49454F);border-radius:16px;background:transparent;color:var(--on,#E6E0E9);font-family:Roboto,sans-serif;font-size:12px;cursor:pointer">Wrong lyrics?</button>
+                </div>
+              </div>
+            </sc-if>
+
+          </div>
+        </x-import>
+      </div>
+
+      <div id="1b" style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:12px;font-weight:700;letter-spacing:0.6px;background:#2B2930;color:#CAC4D0;padding:4px 10px;border-radius:6px">1b</span>
+          <span style="font-size:15px;font-weight:500">A · Standard</span>
+        </div>
+        <div style="max-width:412px;font-size:13px;line-height:19px;color:#938F99;text-wrap:pretty">Baseline M3. Centred 330px artwork, tint pulled from the cover, transport row on the accent, secondary actions in a bottom bar. Safest, and the one that survives any artwork.</div>
+        <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" hint-size="412px,892px">
+          <div style="position:relative;height:100%;overflow:hidden;background:var(--surf2,#211F26)">
+            <dc-import name="Player" style="position:absolute;inset:0" hint-size="100%,100%" variant="A" art-id="mero-var-a" up-next="{{ upNext }}"></dc-import>
+          </div>
+        </x-import>
+      </div>
+
+      <div id="1c" style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:12px;font-weight:700;letter-spacing:0.6px;background:#2B2930;color:#CAC4D0;padding:4px 10px;border-radius:6px">1c</span>
+          <span style="font-size:15px;font-weight:500">B · Full-bleed</span>
+        </div>
+        <div style="max-width:412px;font-size:13px;line-height:19px;color:#938F99;text-wrap:pretty">Artwork runs edge to edge under the status bar and fades into the surface. Title gets display size, transport uses a squared play button, Lyrics and Queue become tonal buttons. Most expressive, most dependent on good cover art.</div>
+        <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" hint-size="412px,892px">
+          <div style="position:relative;height:100%;overflow:hidden;background:var(--surf2,#211F26)">
+            <dc-import name="Player" style="position:absolute;inset:0" hint-size="100%,100%" variant="B" art-id="mero-var-b" up-next="{{ upNext }}"></dc-import>
+          </div>
+        </x-import>
+      </div>
+
+      <div id="1d" style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:12px;font-weight:700;letter-spacing:0.6px;background:#2B2930;color:#CAC4D0;padding:4px 10px;border-radius:6px">1d</span>
+          <span style="font-size:15px;font-weight:500">C · Queue-forward</span>
+        </div>
+        <div style="max-width:412px;font-size:13px;line-height:19px;color:#938F99;text-wrap:pretty">200px artwork, compact transport, and Up next docked as a card on the same screen — queue reordering without opening a sheet. Densest, and the closest to how a shared-queue listener actually uses the app.</div>
+        <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" hint-size="412px,892px">
+          <div style="position:relative;height:100%;overflow:hidden;background:var(--surf2,#211F26)">
+            <dc-import name="Player" style="position:absolute;inset:0" hint-size="100%,100%" variant="C" art-id="mero-var-c" up-next="{{ upNext }}"></dc-import>
+          </div>
+        </x-import>
+      </div>
+
+      <div id="1e" style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:12px;font-weight:700;letter-spacing:0.6px;background:#2B2930;color:#CAC4D0;padding:4px 10px;border-radius:6px">1e</span>
+          <span style="font-size:15px;font-weight:500">Search · typing</span>
+        </div>
+        <div style="max-width:412px;font-size:13px;line-height:19px;color:#938F99;text-wrap:pretty">The focused state: suggestions collapse into live results as you type, tabbed by type, songs first. Downloaded tracks keep their marker here too, so an offline search reads the same as an online one. Recents and trending chips are in the live prototype under Search.</div>
+        <x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" dark="{{ true }}" keyboard="{{ true }}" hint-size="412px,892px">
+          <div style="position:relative;height:100%;overflow:hidden;background:var(--bg,#141218);font-family:Roboto,system-ui,sans-serif;color:var(--on,#E6E0E9);display:flex;flex-direction:column">
+            <div style="flex:none;padding:12px 16px 8px">
+              <div style="height:56px;border-radius:28px;background:var(--surf3,#2B2930);display:flex;align-items:center;padding:0 8px 0 16px;gap:8px;box-shadow:0 1px 3px rgba(0,0,0,0.3)">
+                <span style="font-family:'Material Symbols Rounded';font-size:24px;color:var(--onv,#CAC4D0)">arrow_back</span>
+                <div style="flex:1;min-width:0;font-size:16px;display:flex;align-items:center">angus<span style="display:inline-block;width:2px;height:20px;margin-left:1px;background:var(--accent,#D0BCFF)"></span></div>
+                <span style="font-family:'Material Symbols Rounded';font-size:22px;color:var(--onv,#CAC4D0)">close</span>
+              </div>
+            </div>
+            <div style="flex:none;display:flex;gap:8px;padding:4px 16px 8px">
+              <div style="height:32px;padding:0 14px;border-radius:8px;background:var(--accentC,#4F378B);color:var(--onAccentC,#EADDFF);display:flex;align-items:center;font-size:13px;font-weight:500">Songs</div>
+              <div style="height:32px;padding:0 14px;border-radius:8px;border:1px solid var(--outlinev,#49454F);display:flex;align-items:center;font-size:13px;font-weight:500">Albums</div>
+              <div style="height:32px;padding:0 14px;border-radius:8px;border:1px solid var(--outlinev,#49454F);display:flex;align-items:center;font-size:13px;font-weight:500">Artists</div>
+              <div style="height:32px;padding:0 14px;border-radius:8px;border:1px solid var(--outlinev,#49454F);display:flex;align-items:center;font-size:13px;font-weight:500">Playlists</div>
+            </div>
+            <div style="flex:1;min-height:0;overflow:hidden">
+              <sc-for list="{{ searchFrameRows }}" as="s" hint-placeholder-count="4">
+                <div style="height:64px;display:flex;align-items:center;gap:16px;padding:0 8px 0 16px">
+                  <div style="width:48px;height:48px;flex:none;border-radius:6px;background:var(--surf3,#2B2930);display:flex;align-items:center;justify-content:center;color:var(--outline,#938F99)"><span style="font-family:'Material Symbols Rounded';font-size:22px">music_note</span></div>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:16px;line-height:22px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.title }}</div>
+                    <div style="font-size:13px;line-height:18px;color:var(--onv,#CAC4D0);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.sub }}</div>
+                  </div>
+                  <span style="font-family:'Material Symbols Rounded';font-size:18px;color:var(--accent,#D0BCFF);flex:none;opacity:{{ s.dlOpacity }}">download_done</span>
+                  <span style="font-family:'Material Symbols Rounded';font-size:20px;color:var(--onv,#CAC4D0);flex:none;padding-right:8px">more_vert</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </x-import>
+      </div>
+
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;A&quot;,&quot;B&quot;,&quot;C&quot;],&quot;default&quot;:&quot;A&quot;,&quot;tsType&quot;:&quot;'A'|'B'|'C'&quot;,&quot;section&quot;:&quot;Player&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;options&quot;:[&quot;#D0BCFF&quot;,&quot;#A8C7FA&quot;,&quot;#FFB59D&quot;,&quot;#A6D3A0&quot;],&quot;default&quot;:&quot;#D0BCFF&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;},&quot;amoled&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Theme&quot;}}">
+const PALETTES = {
+  "#D0BCFF": { onAccent: "#381E72", accentC: "#4F378B", onAccentC: "#EADDFF", sec: "#4A4458", tint: "#2A2233" },
+  "#A8C7FA": { onAccent: "#0A305F", accentC: "#28497A", onAccentC: "#D7E3FF", sec: "#3F4759", tint: "#1E2532" },
+  "#FFB59D": { onAccent: "#5B1A00", accentC: "#7D2F0F", onAccentC: "#FFDBCF", sec: "#5A423A", tint: "#2E211C" },
+  "#A6D3A0": { onAccent: "#0C3910", accentC: "#265025", onAccentC: "#C2EFBB", sec: "#3F4A3D", tint: "#1C2620" }
+};
+const ACCENT_NAMES = { "#D0BCFF": "Violet", "#A8C7FA": "Blue", "#FFB59D": "Peach", "#A6D3A0": "Green" };
+const SONGS = [
+  { title: "Mango Tree", artist: "Angus & Julia Stone", album: "Snow", dur: "3:48", secs: 228, dl: true },
+  { title: "Big Jet Plane", artist: "Angus & Julia Stone", album: "Down the Way", dur: "3:56", secs: 236, dl: true },
+  { title: "Riptide", artist: "Vance Joy", album: "Dream Your Life Away", dur: "3:24", secs: 204, dl: true },
+  { title: "Electric Feel", artist: "MGMT", album: "Oracular Spectacular", dur: "3:49", secs: 229, dl: false },
+  { title: "Sunflower", artist: "Rex Orange County", album: "Apricot Princess", dur: "2:56", secs: 176, dl: false },
+  { title: "Nightcall", artist: "Kavinsky", album: "OutRun", dur: "4:18", secs: 258, dl: true },
+  { title: "Redbone", artist: "Childish Gambino", album: "Awaken, My Love!", dur: "5:27", secs: 327, dl: false },
+  { title: "Cigarettes", artist: "Ruel", album: "Bright Lights, Red Eyes", dur: "3:22", secs: 202, dl: false }
+];
+const LYRICS = [
+  { t: 0, text: "I was sitting in the shade of a mango tree" },
+  { t: 14, text: "Waiting on the rain to come" },
+  { t: 27, text: "You said the summer wouldn't last" },
+  { t: 41, text: "And you were right, it never does" },
+  { t: 58, text: "So I packed the car up slow" },
+  { t: 74, text: "Left the porch light burning low" },
+  { t: 92, text: "Every road out of this town" },
+  { t: 108, text: "Runs back to where you are now" }
+];
+const FLAT = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+const PRESETS = {
+  Flat: FLAT,
+  "Bass Boost": [9, 8, 6, 3, 0, 0, 0, 1, 2, 2],
+  Vocal: [-3, -2, 0, 2, 5, 6, 4, 2, 0, -1],
+  Rock: [5, 4, 2, -1, -2, 0, 3, 5, 5, 4],
+  Electronic: [7, 6, 2, 0, -2, 1, 2, 4, 6, 6],
+  Custom: [2, 1, 0, -1, 0, 2, 3, 1, 0, 3]
+};
+const HZ = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
+
+class Component extends DCLogic {
+  state = {
+    screen: "home", prev: "home", accent: null,
+    variant: this.props.variant || "A",
+    expanded: false, sheet: "none",
+    idx: 0, playing: true, pos: 71, liked: true, shuffle: false, repeat: "off",
+    queue: [1, 2, 5, 3, 7, 4],
+    query: "", searchTab: "Songs", libTab: "Playlists",
+    recent: ["angus julia stone", "nightcall kavinsky", "lo-fi study", "redbone"],
+    importStep: 1, importPicked: { 0: true, 1: true, 3: true },
+    eqOn: true, preset: "Bass Boost", bands: PRESETS["Bass Boost"].slice(),
+    preamp: 0.6, crossfade: 0.5,
+    toggles: { norm: true, silence: false, gapless: true, dynamic: true, amoled: false, wifi: true, scrobble: false }
+  };
+
+  componentDidMount() {
+    this.timer = setInterval(() => {
+      if (!this.state.playing) return;
+      const s = SONGS[this.state.idx];
+      this.setState(st => ({ pos: st.pos + 1 >= s.secs ? 0 : st.pos + 1 }));
+    }, 1000);
+    this.applyTheme();
+    this.applyGeom();
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+  componentDidUpdate() { this.applyTheme(); this.applyGeom(); }
+
+  applyTheme() {
+    const el = this.rootRef && this.rootRef.current;
+    if (!el) return;
+    const accent = this.state.accent || this.props.accent || "#D0BCFF";
+    const p = PALETTES[accent] || PALETTES["#D0BCFF"];
+    el.style.setProperty("--accent", accent);
+    el.style.setProperty("--onAccent", p.onAccent);
+    el.style.setProperty("--accentC", p.accentC);
+    el.style.setProperty("--onAccentC", p.onAccentC);
+    el.style.setProperty("--secContainer", p.sec);
+    el.style.setProperty("--playerTint", p.tint);
+    const black = this.props.amoled === true || this.state.toggles.amoled;
+    const t = black
+      ? { bg: "#000000", s1: "#0A0A0C", s2: "#0D0D10", s3: "#16161A", s4: "#1F1F24", tint: "#131017" }
+      : { bg: "#141218", s1: "#1D1B20", s2: "#211F26", s3: "#2B2930", s4: "#36343B", tint: p.tint };
+    el.style.setProperty("--bg", t.bg);
+    el.style.setProperty("--surf1", t.s1);
+    el.style.setProperty("--surf2", t.s2);
+    el.style.setProperty("--surf3", t.s3);
+    el.style.setProperty("--surf4", t.s4);
+    el.style.setProperty("--playerTint", t.tint);
+  }
+
+  applyGeom() {
+    const sheet = this.sheetRef && this.sheetRef.current;
+    const art = this.artRef && this.artRef.current;
+    const mini = this.miniRef && this.miniRef.current;
+    const full = this.fullRef && this.fullRef.current;
+    if (!sheet || !art || !mini || !full) return;
+    const open = this.state.expanded;
+    const v = this.state.variant;
+    Object.assign(sheet.style, open
+      ? { left: "0px", right: "0px", bottom: "0px", height: "812px", borderRadius: "0px", boxShadow: "none" }
+      : { left: "8px", right: "8px", bottom: "80px", height: "64px", borderRadius: "16px", boxShadow: "0 2px 10px rgba(0,0,0,0.4)" });
+    const rect = !open
+      ? { left: 8, top: 8, w: 48, h: 48, r: 8 }
+      : v === "B" ? { left: 0, top: 0, w: 396, h: 430, r: 0 }
+      : v === "C" ? { left: 98, top: 56, w: 200, h: 200, r: 12 }
+      : { left: 33, top: 88, w: 330, h: 330, r: 16 };
+    Object.assign(art.style, {
+      left: rect.left + "px", top: rect.top + "px",
+      width: rect.w + "px", height: rect.h + "px", borderRadius: rect.r + "px"
+    });
+    mini.style.opacity = open ? "0" : "1";
+    mini.style.pointerEvents = open ? "none" : "auto";
+    full.style.opacity = open ? "1" : "0";
+    full.style.pointerEvents = open ? "auto" : "none";
+  }
+
+  fmt(s) {
+    const m = Math.floor(s / 60), r = Math.floor(s % 60);
+    return m + ":" + (r < 10 ? "0" : "") + r;
+  }
+  go(screen) {
+    const base = ["home", "search", "library"];
+    this.setState(st => ({ screen, prev: base.indexOf(st.screen) >= 0 ? st.screen : st.prev }));
+  }
+  playIdx(i) { this.setState({ idx: i, pos: 0, playing: true }); }
+  chip(active) {
+    return active
+      ? { bg: "var(--accentC,#4F378B)", fg: "var(--onAccentC,#EADDFF)" }
+      : { bg: "transparent", fg: "var(--on,#E6E0E9)" };
+  }
+  sw(on) {
+    return {
+      track: on ? "var(--accent,#D0BCFF)" : "var(--surf4,#36343B)",
+      trackBorder: on ? "var(--accent,#D0BCFF)" : "var(--outline,#938F99)",
+      knob: on ? "var(--onAccent,#381E72)" : "var(--outline,#938F99)",
+      knobSize: on ? "24px" : "16px",
+      knobTop: on ? "2px" : "6px",
+      knobLeft: on ? "24px" : "6px"
+    };
+  }
+  toggle(k) {
+    this.setState(st => ({ toggles: Object.assign({}, st.toggles, { [k]: !st.toggles[k] }) }));
+  }
+
+  renderVals() {
+    const st = this.state;
+    const song = SONGS[st.idx];
+    const pctNum = Math.min(100, (st.pos / song.secs) * 100);
+    const screen = st.screen;
+    const q = st.query.trim().toLowerCase();
+
+    const rowsFor = list => list.map(i => {
+      const s = SONGS[i];
+      return {
+        n: String(list.indexOf(i) + 1), title: s.title, sub: s.artist + " · " + s.dur,
+        icon: i === st.idx ? "graphic_eq" : "music_note",
+        titleColor: i === st.idx ? "var(--accent,#D0BCFF)" : "var(--on,#E6E0E9)",
+        dlOpacity: s.dl ? "1" : "0", play: () => this.playIdx(i)
+      };
+    });
+
+    const searchPool = SONGS.map((s, i) => i).filter(i => {
+      if (!q) return true;
+      const s = SONGS[i];
+      return (s.title + " " + s.artist).toLowerCase().indexOf(q) >= 0;
+    });
+    const results = searchPool.map(i => {
+      const s = SONGS[i];
+      const kind = st.searchTab === "Albums" ? "Album · " + s.artist
+        : st.searchTab === "Artists" ? "Artist"
+        : st.searchTab === "Playlists" ? "Playlist · 24 songs"
+        : "Song · " + s.artist + " · " + s.dur;
+      return {
+        title: st.searchTab === "Albums" ? s.album : st.searchTab === "Artists" ? s.artist : s.title,
+        sub: kind,
+        icon: st.searchTab === "Artists" ? "person" : st.searchTab === "Albums" ? "album" : "music_note",
+        titleColor: i === st.idx ? "var(--accent,#D0BCFF)" : "var(--on,#E6E0E9)",
+        dlOpacity: s.dl && st.searchTab === "Songs" ? "1" : "0",
+        play: () => this.playIdx(i)
+      };
+    });
+
+    const eqBands = st.bands.map((db, i) => ({
+      i: String(i), hz: HZ[i],
+      db: (db > 0 ? "+" : "") + db,
+      fill: (((db + 12) / 24) * 100) + "%",
+      handle: "calc(" + (((db + 12) / 24) * 100) + "% - 7px)",
+      set: e => {
+        const r = e.currentTarget.getBoundingClientRect();
+        const ratio = 1 - (e.clientY - r.top) / r.height;
+        const val = Math.round(Math.max(-12, Math.min(12, ratio * 24 - 12)));
+        this.setState(s2 => {
+          const b = s2.bands.slice(); b[i] = val;
+          return { bands: b, preset: "Custom" };
+        });
+      }
+    }));
+
+    const setSlider = key => e => {
+      const r = e.currentTarget.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+      this.setState({ [key]: ratio });
+    };
+
+    const settingsGroups = [
+      { title: "APPEARANCE", rows: [
+        { icon: "palette", iconColor: "var(--onv,#CAC4D0)", label: "Theme", sub: "Follows system", isValue: true, value: "Dark", act: () => {} },
+        { icon: "colorize", iconColor: "var(--onv,#CAC4D0)", label: "Material You colour", sub: "Palette from your wallpaper (Android 12+)", isSwitch: true, act: () => this.toggle("dynamic"), ...this.sw(st.toggles.dynamic) },
+        { icon: "contrast", iconColor: "var(--onv,#CAC4D0)", label: "Pure black", sub: "True black surfaces on AMOLED", isSwitch: true, act: () => this.toggle("amoled"), ...this.sw(st.toggles.amoled) }
+      ] },
+      { title: "AUDIO", rows: [
+        { icon: "graphic_eq", iconColor: "var(--accent,#D0BCFF)", label: "Equalizer & effects", sub: st.eqOn ? st.preset + " · crossfade " + Math.round(st.crossfade * 12) + "s" : "Off", isNav: true, act: () => this.go("eq") },
+        { icon: "hd", iconColor: "var(--onv,#CAC4D0)", label: "Streaming quality", sub: "Opus ~160 kbps", isValue: true, value: "High", act: () => {} },
+        { icon: "sd_card", iconColor: "var(--onv,#CAC4D0)", label: "Download quality", sub: "Opus ~160 kbps", isValue: true, value: "High", act: () => {} }
+      ] },
+      { title: "DOWNLOADS", rows: [
+        { icon: "wifi", iconColor: "var(--onv,#CAC4D0)", label: "Download on Wi-Fi only", sub: "", isSwitch: true, act: () => this.toggle("wifi"), ...this.sw(st.toggles.wifi) },
+        { icon: "storage", iconColor: "var(--onv,#CAC4D0)", label: "Storage", sub: "1.1 GB downloads · 240 MB cache", isNav: true, act: () => {} }
+      ] },
+      { title: "PLAYBACK", rows: [
+        { icon: "battery_alert", iconColor: "#FFB4AB", label: "Battery optimisation", sub: "Xiaomi detected — Autostart and No restrictions are separate settings", isNav: true, act: () => {} },
+        { icon: "cloud_upload", iconColor: "var(--onv,#CAC4D0)", label: "Scrobble to ListenBrainz", sub: "Paste a user token", isSwitch: true, act: () => this.toggle("scrobble"), ...this.sw(st.toggles.scrobble) }
+      ] },
+      { title: "ABOUT", rows: [
+        { icon: "code", iconColor: "var(--onv,#CAC4D0)", label: "Source", sub: "github.com/mero/mero · GPL-3.0", isNav: true, act: () => {} },
+        { icon: "system_update", iconColor: "var(--onv,#CAC4D0)", label: "Updates", sub: "Delivered through Obtainium", isValue: true, value: "1.0.0", act: () => {} }
+      ] }
+    ];
+
+    const vChip = v => st.variant === v
+      ? { bg: "#4F378B", fg: "#EADDFF" }
+      : { bg: "transparent", fg: "#CAC4D0" };
+    const va = vChip("A"), vb = vChip("B"), vc = vChip("C");
+
+    const impStep = n => ({
+      label: ["Connect", "Choose", "Resolve", "Review"][n - 1],
+      bar: st.importStep >= n ? "var(--accent,#D0BCFF)" : "var(--outlinev,#49454F)",
+      fg: st.importStep >= n ? "var(--on,#E6E0E9)" : "var(--onv,#CAC4D0)"
+    });
+
+    const picks = [
+      { name: "Indie Chill", sub: "Playlist · 42 tracks" },
+      { name: "Late Night Drive", sub: "Playlist · 18 tracks" },
+      { name: "Gym 2026", sub: "Playlist · 61 tracks" },
+      { name: "Liked Songs", sub: "Playlist · 128 tracks" },
+      { name: "Snow — Angus & Julia Stone", sub: "Album · 12 tracks" }
+    ].map((p, i) => {
+      const on = !!st.importPicked[i];
+      return Object.assign({}, p, {
+        check: on ? "check_circle" : "radio_button_unchecked",
+        checkColor: on ? "var(--accent,#D0BCFF)" : "var(--outline,#938F99)",
+        toggle: () => this.setState(s2 => ({ importPicked: Object.assign({}, s2.importPicked, { [i]: !s2.importPicked[i] }) }))
+      });
+    });
+    const pickedCount = Object.keys(st.importPicked).filter(k => st.importPicked[k]).length;
+
+    return {
+      rootRef: (this.rootRef = this.rootRef || React.createRef()),
+      sheetRef: (this.sheetRef = this.sheetRef || React.createRef()),
+      artRef: (this.artRef = this.artRef || React.createRef()),
+      miniRef: (this.miniRef = this.miniRef || React.createRef()),
+      fullRef: (this.fullRef = this.fullRef || React.createRef()),
+
+      onHome: screen === "home", onSearch: screen === "search", onLibrary: screen === "library",
+      onPlaylist: screen === "playlist", onImport: screen === "import", onEq: screen === "eq", onSettings: screen === "settings",
+
+      variant: st.variant,
+      vaBg: va.bg, vaFg: va.fg, vbBg: vb.bg, vbFg: vb.fg, vcBg: vc.bg, vcFg: vc.fg,
+      setVarA: () => this.setState({ variant: "A" }),
+      setVarB: () => this.setState({ variant: "B" }),
+      setVarC: () => this.setState({ variant: "C" }),
+
+      title: song.title, artist: song.artist, source: "Indie Chill",
+      position: this.fmt(st.pos), duration: song.dur, pct: pctNum + "%",
+      playing: st.playing, liked: st.liked, shuffle: st.shuffle, repeat: st.repeat,
+      playIcon: st.playing ? "pause" : "play_arrow",
+
+      togglePlay: () => this.setState(s2 => ({ playing: !s2.playing })),
+      togglePlayStop: e => { e.stopPropagation(); this.setState(s2 => ({ playing: !s2.playing })); },
+      nextStop: e => { e.stopPropagation(); this.playIdx((st.idx + 1) % SONGS.length); },
+      prevTrack: () => this.playIdx((st.idx - 1 + SONGS.length) % SONGS.length),
+      nextTrack: () => this.playIdx((st.idx + 1) % SONGS.length),
+      seek: e => {
+        const r = e.currentTarget.getBoundingClientRect();
+        const ratio = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+        this.setState({ pos: Math.round(ratio * song.secs) });
+      },
+      expand: () => this.setState({ expanded: true }),
+      collapse: () => this.setState({ expanded: false, sheet: "none" }),
+      openQueue: () => this.setState({ sheet: "queue" }),
+      openLyrics: () => this.setState({ sheet: "lyrics" }),
+      closeSheets: () => this.setState({ sheet: "none" }),
+      toggleLike: () => this.setState(s2 => ({ liked: !s2.liked })),
+      toggleShuffle: () => this.setState(s2 => ({ shuffle: !s2.shuffle })),
+      cycleRepeat: () => this.setState(s2 => ({ repeat: s2.repeat === "off" ? "all" : s2.repeat === "all" ? "one" : "off" })),
+      queueOpen: st.expanded && st.sheet === "queue",
+      lyricsOpen: st.expanded && st.sheet === "lyrics",
+
+      navItems: [
+        { key: "home", icon: "home", label: "Home" },
+        { key: "search", icon: "search", label: "Search" },
+        { key: "library", icon: "library_music", label: "Library" }
+      ].map(n => {
+        const active = screen === n.key || (n.key === "library" && (screen === "playlist" || screen === "import"));
+        return {
+          icon: n.icon, label: n.label,
+          pill: active ? "var(--secContainer,#4A4458)" : "transparent",
+          iconColor: active ? "var(--on,#E6E0E9)" : "var(--onv,#CAC4D0)",
+          labelColor: active ? "var(--on,#E6E0E9)" : "var(--onv,#CAC4D0)",
+          fill: active ? "1" : "0",
+          go: () => this.go(n.key)
+        };
+      }),
+
+      moods: [
+        { icon: "trending_up", label: "Top 100 · Global" },
+        { icon: "local_fire_department", label: "Trending" },
+        { icon: "nightlight", label: "Late night" },
+        { icon: "self_improvement", label: "Focus" },
+        { icon: "fitness_center", label: "Workout" },
+        { icon: "beach_access", label: "Summer" }
+      ],
+
+      goSettings: () => this.go("settings"),
+      goImport: () => this.go("import"),
+      goPlaylist: () => this.go("playlist"),
+      goBack: () => this.setState(s2 => ({ screen: s2.prev })),
+      playFirst: () => this.playIdx(0),
+      shuffleAll: () => { this.setState({ shuffle: true }); this.playIdx(3); },
+
+      query: st.query,
+      onQuery: e => this.setState({ query: e.target.value }),
+      clearQuery: () => this.setState({ query: "" }),
+      searchTrailIcon: st.query ? "close" : "mic",
+      searchIdle: !st.query,
+      searchResultsMode: !!st.query,
+      recentSearches: st.recent.map((text, i) => ({
+        text,
+        use: () => this.setState({ query: text }),
+        remove: () => this.setState(s2 => ({ recent: s2.recent.filter((_, j) => j !== i) }))
+      })),
+      trending: ["indie folk", "phonk", "2010s throwback", "lo-fi beats"].map(text => ({
+        text, use: () => this.setState({ query: text })
+      })),
+      searchTabs: ["Songs", "Albums", "Artists", "Playlists"].map(label => Object.assign(
+        { label, select: () => this.setState({ searchTab: label }) }, this.chip(st.searchTab === label)
+      )),
+      results,
+      searchFrameRows: [
+        { title: "Mango Tree", sub: "Song · Angus & Julia Stone · 3:48", dlOpacity: "1" },
+        { title: "Big Jet Plane", sub: "Song · Angus & Julia Stone · 3:56", dlOpacity: "1" },
+        { title: "Snow", sub: "Album · Angus & Julia Stone · 2017", dlOpacity: "0" },
+        { title: "Chateau", sub: "Song · Angus & Julia Stone · 3:33", dlOpacity: "0" }
+      ],
+
+      libTabs: ["Playlists", "Songs", "Albums", "Artists", "Downloads"].map(label => Object.assign(
+        { label, select: () => this.setState({ libTab: label }) }, this.chip(st.libTab === label)
+      )),
+      libShortcuts: [
+        { icon: "favorite", label: "Liked songs", sub: "128 songs", open: () => this.go("playlist") },
+        { icon: "download_done", label: "Downloads", sub: "42 songs · 1.1 GB", open: () => this.go("playlist") },
+        { icon: "history", label: "Recently played", sub: "Last 200 tracks", open: () => this.go("playlist") },
+        { icon: "trending_up", label: "Most played", sub: "This month", open: () => this.go("playlist") }
+      ],
+      playlists: [
+        { name: "Indie Chill", sub: "42 songs · imported from Spotify", dl: true },
+        { name: "Late Night Drive", sub: "18 songs", dl: true },
+        { name: "Gym 2026", sub: "61 songs", dl: false },
+        { name: "Shared with Priya", sub: "9 songs · from JSON", dl: false }
+      ].map(p => Object.assign({}, p, { dlOpacity: p.dl ? "1" : "0", open: () => this.go("playlist") })),
+
+      playlistTracks: rowsFor([0, 1, 2, 3, 4, 5, 6, 7]),
+
+      importSteps: [impStep(1), impStep(2), impStep(3), impStep(4)],
+      imp1: st.importStep === 1, imp2: st.importStep === 2, imp3: st.importStep === 3, imp4: st.importStep === 4,
+      importNext: () => this.setState(s2 => ({ importStep: Math.min(4, s2.importStep + 1) })),
+      importBack: () => { if (st.importStep === 1) this.go("library"); else this.setState(s2 => ({ importStep: s2.importStep - 1 })); },
+      importDone: () => this.go("library"),
+      importPicks: picks,
+      importCta: "Import " + pickedCount + (pickedCount === 1 ? " selection" : " selections"),
+      importProgress: [
+        { icon: "check_circle", color: "var(--accent,#D0BCFF)", title: "Mango Tree", status: "Matched · Δ0.4s · song result" },
+        { icon: "check_circle", color: "var(--accent,#D0BCFF)", title: "Big Jet Plane", status: "Matched · Δ1.1s · song result" },
+        { icon: "progress_activity", color: "var(--onv,#CAC4D0)", title: "Electric Feel", status: "Resolving…" },
+        { icon: "warning", color: "#FFB4AB", title: "Sunflower", status: "Two candidates within 3s — needs review" },
+        { icon: "check_circle", color: "var(--accent,#D0BCFF)", title: "Nightcall", status: "Matched · Δ0.2s · song result" },
+        { icon: "radio_button_unchecked", color: "var(--outline,#938F99)", title: "Redbone", status: "Queued" }
+      ],
+      importReview: [
+        { reason: "Duration differs by 41s", flagIcon: "warning", flagColor: "#FFB4AB", border: "#8C4A47", from: "Sunflower — Rex Orange County", to: "Sunflower (Live at Amoeba) — Rex Orange County", toColor: "#FFB4AB" },
+        { reason: "Title match below threshold", flagIcon: "help", flagColor: "var(--onv,#CAC4D0)", border: "var(--outlinev,#49454F)", from: "Electric Feel — MGMT", to: "Electric Feel (Justice Remix) — MGMT", toColor: "var(--on,#E6E0E9)" },
+        { reason: "Video result, no song result found", flagIcon: "info", flagColor: "var(--onv,#CAC4D0)", border: "var(--outlinev,#49454F)", from: "Cigarettes — Ruel", to: "Ruel - Cigarettes (Official Video)", toColor: "var(--on,#E6E0E9)" }
+      ],
+
+      eqOn: st.eqOn,
+      eqOnLabel: st.eqOn ? "On" : "Off",
+      eqOnBg: st.eqOn ? "var(--accentC,#4F378B)" : "transparent",
+      eqOnFg: st.eqOn ? "var(--onAccentC,#EADDFF)" : "var(--onv,#CAC4D0)",
+      toggleEq: () => this.setState(s2 => ({ eqOn: !s2.eqOn })),
+      eqPresets: Object.keys(PRESETS).map(label => Object.assign(
+        { label, select: () => this.setState({ preset: label, bands: PRESETS[label].slice() }) },
+        this.chip(st.preset === label)
+      )),
+      eqBands,
+      eqSliders: [
+        { key: "preamp", label: "Preamp", value: (st.preamp * 24 - 12).toFixed(1) + " dB", pct: st.preamp * 100 + "%", set: setSlider("preamp") },
+        { key: "crossfade", label: "Crossfade", value: Math.round(st.crossfade * 12) + " s", pct: st.crossfade * 100 + "%", set: setSlider("crossfade") }
+      ],
+      eqSwitches: [
+        Object.assign({ label: "Loudness normalization", sub: "Per-track gain via LoudnessEnhancer", toggle: () => this.toggle("norm") }, this.sw(st.toggles.norm)),
+        Object.assign({ label: "Skip silence", sub: "Trims dead air between tracks", toggle: () => this.toggle("silence") }, this.sw(st.toggles.silence)),
+        Object.assign({ label: "Gapless playback", sub: "Native to ExoPlayer", toggle: () => this.toggle("gapless") }, this.sw(st.toggles.gapless))
+      ],
+
+      settingsGroups,
+      accentLabel: ACCENT_NAMES[st.accent || this.props.accent || "#D0BCFF"] || "Custom",
+      accentSwatches: Object.keys(PALETTES).map(hex => {
+        const on = (st.accent || this.props.accent || "#D0BCFF") === hex;
+        return {
+          color: hex,
+          ring: on ? "var(--on,#E6E0E9)" : "transparent",
+          tick: PALETTES[hex].onAccent,
+          icon: on ? "check" : "",
+          select: () => this.setState({ accent: hex })
+        };
+      }),
+
+      queueCount: st.queue.length + " tracks",
+      queueRows: st.queue.map((i, pos) => ({
+        title: SONGS[i].title, artist: SONGS[i].artist,
+        play: () => this.playIdx(i),
+        remove: () => this.setState(s2 => ({ queue: s2.queue.filter((_, j) => j !== pos) }))
+      })),
+      upNext: st.queue.slice(0, 4).map(i => ({ title: SONGS[i].title, artist: SONGS[i].artist })),
+
+      lyricLines: LYRICS.map((l, i) => {
+        const next = LYRICS[i + 1];
+        const active = st.pos >= l.t && (!next || st.pos < next.t);
+        return {
+          text: l.text,
+          color: active ? "var(--accent,#D0BCFF)" : st.pos > l.t ? "var(--onv,#CAC4D0)" : "var(--outline,#938F99)",
+          seek: () => this.setState({ pos: l.t })
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>
