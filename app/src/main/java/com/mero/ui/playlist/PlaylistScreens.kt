@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mero.data.db.PlaylistSummary
+import com.mero.data.db.SmartPlaylistSummary
 import com.mero.domain.Song
 import com.mero.domain.asClock
 import com.mero.ui.components.Artwork
@@ -62,12 +63,16 @@ import com.mero.ui.components.Artwork
 @Composable
 fun PlaylistsTab(
     playlists: List<PlaylistSummary>,
+    smartPlaylists: List<SmartPlaylistSummary>,
     onOpen: (String) -> Unit,
+    onOpenSmart: (String) -> Unit,
     onCreate: (String) -> Unit,
+    onCreateSmart: (String, String, Int, String) -> Unit,
     contentPadding: PaddingValues,
 ) {
     val scheme = MaterialTheme.colorScheme
     var creating by remember { mutableStateOf(false) }
+    var creatingSmart by remember { mutableStateOf(false) }
 
     if (creating) {
         NamePlaylistDialog(
@@ -76,6 +81,15 @@ fun PlaylistsTab(
             confirmLabel = "Create",
             onDismiss = { creating = false },
             onConfirm = { name -> creating = false; onCreate(name) },
+        )
+    }
+    if (creatingSmart) {
+        SmartPlaylistDialog(
+            onDismiss = { creatingSmart = false },
+            onConfirm = { name, rule, minPlays, artist ->
+                creatingSmart = false
+                onCreateSmart(name, rule, minPlays, artist)
+            },
         )
     }
 
@@ -101,9 +115,48 @@ fun PlaylistsTab(
                 }
                 Text("New playlist", fontSize = 16.sp, fontWeight = FontWeight.Medium)
             }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .clickable { creatingSmart = true }
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(scheme.secondaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Icons.Rounded.Shuffle, null, tint = scheme.onSecondaryContainer) }
+                Column {
+                    Text("New smart playlist", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    Text("Auto-updating rules", fontSize = 13.sp, color = scheme.onSurfaceVariant)
+                }
+            }
         }
 
-        if (playlists.isEmpty()) {
+        items(smartPlaylists, key = { it.id }) { smart ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .clickable { onOpenSmart(smart.id) }
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Artwork(null, 48, icon = Icons.Rounded.Shuffle)
+                Column(Modifier.weight(1f)) {
+                    Text(smart.name, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("${smart.trackCount} tracks · ${smartRuleLabel(smart.rule)}", fontSize = 13.sp, color = scheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        if (playlists.isEmpty() && smartPlaylists.isEmpty()) {
             item {
                 Text(
                     "No playlists yet.\nCreate one, then add songs from the ⋮ menu on any track.",
@@ -144,6 +197,61 @@ fun PlaylistsTab(
             }
         }
     }
+}
+
+private fun smartRuleLabel(rule: String): String = when (rule) {
+    "most" -> "Most played"
+    "recent" -> "Recently played"
+    "liked" -> "Liked"
+    "downloads" -> "Downloads"
+    else -> "Custom rules"
+}
+
+@Composable
+private fun SmartPlaylistDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, Int, String) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var rule by remember { mutableStateOf("most") }
+    var minPlays by remember { mutableStateOf("3") }
+    var artist by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("New smart playlist") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("Name") })
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("most" to "Most played", "recent" to "Recent", "liked" to "Liked", "downloads" to "Downloads", "custom" to "Custom")
+                        .forEach { (value, label) ->
+                            MeroChip(label, rule == value, onClick = { rule = value })
+                        }
+                }
+                if (rule == "custom") {
+                    OutlinedTextField(
+                        minPlays,
+                        { minPlays = it.filter(Char::isDigit) },
+                        singleLine = true,
+                        label = { Text("Minimum plays") },
+                    )
+                    OutlinedTextField(
+                        artist,
+                        { artist = it },
+                        singleLine = true,
+                        label = { Text("Artist contains (optional)") },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(name, rule, minPlays.toIntOrNull() ?: 0, artist) },
+                enabled = name.isNotBlank(),
+            ) { Text("Create") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /* --------------------------- one playlist --------------------------- */

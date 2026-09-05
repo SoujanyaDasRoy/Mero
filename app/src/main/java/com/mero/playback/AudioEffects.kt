@@ -1,11 +1,13 @@
 package com.mero.playback
 
 import android.media.audiofx.DynamicsProcessing
+import android.media.audiofx.EnvironmentalReverb
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
 import android.util.Log
 import com.mero.data.EqPresets
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 private const val BANDS = 10
 private const val CHANNELS = 2
@@ -27,6 +29,7 @@ class AudioEffects {
     private var processing: DynamicsProcessing? = null
     private var loudness: LoudnessEnhancer? = null
     private var virtualizer: Virtualizer? = null
+    private var reverb: EnvironmentalReverb? = null
 
     var enabled: Boolean = true
         private set
@@ -34,6 +37,12 @@ class AudioEffects {
         private set
     /** 0f..1f from the UI slider, mapped to −12..+12 dB. */
     var preamp: Float = 0.5f
+        private set
+    /** 0f..1f from the UI slider, mapped to 0..12 dB of safe output lift. */
+    var booster: Float = 0f
+        private set
+    /** 0f..1f room ambience intensity. */
+    var reverbIntensity: Float = 0f
         private set
     var normalization: Boolean = false
         private set
@@ -57,11 +66,14 @@ class AudioEffects {
         get() = !enabled || (
             bands.all { it == 0 } &&
                 preampDb() == 0f &&
+                boosterDb() == 0f &&
+                reverbIntensity == 0f &&
                 !normalization &&
                 !(spatial && spatialSupported)
             )
 
     private fun preampDb(): Float = (preamp * 24f) - 12f
+    private fun boosterDb(): Float = booster * 12f
 
     /** Called by the playback service once ExoPlayer has an audio session. */
     fun attach(audioSessionId: Int) {
@@ -74,6 +86,7 @@ class AudioEffects {
             virtualizer = Virtualizer(0, audioSessionId).also {
                 spatialSupported = it.strengthSupported
             }
+            reverb = EnvironmentalReverb(0, audioSessionId)
         }.onFailure { Log.e(TAG, "failed to attach audio effects", it) }
         apply()
     }
@@ -82,6 +95,7 @@ class AudioEffects {
         runCatching { processing?.release() }
         runCatching { loudness?.release() }
         runCatching { virtualizer?.release() }
+        runCatching { reverb?.release() }
         processing = null
         loudness = null
         virtualizer = null
@@ -95,6 +109,8 @@ class AudioEffects {
         apply()
     }
     fun setPreamp(value: Float) { preamp = value; apply() }
+    fun setBooster(value: Float) { booster = value.coerceIn(0f, 1f); apply() }
+    fun setReverb(value: Float) { reverbIntensity = value.coerceIn(0f, 1f); apply() }
     fun setNormalization(value: Boolean) { normalization = value; apply() }
     fun setSpatial(value: Boolean) { spatial = value; apply() }
 
@@ -139,7 +155,10 @@ class AudioEffects {
             }
 
             val preampDb = if (enabled) preampDb() else 0f
-            dp.setInputGainAllChannelsTo(preampDb - maxBoost)
+            val outputLiftDb = if (enabled) boosterDb() else 0f
+            // Reserve headroom for the post-EQ booster so loudness gains do not
+            // turn an already boosted band into hard digital clipping.
+            dp.setInputGainAllChannelsTo(preampDb - maxBoost - outputLiftDb)
 
             dp.setLimiterAllChannelsTo(
                 DynamicsProcessing.Limiter(
@@ -161,10 +180,13 @@ class AudioEffects {
 
         runCatching {
             loudness?.let {
-                it.enabled = enabled && normalization
-                // Gentle, and the limiter above catches anything it pushes over.
-                // The previous blanket +3 dB was a major contributor to clipping.
-                if (enabled && normalization) it.setTargetGain(150)
+                val gainMb = if (enabled) {
+                    (boosterDb() * 1000f).roundToInt() + if (normalization) 150 else 0
+                } else {
+                    0
+                }
+                it.enabled = enabled && gainMb > 0
+                if (it.enabled) it.setTargetGain(gainMb)
             }
         }.onFailure { Log.e(TAG, "failed to apply loudness enhancer", it) }
 
@@ -174,5 +196,22 @@ class AudioEffects {
                 if (spatial && spatialSupported) it.setStrength(900)
             }
         }.onFailure { Log.e(TAG, "failed to apply spatial audio", it) }
+
+        runCatching {
+            reverb?.let { effect ->
+                val amount = if (enabled) reverbIntensity else 0f
+                effect.enabled = amount > 0f
+                if (amount > 0f) {
+                    effect.roomLevel = (-1000f + amount * 850f).toInt().toShort()
+                    effect.roomHFLevel = (-1800f + amount * 1200f).toInt().toShort()
+                    effect.decayTime = (350f + amount * 900f).toInt()
+                    effect.decayHFRatio = (450f + amount * 250f).toInt().toShort()
+                    effect.reflectionsLevel = (-1800f + amount * 1300f).toInt().toShort()
+                    effect.reverbLevel = (-2200f + amount * 1500f).toInt().toShort()
+                    effect.diffusion = (700f + amount * 250f).toInt().toShort()
+                    effect.density = (650f + amount * 300f).toInt().toShort()
+                }
+            }
+        }.onFailure { Log.e(TAG, "failed to apply reverb", it) }
     }
 }

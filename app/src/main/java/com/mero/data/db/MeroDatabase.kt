@@ -58,6 +58,16 @@ data class PlaylistSongEntity(
     val position: Int,
 )
 
+@Entity(tableName = "smart_playlists")
+data class SmartPlaylistEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val rule: String,
+    val minPlayCount: Int = 0,
+    val artistFilter: String = "",
+    val createdAt: Long,
+)
+
 /** A playlist plus the count and cover art the list screen needs, in one query. */
 data class PlaylistSummary(
     val id: String,
@@ -65,6 +75,15 @@ data class PlaylistSummary(
     val createdAt: Long,
     val trackCount: Int,
     val artworkUrl: String?,
+)
+
+data class SmartPlaylistSummary(
+    val id: String,
+    val name: String,
+    val rule: String,
+    val minPlayCount: Int,
+    val artistFilter: String,
+    val trackCount: Int,
 )
 
 @Dao
@@ -158,6 +177,54 @@ interface MeroDao {
     )
     fun playlists(): Flow<List<PlaylistSummary>>
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSmartPlaylist(playlist: SmartPlaylistEntity)
+
+    @Query("DELETE FROM smart_playlists WHERE id = :id")
+    suspend fun deleteSmartPlaylist(id: String)
+
+    @Query(
+        """
+        SELECT sp.id AS id, sp.name AS name, sp.rule AS rule,
+               sp.minPlayCount AS minPlayCount, sp.artistFilter AS artistFilter,
+               (SELECT COUNT(*) FROM songs s
+                WHERE (sp.rule = 'most' AND s.playCount > 0)
+                   OR (sp.rule = 'recent' AND s.lastPlayedAt IS NOT NULL)
+                   OR (sp.rule = 'liked' AND s.liked = 1)
+                   OR (sp.rule = 'downloads' AND s.downloadedAt IS NOT NULL)
+                   OR (sp.rule = 'custom' AND
+                       (sp.minPlayCount = 0 OR s.playCount >= sp.minPlayCount) AND
+                       (sp.artistFilter = '' OR s.artist LIKE '%' || sp.artistFilter || '%'))
+               ) AS trackCount
+        FROM smart_playlists sp
+        ORDER BY sp.createdAt DESC
+        """,
+    )
+    fun smartPlaylists(): Flow<List<SmartPlaylistSummary>>
+
+    @Query(
+        """
+        SELECT s.* FROM songs s
+        WHERE (:rule = 'most' AND s.playCount > 0)
+           OR (:rule = 'recent' AND s.lastPlayedAt IS NOT NULL)
+           OR (:rule = 'liked' AND s.liked = 1)
+           OR (:rule = 'downloads' AND s.downloadedAt IS NOT NULL)
+           OR (:rule = 'custom' AND
+               (:minPlayCount = 0 OR s.playCount >= :minPlayCount) AND
+               (:artistFilter = '' OR s.artist LIKE '%' || :artistFilter || '%'))
+        ORDER BY
+            CASE WHEN :rule = 'most' THEN s.playCount ELSE 0 END DESC,
+            CASE WHEN :rule = 'recent' THEN s.lastPlayedAt ELSE 0 END DESC,
+            CASE WHEN :rule = 'liked' THEN s.likedAt ELSE 0 END DESC,
+            s.lastPlayedAt DESC
+        """,
+    )
+    fun smartPlaylistSongs(
+        rule: String,
+        minPlayCount: Int,
+        artistFilter: String,
+    ): Flow<List<SongEntity>>
+
     @Query("SELECT * FROM playlists WHERE id = :id")
     fun playlist(id: String): Flow<PlaylistEntity?>
 
@@ -224,10 +291,28 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         QueueEntity::class,
         PlaylistEntity::class,
         PlaylistSongEntity::class,
+        SmartPlaylistEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class MeroDatabase : RoomDatabase() {
     abstract fun dao(): MeroDao
+}
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS smart_playlists (
+                id TEXT NOT NULL PRIMARY KEY,
+                name TEXT NOT NULL,
+                rule TEXT NOT NULL,
+                minPlayCount INTEGER NOT NULL DEFAULT 0,
+                artistFilter TEXT NOT NULL DEFAULT '',
+                createdAt INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+    }
 }

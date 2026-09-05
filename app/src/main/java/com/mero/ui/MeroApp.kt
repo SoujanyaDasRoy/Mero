@@ -102,6 +102,7 @@ import kotlinx.serialization.Serializable
 @Serializable object SettingsRoute
 @Serializable object ImportRoute
 @Serializable data class PlaylistRoute(val playlistId: String)
+@Serializable data class SmartPlaylistRoute(val playlistId: String)
 @Serializable data class ArtistRoute(val artistId: String)
 
 @Composable
@@ -185,6 +186,7 @@ private fun MeroContent(
     val mostPlayed by library.mostPlayed.collectAsStateWithLifecycle(emptyList())
     val persistedQueue by library.queue.collectAsStateWithLifecycle(emptyList())
     val playlists by library.playlists.collectAsStateWithLifecycle(emptyList())
+    val smartPlaylists by library.smartPlaylists.collectAsStateWithLifecycle(emptyList())
     val downloadedSongs by library.downloads.collectAsStateWithLifecycle(emptyList())
     val sleepRemaining by container.sleepTimer.remainingSec.collectAsStateWithLifecycle(null)
     val sleepAfterTrack by container.sleepTimer.stopAfterTrack.collectAsStateWithLifecycle(false)
@@ -277,6 +279,9 @@ private fun MeroContent(
     var preset by remember { mutableStateOf("Flat") }
     var bands by remember { mutableStateOf(EqPresets.presets.getValue("Flat")) }
     var preamp by remember { mutableStateOf(audioEffects.preamp) }
+    var booster by remember { mutableStateOf(audioEffects.booster) }
+    var reverb by remember { mutableStateOf(audioEffects.reverbIntensity) }
+    var hapticIntensity by remember { mutableStateOf(container.beatHaptics.currentIntensity) }
     var crossfade by remember { mutableStateOf(0.5f) }
     var importStep by remember { mutableIntStateOf(1) }
     var importPicked by remember { mutableStateOf(setOf(0, 1, 3)) }
@@ -483,6 +488,24 @@ private fun MeroContent(
         connection.controller?.seekToNextMediaItem()
     }
 
+    fun togglePlayback() {
+        markInteraction()
+        connection.controller?.let { controller ->
+            when {
+                controller.isPlaying -> controller.pause()
+                controller.playbackState == Player.STATE_IDLE -> {
+                    controller.prepare()
+                    controller.play()
+                }
+                controller.playbackState == Player.STATE_ENDED -> {
+                    controller.seekTo(controller.currentMediaItemIndex, 0L)
+                    controller.play()
+                }
+                else -> controller.play()
+            }
+        }
+    }
+
     // Resolve the next track's URL while the current one plays, so skipping
     // doesn't pay the extraction cost. StreamRepository caches the result, so
     // the actual skip is then instant.
@@ -603,10 +626,7 @@ private fun MeroContent(
                                 if (d == 0) 0f else (positionSec.toFloat() / d).coerceIn(0f, 1f)
                             },
                             onExpand = { expanded = true },
-                            onPlayPause = {
-                                markInteraction()
-                                connection.controller?.let { if (it.isPlaying) it.pause() else it.play() }
-                            },
+                            onPlayPause = { togglePlayback() },
                             onPrevious = {
                                 markInteraction()
                                 connection.controller?.let {
@@ -807,8 +827,13 @@ private fun MeroContent(
                         mostPlayed = mostPlayed,
                         downloads = downloadedSongs,
                         playlists = playlists,
+                        smartPlaylists = smartPlaylists,
                         onOpenPlaylist = { navController.navigate(PlaylistRoute(it)) },
+                        onOpenSmartPlaylist = { navController.navigate(SmartPlaylistRoute(it)) },
                         onCreatePlaylist = { name -> scope.launch { library.createPlaylist(name) } },
+                        onCreateSmartPlaylist = { name, rule, minPlays, artist ->
+                            scope.launch { library.createSmartPlaylist(name, rule, minPlays, artist) }
+                        },
                         onSongMore = { menuSong = it },
                         nowPlayingId = current?.id,
                         onSongClick = { song -> playFrom(song, librarySongs, libraryTab) },
@@ -853,6 +878,15 @@ private fun MeroContent(
                         },
                         preamp = preamp,
                         onPreampChange = { preamp = it; audioEffects.setPreamp(it) },
+                        booster = booster,
+                        onBoosterChange = { booster = it; audioEffects.setBooster(it) },
+                        reverb = reverb,
+                        onReverbChange = { reverb = it; audioEffects.setReverb(it) },
+                        hapticIntensity = hapticIntensity,
+                        onHapticIntensityChange = {
+                            hapticIntensity = it
+                            container.beatHaptics.setIntensity(it)
+                        },
                         crossfade = crossfade,
                         onCrossfadeChange = { crossfade = it },
                         toggles = toggles,
@@ -902,6 +936,36 @@ private fun MeroContent(
                         },
                         onDelete = {
                             scope.launch { library.deletePlaylist(route.playlistId) }
+                            navController.popBackStack()
+                        },
+                        contentPadding = contentPadding,
+                    )
+                }
+
+                composable<SmartPlaylistRoute> { entry ->
+                    val route: SmartPlaylistRoute = entry.toRoute()
+                    val summary = smartPlaylists.firstOrNull { it.id == route.playlistId }
+                    val songs by if (summary == null) {
+                        kotlinx.coroutines.flow.flowOf(emptyList())
+                    } else {
+                        library.smartPlaylistSongs(summary)
+                    }.collectAsStateWithLifecycle(emptyList())
+
+                    PlaylistDetailScreen(
+                        name = summary?.name ?: "Smart playlist",
+                        songs = songs,
+                        nowPlayingId = current?.id,
+                        onBack = { navController.popBackStack() },
+                        onPlay = { song -> playFrom(song, songs, summary?.name ?: "Smart playlist") },
+                        onPlayAll = { songs.firstOrNull()?.let { playFrom(it, songs, summary?.name ?: "Smart playlist") } },
+                        onShuffle = {
+                            val shuffled = songs.shuffled()
+                            shuffled.firstOrNull()?.let { playFrom(it, shuffled, summary?.name ?: "Smart playlist") }
+                        },
+                        onRemove = {},
+                        onRename = {},
+                        onDelete = {
+                            scope.launch { library.deleteSmartPlaylist(route.playlistId) }
                             navController.popBackStack()
                         },
                         contentPadding = contentPadding,
@@ -1118,10 +1182,7 @@ private fun MeroContent(
                         ),
                         actions = PlayerActions(
                             onCollapse = { expanded = false },
-                            onPlayPause = {
-                                markInteraction()
-                                connection.controller?.let { if (it.isPlaying) it.pause() else it.play() }
-                            },
+                            onPlayPause = { togglePlayback() },
                             onPrev = {
                                 // Below three seconds, "previous" means the
                                 // previous track; after that it means restart —

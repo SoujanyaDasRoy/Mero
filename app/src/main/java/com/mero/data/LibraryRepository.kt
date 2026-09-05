@@ -4,6 +4,8 @@ import com.mero.data.db.MeroDao
 import com.mero.data.db.PlaylistEntity
 import com.mero.data.db.PlaylistSongEntity
 import com.mero.data.db.PlaylistSummary
+import com.mero.data.db.SmartPlaylistEntity
+import com.mero.data.db.SmartPlaylistSummary
 import com.mero.data.db.QueueEntity
 import com.mero.data.db.SongEntity
 import com.mero.domain.Song
@@ -88,6 +90,11 @@ class LibraryRepository(private val dao: MeroDao) {
     /* ---------------------------- playlists ---------------------------- */
 
     val playlists: Flow<List<PlaylistSummary>> = dao.playlists()
+    val smartPlaylists: Flow<List<SmartPlaylistSummary>> = dao.smartPlaylists()
+
+    fun smartPlaylistSongs(summary: SmartPlaylistSummary): Flow<List<Song>> =
+        dao.smartPlaylistSongs(summary.rule, summary.minPlayCount, summary.artistFilter)
+            .map { rows -> rows.map { it.toDomain() } }
 
     fun playlistSongs(playlistId: String): Flow<List<Song>> =
         dao.playlistSongs(playlistId).map { rows -> rows.map { it.toDomain() } }
@@ -99,6 +106,28 @@ class LibraryRepository(private val dao: MeroDao) {
         dao.insertPlaylist(PlaylistEntity(id, name.trim(), System.currentTimeMillis()))
         return id
     }
+
+    suspend fun createSmartPlaylist(
+        name: String,
+        rule: String,
+        minPlayCount: Int = 0,
+        artistFilter: String = "",
+    ): String {
+        val id = "smart-" + System.currentTimeMillis().toString(36)
+        dao.insertSmartPlaylist(
+            SmartPlaylistEntity(
+                id = id,
+                name = name.trim(),
+                rule = rule,
+                minPlayCount = minPlayCount.coerceAtLeast(0),
+                artistFilter = artistFilter.trim(),
+                createdAt = System.currentTimeMillis(),
+            ),
+        )
+        return id
+    }
+
+    suspend fun deleteSmartPlaylist(id: String) = dao.deleteSmartPlaylist(id)
 
     suspend fun renamePlaylist(id: String, name: String) = dao.renamePlaylist(id, name.trim())
 

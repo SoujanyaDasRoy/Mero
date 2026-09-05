@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mero.domain.Song
+import com.mero.data.db.SmartPlaylistSummary
 import com.mero.ui.components.MeroChip
 import com.mero.ui.components.SongRow
 
@@ -41,8 +42,11 @@ fun LibraryScreen(
     mostPlayed: List<Song>,
     downloads: List<Song>,
     playlists: List<com.mero.data.db.PlaylistSummary>,
+    smartPlaylists: List<SmartPlaylistSummary>,
     onOpenPlaylist: (String) -> Unit,
+    onOpenSmartPlaylist: (String) -> Unit,
     onCreatePlaylist: (String) -> Unit,
+    onCreateSmartPlaylist: (String, String, Int, String) -> Unit,
     onSongMore: (Song) -> Unit,
     nowPlayingId: String?,
     onSongClick: (Song) -> Unit,
@@ -86,8 +90,11 @@ fun LibraryScreen(
         if (selectedTab == "Playlists") {
             com.mero.ui.playlist.PlaylistsTab(
                 playlists = playlists,
+                smartPlaylists = smartPlaylists,
                 onOpen = onOpenPlaylist,
+                onOpenSmart = onOpenSmartPlaylist,
                 onCreate = onCreatePlaylist,
+                onCreateSmart = onCreateSmartPlaylist,
                 contentPadding = contentPadding,
             )
         } else if (songs.isEmpty()) {

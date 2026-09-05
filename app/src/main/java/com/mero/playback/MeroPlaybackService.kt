@@ -58,6 +58,8 @@ class MeroPlaybackService : MediaSessionService() {
         // The equalizer processes this session only — not system audio.
         val effects = container.audioEffects
         effects.attach(player.audioSessionId)
+        val beatHaptics = container.beatHaptics
+        beatHaptics.attach(player.audioSessionId)
         player.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 effects.attach(audioSessionId)
@@ -71,6 +73,7 @@ class MeroPlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         (application as MeroApplication).container.audioEffects.release()
+        (application as MeroApplication).container.beatHaptics.release()
         mediaSession?.run {
             player.release()
             release()
