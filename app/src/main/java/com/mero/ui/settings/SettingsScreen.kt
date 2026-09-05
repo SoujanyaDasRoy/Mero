@@ -36,11 +36,13 @@ import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +69,7 @@ fun SettingsScreen(
     onSleepTimerClick: () -> Unit,
     sleepSummary: String,
     onClearCache: () -> Unit,
+    onClearDownloads: () -> Unit,
     onImportClick: () -> Unit,
     playerVariant: PlayerVariant,
     onPlayerVariantChange: (PlayerVariant) -> Unit,
@@ -75,6 +78,26 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
+    var confirmClearDownloads by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    if (confirmClearDownloads) {
+        AlertDialog(
+            onDismissRequest = { confirmClearDownloads = false },
+            title = { Text("Remove all downloaded songs?") },
+            text = { Text("This removes every song stored on the device. Your playlists and listening history stay intact.") },
+        onChooseDownloadFolder: () -> Unit,
+        downloadFolderSelected: Boolean,
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmClearDownloads = false
+                    onClearDownloads()
+                }) { Text("Remove all") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearDownloads = false }) { Text("Cancel") }
+            },
+        )
+    }
 
     Column(modifier.fillMaxSize()) {
         Row(
@@ -287,6 +310,14 @@ fun SettingsScreen(
                     "Clear cache",
                     "Frees cached audio and cover art. Both re-download as needed.",
                     onClick = onClearCache,
+                ) {
+                    Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
+                }
+                PreferenceRow(
+                    Icons.Rounded.CloudDownload,
+                    "Remove all downloaded songs",
+                    "Deletes offline music from this device only",
+                    onClick = { confirmClearDownloads = true },
                 ) {
                     Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
                 }

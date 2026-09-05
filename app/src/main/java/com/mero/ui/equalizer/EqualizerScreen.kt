@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import com.mero.data.EqPresets
 import com.mero.ui.components.MeroChip
 import com.mero.ui.components.PreferenceRow
+import com.mero.playback.SpatialMode
 import kotlin.math.roundToInt
 
 private const val BAND_TRACK_DP = 150
@@ -65,6 +66,8 @@ fun EqualizerScreen(
     onCrossfadeChange: (Float) -> Unit,
     toggles: Map<String, Boolean>,
     onToggle: (String, Boolean) -> Unit,
+    spatialMode: SpatialMode = SpatialMode.Off,
+    onSpatialModeChange: (SpatialMode) -> Unit = {},
     spatialSupported: Boolean = false,
     onBack: () -> Unit,
     contentPadding: PaddingValues,
@@ -209,6 +212,27 @@ fun EqualizerScreen(
                 toggles["spatial"] == true && spatialSupported,
                 enabled = spatialSupported,
             ) { onToggle("spatial", it) }
+            Text(
+                "Spatial mode",
+                Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = scheme.onSurfaceVariant,
+            )
+            Row(
+                Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SpatialMode.entries.forEach { mode ->
+                    MeroChip(
+                        mode.label,
+                        mode == spatialMode,
+                        onClick = { onSpatialModeChange(mode) },
+                    )
+                }
+            }
 
             Text(
                 "Dolby Atmos needs a licence from Dolby, firmware support from the " +

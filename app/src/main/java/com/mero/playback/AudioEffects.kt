@@ -13,6 +13,12 @@ private const val BANDS = 10
 private const val CHANNELS = 2
 private const val TAG = "MeroAudioFx"
 
+enum class SpatialMode(val label: String) {
+    Off("Off"),
+    Wide("Stereo Wide"),
+    Immersive("Immersive Room"),
+}
+
 /**
  * The real DSP behind the equalizer screen.
  *
@@ -46,8 +52,9 @@ class AudioEffects {
         private set
     var normalization: Boolean = false
         private set
-    var spatial: Boolean = false
+    var spatialMode: SpatialMode = SpatialMode.Off
         private set
+    val spatial: Boolean get() = spatialMode != SpatialMode.Off
 
     /** True when the device can actually widen the stereo image. */
     var spatialSupported: Boolean = false
@@ -69,7 +76,7 @@ class AudioEffects {
                 boosterDb() == 0f &&
                 reverbIntensity == 0f &&
                 !normalization &&
-                !(spatial && spatialSupported)
+                spatialMode == SpatialMode.Off
             )
 
     private fun preampDb(): Float = (preamp * 24f) - 12f
@@ -112,7 +119,11 @@ class AudioEffects {
     fun setBooster(value: Float) { booster = value.coerceIn(0f, 1f); apply() }
     fun setReverb(value: Float) { reverbIntensity = value.coerceIn(0f, 1f); apply() }
     fun setNormalization(value: Boolean) { normalization = value; apply() }
-    fun setSpatial(value: Boolean) { spatial = value; apply() }
+    fun setSpatial(value: Boolean) {
+        spatialMode = if (value) SpatialMode.Wide else SpatialMode.Off
+        apply()
+    }
+    fun setSpatialMode(value: SpatialMode) { spatialMode = value; apply() }
 
     private fun buildConfig(): DynamicsProcessing.Config =
         DynamicsProcessing.Config.Builder(
@@ -192,14 +203,17 @@ class AudioEffects {
 
         runCatching {
             virtualizer?.let {
-                it.enabled = spatial && spatialSupported
-                if (spatial && spatialSupported) it.setStrength(900)
+                it.enabled = enabled && spatial && spatialSupported
+                if (it.enabled) {
+                    it.setStrength(if (spatialMode == SpatialMode.Immersive) 900 else 650)
+                }
             }
         }.onFailure { Log.e(TAG, "failed to apply spatial audio", it) }
 
         runCatching {
             reverb?.let { effect ->
-                val amount = if (enabled) reverbIntensity else 0f
+                val modeRoom = if (spatialMode == SpatialMode.Immersive) 0.25f else 0f
+                val amount = if (enabled) max(reverbIntensity, modeRoom) else 0f
                 effect.enabled = amount > 0f
                 if (amount > 0f) {
                     effect.roomLevel = (-1000f + amount * 850f).toInt().toShort()

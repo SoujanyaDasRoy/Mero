@@ -19,6 +19,7 @@ private fun SongEntity.toDomain() = Song(
     album = album,
     durationSec = durationSec,
     thumbnailUrl = thumbnailUrl,
+    downloaded = downloadedAt != null,
 )
 
 private fun Song.toEntity() = SongEntity(
@@ -54,6 +55,8 @@ class LibraryRepository(private val dao: MeroDao) {
         ensure(song)
         dao.setDownloaded(song.id, if (downloaded) System.currentTimeMillis() else null)
     }
+
+    suspend fun clearDownloadedMarkers() = dao.clearDownloadedMarkers()
 
     suspend fun onPlayed(song: Song) {
         ensure(song)

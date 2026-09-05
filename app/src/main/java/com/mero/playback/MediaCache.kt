@@ -1,6 +1,9 @@
 package com.mero.playback
 
 import android.content.Context
+import android.net.Uri
+import androidx.documentfile.provider.DocumentFile
+import androidx.media3.datasource.DataSource
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.cache.CacheDataSource
@@ -66,6 +69,15 @@ object MediaCache {
         cache.getCachedSpans(videoId).toList().forEach { runCatching { cache.removeSpan(it) } }
     }
 
+    /** Removes every persistent download while keeping the cache handle valid. */
+    fun clearDownloads() {
+        downloads?.let { cache ->
+            cache.keys.toList().forEach { key ->
+                runCatching { cache.removeResource(key) }
+            }
+        }
+    }
+
     /**
      * Pulls a whole track into the download cache. Blocking, and reports
      * progress as a fraction so the UI can show something moving.
@@ -85,6 +97,50 @@ object MediaCache {
         }.cache()
     }
 
+    /** Copies a fully cached track into the user's selected SAF folder. */
+    fun exportDownload(
+        context: Context,
+        folderUri: Uri,
+        videoId: String,
+        title: String,
+        artist: String,
+    ) {
+        val cache = downloads ?: error("Download cache is not initialized")
+        val folder = DocumentFile.fromTreeUri(context, folderUri)
+            ?: error("Selected download folder is no longer available")
+        val fileName = "Mero-${videoId}-${safeName(title)}-${safeName(artist)}.webm"
+        folder.findFile(fileName)?.delete()
+        val file = folder.createFile("audio/webm", fileName)
+            ?: error("Could not create a file in the selected folder")
+        val source = CacheDataSource.Factory()
+            .setCache(cache)
+            .setCacheKeyFactory(keyFactory)
+            .setUpstreamDataSourceFactory(DataSource.Factory { error("Track is not fully cached") })
+            .createDataSource()
+        val spec = DataSpec.Builder().setUri("mero://$videoId").build()
+        source.open(spec)
+        try {
+            context.contentResolver.openOutputStream(file.uri)?.use { output ->
+                val buffer = ByteArray(32 * 1024)
+                while (true) {
+                    val count = source.read(buffer, 0, buffer.size)
+                    if (count == -1) break
+                    output.write(buffer, 0, count)
+                }
+            } ?: error("Could not open the selected folder")
+        } finally {
+            source.close()
+        }
+    }
+
+    fun clearExportedDownloads(context: Context, folderUris: Set<String>) {
+        folderUris.forEach { rawUri ->
+            DocumentFile.fromTreeUri(context, Uri.parse(rawUri))?.listFiles()
+                ?.filter { it.name?.startsWith("Mero-") == true }
+                ?.forEach { runCatching { it.delete() } }
+        }
+    }
+
     val keyFactory = CacheKeyFactory { spec -> spec.key ?: spec.uri.host ?: spec.uri.toString() }
 
     fun isWarm(videoId: String): Boolean =
@@ -102,4 +158,10 @@ object MediaCache {
             .build()
         CacheWriter(factory.createDataSource(), spec, null, null).cache()
     }
+
+    private fun safeName(value: String): String = value
+        .replace(Regex("[^A-Za-z0-9 ._-]"), "_")
+        .trim()
+        .take(80)
+        .ifBlank { "track" }
 }

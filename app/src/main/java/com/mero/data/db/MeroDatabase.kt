@@ -107,6 +107,9 @@ interface MeroDao {
     @Query("UPDATE songs SET downloadedAt = :at WHERE id = :id")
     suspend fun setDownloaded(id: String, at: Long?)
 
+    @Query("UPDATE songs SET downloadedAt = NULL WHERE downloadedAt IS NOT NULL")
+    suspend fun clearDownloadedMarkers()
+
     @Query("SELECT * FROM songs WHERE playCount > 0 ORDER BY playCount DESC LIMIT 50")
     fun mostPlayed(): Flow<List<SongEntity>>
 

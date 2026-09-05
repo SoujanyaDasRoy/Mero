@@ -138,7 +138,7 @@ fun SongMenuSheet(
         ) { onClose(); onToggleLike() }
         MenuRow(
             if (downloaded) Icons.Rounded.DownloadDone else Icons.Rounded.Download,
-            if (downloaded) "Remove download" else "Download",
+            if (downloaded) "Remove from device" else "Download to device",
         ) { onClose(); onDownload() }
         MenuRow(Icons.Rounded.Radio, "Start radio") { onClose(); onStartRadio() }
         MenuRow(Icons.Rounded.Person, "Go to artist") { onClose(); onGoToArtist() }

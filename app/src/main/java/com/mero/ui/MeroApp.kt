@@ -6,6 +6,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -64,6 +66,7 @@ import com.mero.domain.SearchItem
 import com.mero.domain.SearchResultType
 import com.mero.domain.Song
 import com.mero.playback.PlayerConnection
+import com.mero.playback.SpatialMode
 import com.mero.playback.mediaItemFor
 import com.mero.ui.equalizer.EqualizerScreen
 import com.mero.ui.artist.ArtistScreen
@@ -176,6 +179,34 @@ private fun MeroContent(
     val scope = rememberCoroutineScope()
     val container = remember { (context.applicationContext as MeroApplication).container }
     val connection = remember { PlayerConnection() }
+    val downloadPrefs = remember {
+        context.getSharedPreferences("downloads", android.content.Context.MODE_PRIVATE)
+    }
+    var downloadFolderUri by remember {
+        mutableStateOf(downloadPrefs.getString("folder", null))
+    }
+    var downloadFolderUris by remember {
+        mutableStateOf(downloadPrefs.getStringSet("folders", emptySet()).orEmpty())
+    }
+    val folderPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            downloadFolderUri = uri.toString()
+            downloadFolderUris = downloadFolderUris + uri.toString()
+            downloadPrefs.edit()
+                .putString("folder", downloadFolderUri)
+                .putStringSet("folders", downloadFolderUris)
+                .apply()
+        }
+    }
     val resolved by container.streamRepository.lastResolved.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { connection.connect(context) }
 
@@ -281,6 +312,7 @@ private fun MeroContent(
     var preamp by remember { mutableStateOf(audioEffects.preamp) }
     var booster by remember { mutableStateOf(audioEffects.booster) }
     var reverb by remember { mutableStateOf(audioEffects.reverbIntensity) }
+    var spatialMode by remember { mutableStateOf(audioEffects.spatialMode) }
     var hapticIntensity by remember { mutableStateOf(container.beatHaptics.currentIntensity) }
     var crossfade by remember { mutableStateOf(0.5f) }
     var importStep by remember { mutableIntStateOf(1) }
@@ -894,8 +926,17 @@ private fun MeroContent(
                             onToggle(key, value)
                             when (key) {
                                 "norm" -> audioEffects.setNormalization(value)
-                                "spatial" -> audioEffects.setSpatial(value)
+                                "spatial" -> {
+                                    spatialMode = if (value) SpatialMode.Wide else SpatialMode.Off
+                                    audioEffects.setSpatial(value)
+                                }
                             }
+                        },
+                        spatialMode = spatialMode,
+                        onSpatialModeChange = {
+                            spatialMode = it
+                            audioEffects.setSpatialMode(it)
+                            onToggle("spatial", it != SpatialMode.Off)
                         },
                         spatialSupported = audioEffects.spatialSupported,
                         onBack = { navController.popBackStack() },
@@ -1055,6 +1096,18 @@ private fun MeroContent(
                                 context.cacheDir.resolve("media").deleteRecursively()
                             }
                         },
+                        onClearDownloads = {
+                            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                container.libraryRepository.clearDownloadedMarkers()
+                                com.mero.playback.MediaCache.clearExportedDownloads(
+                                    context,
+                                    downloadFolderUris,
+                                )
+                                com.mero.playback.MediaCache.clearDownloads()
+                            }
+                        },
+                        onChooseDownloadFolder = { folderPicker.launch(null) },
+                        downloadFolderSelected = downloadFolderUri != null,
                         playerVariant = playerVariant,
                         onPlayerVariantChange = { playerVariant = it },
                         onBack = { navController.popBackStack() },
@@ -1077,7 +1130,7 @@ private fun MeroContent(
                     val already = downloadedSongs.any { it.id == song.id }
                     // A download takes a minute and the only feedback available
                     // without a progress UI is saying so at both ends.
-                    toast(if (already) "Removing download" else "Downloading ${song.title}")
+                    toast(if (already) "Removing from device" else "Downloading ${song.title} to device")
                     scope.launch(Dispatchers.IO) {
                         if (already) {
                             com.mero.playback.MediaCache.removeDownload(song.id)
@@ -1088,6 +1141,15 @@ private fun MeroContent(
                                     container.downloadDataSourceFactory(context),
                                     song.id,
                                 ) {}
+                                downloadFolderUri?.let { folder ->
+                                    com.mero.playback.MediaCache.exportDownload(
+                                        context = context,
+                                        folderUri = android.net.Uri.parse(folder),
+                                        videoId = song.id,
+                                        title = song.title,
+                                        artist = song.artist,
+                                    )
+                                }
                             }.fold(
                                 onSuccess = {
                                     library.markDownloaded(song, true)
