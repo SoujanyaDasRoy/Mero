@@ -44,6 +44,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,6 +78,13 @@ fun SettingsScreen(
     onPlayerVariantChange: (PlayerVariant) -> Unit,
     onBack: () -> Unit,
     contentPadding: PaddingValues,
+    onChooseDownloadFolder: () -> Unit,
+    downloadFolderSelected: Boolean,
+    streamCodec: CodecPreference,
+    onStreamCodecChange: (CodecPreference) -> Unit,
+    downloadCodec: CodecPreference,
+    onDownloadCodecChange: (CodecPreference) -> Unit,
+    onBatterySettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -86,13 +95,6 @@ fun SettingsScreen(
             onDismissRequest = { confirmClearDownloads = false },
             title = { Text("Remove all downloaded songs?") },
             text = { Text("This removes every song stored on the device. Your playlists and listening history stay intact.") },
-        onChooseDownloadFolder: () -> Unit,
-        downloadFolderSelected: Boolean,
-        streamCodec: CodecPreference,
-        onStreamCodecChange: (CodecPreference) -> Unit,
-        downloadCodec: CodecPreference,
-        onDownloadCodecChange: (CodecPreference) -> Unit,
-        onBatterySettingsClick: () -> Unit,
             confirmButton = {
                 TextButton(onClick = {
                     confirmClearDownloads = false

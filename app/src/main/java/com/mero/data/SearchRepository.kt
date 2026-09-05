@@ -52,7 +52,9 @@ class SearchRepository(
             while (true) {
                 page.items.mapNotNull { it.toSearchItem() }.forEach { items.putIfAbsent(it.id, it) }
                 val continuation = page.continuation
-                if (continuation == null || pages++ >= 5) break
+                // Render a useful first page quickly; two pages give breadth
+                // without making every search wait on a long continuation crawl.
+                if (continuation == null || pages++ >= 2) break
                 page = YouTube.searchContinuation(continuation).getOrNull() ?: break
             }
             items.values.toList()

@@ -163,7 +163,7 @@ fun SearchScreen(
                     SongRow(
                         song = song,
                         highlighted = song.id == nowPlayingId,
-                        onClick = { onSongClick(song) },
+                        onClick = { onSuggestionClick(song.title) },
                     )
                 }
             }

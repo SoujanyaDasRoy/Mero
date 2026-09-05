@@ -404,6 +404,7 @@ private fun MeroContent(
             // retry is automatic, and drop the spinner either way.
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 buffering = false
+                current?.let { container.streamRepository.invalidate(it.id) }
                 if (retriedForError != error.timestampMs) {
                     retriedForError = error.timestampMs
                     controller.prepare()
@@ -501,6 +502,18 @@ private fun MeroContent(
      * notification and to Bluetooth — it does, instead of the composition
      * re-implementing it.
      */
+    fun warmForPlayback(song: Song) {
+        scope.launch(Dispatchers.IO) {
+            container.streamRepository.prefetch(song.id)
+            runCatching {
+                com.mero.playback.MediaCache.warm(
+                    container.mediaDataSourceFactory(context),
+                    song.id,
+                )
+            }
+        }
+    }
+
     fun playFrom(song: Song, context: List<Song>, source: String = playSource) {
         playSource = source
         val list = if (context.any { it.id == song.id }) context else listOf(song) + context
@@ -517,18 +530,6 @@ private fun MeroContent(
         scope.launch {
             library.onPlayed(song)
             library.setQueue(queue)
-        }
-    }
-
-    fun warmForPlayback(song: Song) {
-        scope.launch(Dispatchers.IO) {
-            container.streamRepository.prefetch(song.id)
-            runCatching {
-                com.mero.playback.MediaCache.warm(
-                    container.mediaDataSourceFactory(context),
-                    song.id,
-                )
-            }
         }
     }
 

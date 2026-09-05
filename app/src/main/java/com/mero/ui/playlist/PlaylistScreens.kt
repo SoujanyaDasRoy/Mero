@@ -57,6 +57,7 @@ import com.mero.data.db.SmartPlaylistSummary
 import com.mero.domain.Song
 import com.mero.domain.asClock
 import com.mero.ui.components.Artwork
+import com.mero.ui.components.MeroChip
 
 /* ------------------------- list of playlists ------------------------- */
 

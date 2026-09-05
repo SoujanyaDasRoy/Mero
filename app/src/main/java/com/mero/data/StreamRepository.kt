@@ -114,6 +114,11 @@ class StreamRepository(private val api: PlayerApi) {
         codecPreference = value
     }
 
+    /** Drops a possibly expired CDN URL so the next play resolves a fresh one. */
+    fun invalidate(videoId: String) {
+        cache.keys.removeIf { it.startsWith("$videoId:") }
+    }
+
     private fun cached(key: String): ResolvedStream? {
         val hit = cache[key] ?: return null
         if (System.currentTimeMillis() - hit.atMs < URL_TTL_MS) return hit.stream
