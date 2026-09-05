@@ -78,6 +78,11 @@ object MediaCache {
         }
     }
 
+    /** Drops a partial streaming resource after a CDN/cache read failure. */
+    fun invalidateStreaming(videoId: String) {
+        instance?.removeResource(videoId)
+    }
+
     /**
      * Pulls a whole track into the download cache. Blocking, and reports
      * progress as a fraction so the UI can show something moving.

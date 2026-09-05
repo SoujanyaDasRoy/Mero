@@ -404,7 +404,10 @@ private fun MeroContent(
             // retry is automatic, and drop the spinner either way.
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 buffering = false
-                current?.let { container.streamRepository.invalidate(it.id) }
+                current?.let {
+                    com.mero.playback.MediaCache.invalidateStreaming(it.id)
+                    container.streamRepository.invalidate(it.id)
+                }
                 if (retriedForError != error.timestampMs) {
                     retriedForError = error.timestampMs
                     controller.prepare()
@@ -504,13 +507,10 @@ private fun MeroContent(
      */
     fun warmForPlayback(song: Song) {
         scope.launch(Dispatchers.IO) {
+            // Resolve the URL ahead of time, but do not partially cache the
+            // current track. A 1.5 MB partial span can end around 51 seconds
+            // on high-bitrate files and strand playback at that boundary.
             container.streamRepository.prefetch(song.id)
-            runCatching {
-                com.mero.playback.MediaCache.warm(
-                    container.mediaDataSourceFactory(context),
-                    song.id,
-                )
-            }
         }
     }
 
