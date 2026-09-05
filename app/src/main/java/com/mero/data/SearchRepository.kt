@@ -1,8 +1,14 @@
 package com.mero.data
 
+import com.mero.domain.SearchItem
+import com.mero.domain.SearchResultType
 import com.mero.domain.Song
 import com.zionhuang.innertube.YouTube
+import com.zionhuang.innertube.models.AlbumItem
+import com.zionhuang.innertube.models.ArtistItem
+import com.zionhuang.innertube.models.PlaylistItem
 import com.zionhuang.innertube.models.SongItem
+import com.zionhuang.innertube.models.YTItem
 
 /**
  * The only seam that matters for testing here: the network call, not the
@@ -37,6 +43,22 @@ class SearchRepository(
         return runCatching { api.searchSongs(query.trim()) }
     }
 
+    suspend fun searchItems(query: String, type: SearchResultType): Result<List<SearchItem>> {
+        if (query.isBlank()) return Result.success(emptyList())
+        return runCatching {
+            var page = YouTube.search(query.trim(), type.filter()).getOrThrow()
+            val items = LinkedHashMap<String, SearchItem>()
+            var pages = 1
+            while (true) {
+                page.items.mapNotNull { it.toSearchItem() }.forEach { items.putIfAbsent(it.id, it) }
+                val continuation = page.continuation
+                if (continuation == null || pages++ >= 5) break
+                page = YouTube.searchContinuation(continuation).getOrNull() ?: break
+            }
+            items.values.toList()
+        }
+    }
+
     /**
      * Cheap enough to run while typing (debounced by the caller): it hits
      * YouTube's suggestion endpoint rather than performing a full search.
@@ -45,6 +67,50 @@ class SearchRepository(
         if (query.isBlank()) return Result.success(Suggestions(emptyList(), emptyList()))
         return runCatching { suggestApi.suggest(query.trim()) }
     }
+}
+
+private fun SearchResultType.filter() = when (this) {
+    SearchResultType.Song -> YouTube.SearchFilter.FILTER_SONG
+    SearchResultType.Album -> YouTube.SearchFilter.FILTER_ALBUM
+    SearchResultType.Artist -> YouTube.SearchFilter.FILTER_ARTIST
+    SearchResultType.Playlist -> YouTube.SearchFilter.FILTER_FEATURED_PLAYLIST
+}
+
+private fun YTItem.toSearchItem(): SearchItem? = when (this) {
+    is SongItem -> SearchItem(
+        id = id,
+        title = title,
+        subtitle = artists.joinToString(", ") { it.name },
+        thumbnailUrl = thumbnail.atArtworkSize(),
+        type = SearchResultType.Song,
+        song = toDomain(),
+    )
+    is AlbumItem -> SearchItem(
+        id = browseId,
+        title = title,
+        subtitle = listOfNotNull(artists?.joinToString(", ") { it.name }, year?.toString())
+            .joinToString(" · "),
+        thumbnailUrl = thumbnail.atArtworkSize(),
+        type = SearchResultType.Album,
+        browseId = browseId,
+    )
+    is ArtistItem -> SearchItem(
+        id = id,
+        title = title,
+        subtitle = "Artist",
+        thumbnailUrl = thumbnail.atArtworkSize(),
+        type = SearchResultType.Artist,
+        browseId = id,
+    )
+    is PlaylistItem -> SearchItem(
+        id = id,
+        title = title,
+        subtitle = listOfNotNull(author?.name, songCountText).joinToString(" · "),
+        thumbnailUrl = thumbnail.atArtworkSize(),
+        type = SearchResultType.Playlist,
+        browseId = id,
+    )
+    else -> null
 }
 
 /**

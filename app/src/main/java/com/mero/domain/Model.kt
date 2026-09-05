@@ -24,6 +24,42 @@ data class Playlist(
 
 data class LyricLine(val atSec: Int, val text: String)
 
+enum class SearchResultType { Song, Album, Artist, Playlist }
+
+data class SearchItem(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val thumbnailUrl: String?,
+    val type: SearchResultType,
+    val song: Song? = null,
+    val browseId: String? = null,
+)
+
+data class ArtistAlbum(
+    val browseId: String,
+    val title: String,
+    val year: Int?,
+    val thumbnailUrl: String?,
+)
+
+data class ArtistPageData(
+    val id: String,
+    val name: String,
+    val thumbnailUrl: String?,
+    val albums: List<ArtistAlbum>,
+    val songs: List<Song>,
+)
+
 enum class RepeatMode { Off, All, One }
 
-fun Int.asClock(): String = "%d:%02d".format(this / 60, this % 60)
+fun Int.asClock(): String {
+    val hours = this / 3600
+    val minutes = (this % 3600) / 60
+    val seconds = this % 60
+    return if (hours > 0) {
+        "%d:%02d:%02d".format(hours, minutes, seconds)
+    } else {
+        "%d:%02d".format(minutes, seconds)
+    }
+}

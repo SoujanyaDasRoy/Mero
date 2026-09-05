@@ -16,6 +16,7 @@ import androidx.room.Room
 import com.mero.playback.MediaCache
 import com.mero.playback.StreamResolver
 import com.mero.data.HomeRepository
+import com.mero.data.ArtistRepository
 import com.mero.data.ImportRepository
 import com.mero.data.InnerTubeSearchApi
 import com.mero.data.LibraryRepository
@@ -53,6 +54,7 @@ class AppContainer(context: Context) {
 
     val searchRepository: SearchRepository by lazy { SearchRepository(InnerTubeSearchApi) }
     val homeRepository: HomeRepository by lazy { HomeRepository() }
+    val artistRepository: ArtistRepository by lazy { ArtistRepository() }
     val importRepository: ImportRepository by lazy { ImportRepository(searchRepository) }
     val radioRepository: RadioRepository by lazy { RadioRepository() }
 

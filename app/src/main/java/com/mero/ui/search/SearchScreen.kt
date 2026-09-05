@@ -40,6 +40,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mero.domain.SearchItem
 import com.mero.domain.Song
 import com.mero.ui.components.MeroChip
 import com.mero.ui.components.SongRow
@@ -56,12 +57,12 @@ fun SearchScreen(
     onSearch: () -> Unit,
     selectedTab: String,
     onTabChange: (String) -> Unit,
-    results: List<Song>,
+    results: List<SearchItem>,
     suggestions: List<String>,
     suggestedSongs: List<Song>,
     onSuggestionClick: (String) -> Unit,
     nowPlayingId: String?,
-    onSongClick: (Song) -> Unit,
+    onResultClick: (SearchItem) -> Unit,
     onSongMore: (Song) -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -188,17 +189,19 @@ fun SearchScreen(
             LazyColumn(
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
-                items(results, key = { it.id }) { song ->
+                items(results, key = { it.id }) { result ->
+                    val rowSong = result.song ?: Song(
+                        id = result.id,
+                        title = result.title,
+                        artist = result.subtitle,
+                        thumbnailUrl = result.thumbnailUrl,
+                    )
                     SongRow(
-                        song = song,
-                        subtitle = when (selectedTab) {
-                            "Albums" -> "Album · ${song.artist}"
-                            "Artists" -> "Artist"
-                            else -> "Song · ${song.artist}"
-                        },
-                        highlighted = song.id == nowPlayingId,
-                        onClick = { onSongClick(song) },
-                        onMore = { onSongMore(song) },
+                        song = rowSong,
+                        subtitle = result.subtitle,
+                        highlighted = result.song?.id == nowPlayingId,
+                        onClick = { onResultClick(result) },
+                        onMore = result.song?.let { { onSongMore(it) } },
                     )
                 }
             }

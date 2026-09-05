@@ -1,5 +1,6 @@
 package com.mero.data
 
+import android.net.Uri
 import com.mero.domain.Song
 import com.zionhuang.innertube.YouTube
 import kotlinx.coroutines.Dispatchers
@@ -9,6 +10,11 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -51,14 +57,22 @@ class ImportRepository(private val searchRepository: SearchRepository) {
             next = more.continuation
             fetched++
         }
+        require(songs.isNotEmpty()) { "That YouTube playlist contains no playable tracks." }
         ImportResult(page.playlist.title, songs.values.toList(), emptyList())
     }
 
     /** Handles `?list=`, `/playlist/`, and a bare id. */
     fun youTubePlaylistId(input: String): String? {
         val trimmed = input.trim()
-        Regex("[?&]list=([A-Za-z0-9_-]+)").find(trimmed)?.let { return it.groupValues[1] }
-        Regex("playlist/([A-Za-z0-9_-]+)").find(trimmed)?.let { return it.groupValues[1] }
+        Uri.parse(trimmed).getQueryParameter("list")
+            ?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{12,}")) }
+            ?.let { return it }
+        Uri.parse(trimmed).pathSegments
+            .zipWithNext()
+            .firstOrNull { (parent, _) -> parent.equals("playlist", ignoreCase = true) }
+            ?.second
+            ?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{12,}")) }
+            ?.let { return it }
         return trimmed.takeIf { it.matches(Regex("[A-Za-z0-9_-]{12,}")) }
     }
 
@@ -66,7 +80,12 @@ class ImportRepository(private val searchRepository: SearchRepository) {
 
     fun spotifyPlaylistId(input: String): String? {
         val trimmed = input.trim()
-        Regex("playlist[/:]([A-Za-z0-9]+)").find(trimmed)?.let { return it.groupValues[1] }
+        Uri.parse(trimmed).pathSegments
+            .zipWithNext()
+            .firstOrNull { (parent, _) -> parent.equals("playlist", ignoreCase = true) }
+            ?.second
+            ?.takeIf { it.matches(Regex("[A-Za-z0-9]{22}")) }
+            ?.let { return it }
         return trimmed.takeIf { it.matches(Regex("[A-Za-z0-9]{22}")) }
     }
 
@@ -92,15 +111,23 @@ class ImportRepository(private val searchRepository: SearchRepository) {
         val token = withContext(Dispatchers.IO) { spotifyToken(clientId, clientSecret) }
         val (name, tracks) = withContext(Dispatchers.IO) { spotifyTracks(id, token) }
 
-        val found = mutableListOf<Song>()
-        val missing = mutableListOf<String>()
-        tracks.forEachIndexed { index, track ->
-            onProgress(index + 1, tracks.size)
-            val match = searchRepository.search("${track.title} ${track.artist}")
-                .getOrNull()
-                ?.firstOrNull()
-            if (match != null) found += match else missing += "${track.title} — ${track.artist}"
+        val results = coroutineScope {
+            val limiter = Semaphore(4)
+            tracks.mapIndexed { index, track ->
+                async {
+                    limiter.withPermit {
+                        val match = searchRepository.search("${track.title} ${track.artist}")
+                            .getOrNull()
+                            ?.firstOrNull()
+                        onProgress(index + 1, tracks.size)
+                        track to match
+                    }
+                }
+            }.awaitAll()
         }
+        val found = results.mapNotNull { it.second }
+        val missing = results.filter { it.second == null }
+            .map { "${it.first.title} — ${it.first.artist}" }
         ImportResult(name, found, missing)
     }
 
@@ -118,7 +145,11 @@ class ImportRepository(private val searchRepository: SearchRepository) {
         conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
         conn.outputStream.use { it.write("grant_type=client_credentials".toByteArray()) }
         if (conn.responseCode != 200) {
-            throw IOException("Spotify rejected those credentials (${conn.responseCode}).")
+            val details = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            throw IOException(
+                "Spotify rejected those credentials (${conn.responseCode})." +
+                    details.takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty(),
+            )
         }
         val body = conn.inputStream.bufferedReader().use { it.readText() }
         return json.parseToJsonElement(body).jsonObject["access_token"]!!.jsonPrimitive.content
@@ -150,7 +181,11 @@ class ImportRepository(private val searchRepository: SearchRepository) {
         val conn = (URL(url).openConnection() as HttpURLConnection)
         conn.setRequestProperty("Authorization", "Bearer $token")
         if (conn.responseCode != 200) {
-            throw IOException("Spotify returned ${conn.responseCode} for that playlist.")
+            val details = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            throw IOException(
+                "Spotify returned ${conn.responseCode} for that playlist." +
+                    details.takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty(),
+            )
         }
         val body = conn.inputStream.bufferedReader().use { it.readText() }
         return json.parseToJsonElement(body).jsonObject

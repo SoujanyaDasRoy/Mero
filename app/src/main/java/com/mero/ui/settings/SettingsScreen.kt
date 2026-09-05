@@ -157,6 +157,16 @@ fun SettingsScreen(
                 }
                 PreferenceRow(
                     Icons.Rounded.Contrast,
+                    "Light mode",
+                    "Use a bright, warm palette instead of dark mode",
+                ) {
+                    Switch(
+                        checked = toggles["dark"] != true,
+                        onCheckedChange = { onToggle("dark", !it) },
+                    )
+                }
+                PreferenceRow(
+                    Icons.Rounded.Contrast,
                     "Pure black",
                     "Real battery saving on the AMOLED panels everyone here has",
                 ) {
@@ -228,6 +238,7 @@ fun SettingsScreen(
                 ) {
                     Switch(
                         checked = toggles["autopause"] == true,
+                        enabled = toggles["infinite"] != true,
                         onCheckedChange = { onToggle("autopause", it) },
                     )
                 }

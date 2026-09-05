@@ -116,6 +116,7 @@ data class PlayerActions(
     val onLyrics: () -> Unit,
     val onEqualizer: () -> Unit = {},
     val onSleepTimer: () -> Unit = {},
+    val onMore: () -> Unit = {},
 )
 
 @Composable
@@ -164,6 +165,7 @@ private fun StandardPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modif
             source = ui.source,
             centred = true,
             onCollapse = actions.onCollapse,
+            onMore = actions.onMore,
         )
 
         // Artwork sits high, not centred — Tidal-style.
@@ -303,7 +305,7 @@ private fun FullBleedPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modi
             ) {
                 ScrimIconButton(Icons.Rounded.KeyboardArrowDown, "Collapse", actions.onCollapse)
                 Spacer(Modifier.weight(1f))
-                ScrimIconButton(Icons.Rounded.MoreVert, "More", {})
+                ScrimIconButton(Icons.Rounded.MoreVert, "More", actions.onMore)
             }
         }
 
@@ -377,6 +379,7 @@ private fun QueueForwardPlayer(ui: PlayerUi, actions: PlayerActions, modifier: M
             source = ui.source,
             centred = false,
             onCollapse = actions.onCollapse,
+            onMore = actions.onMore,
             height = 48,
         )
 
@@ -516,6 +519,7 @@ private fun PlayerTopBar(
     source: String,
     centred: Boolean,
     onCollapse: () -> Unit,
+    onMore: () -> Unit,
     height: Int = 56,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -556,7 +560,7 @@ private fun PlayerTopBar(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButton(onClick = {}) {
+        IconButton(onClick = onMore) {
             Icon(Icons.Rounded.MoreVert, "More", tint = scheme.onSurfaceVariant)
         }
     }

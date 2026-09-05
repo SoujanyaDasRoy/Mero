@@ -25,7 +25,9 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.SyncAlt
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -64,7 +66,9 @@ fun MiniPlayer(
     progress: Float,
     onExpand: () -> Unit,
     onPlayPause: () -> Unit,
+    onPrevious: () -> Unit,
     onNext: () -> Unit,
+    onQueue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -103,6 +107,9 @@ fun MiniPlayer(
                     maxLines = 1,
                 )
             }
+            IconButton(onClick = onPrevious) {
+                Icon(Icons.Rounded.SkipPrevious, "Previous", Modifier.size(24.dp))
+            }
             IconButton(onClick = onPlayPause) {
                 if (buffering) {
                     CircularProgressIndicator(
@@ -120,6 +127,9 @@ fun MiniPlayer(
             }
             IconButton(onClick = onNext) {
                 Icon(Icons.Rounded.SkipNext, "Next", Modifier.size(26.dp))
+            }
+            IconButton(onClick = onQueue) {
+                Icon(Icons.Rounded.QueueMusic, "Queue", Modifier.size(22.dp))
             }
         }
         LinearProgressIndicator(

@@ -5,6 +5,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +23,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,14 +57,22 @@ fun MeroSplash(onFinished: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Image(
-            painter = painterResource(R.drawable.mero_logo),
-            contentDescription = "Mero",
-            modifier = Modifier
+        Box(
+            Modifier
                 .size(132.dp)
                 .scale(scale.value)
-                .clip(RoundedCornerShape(30.dp)),
-        )
+                .clip(RoundedCornerShape(30.dp))
+                .background(colorResource(R.color.mero_yellow)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.mero_logo),
+                contentDescription = "Mero",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .scale(0.78f),
+            )
+        }
         Text(
             "Mero",
             Modifier
