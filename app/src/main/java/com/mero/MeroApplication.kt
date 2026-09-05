@@ -17,6 +17,7 @@ import com.mero.playback.MediaCache
 import com.mero.playback.StreamResolver
 import com.mero.data.HomeRepository
 import com.mero.data.ArtistRepository
+import com.mero.data.CodecPreference
 import com.mero.data.ImportRepository
 import com.mero.data.InnerTubeSearchApi
 import com.mero.data.LibraryRepository
@@ -101,10 +102,13 @@ class AppContainer(context: Context) {
     }
 
     /** Writes into the download cache rather than reading through it. */
-    fun downloadDataSourceFactory(ctx: Context): CacheDataSource.Factory {
+    fun downloadDataSourceFactory(
+        ctx: Context,
+        codec: CodecPreference? = null,
+    ): CacheDataSource.Factory {
         val resolving = ResolvingDataSource.Factory(
             DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true),
-            StreamResolver(streamRepository),
+            StreamResolver(streamRepository, codec),
         )
         return CacheDataSource.Factory()
             .setCache(MediaCache.downloads(ctx))

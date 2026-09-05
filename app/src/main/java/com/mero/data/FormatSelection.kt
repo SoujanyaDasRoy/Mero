@@ -19,9 +19,26 @@ enum class Quality(val preferredItag: Int) {
     LOW(249),
 }
 
-fun selectAudioFormat(formats: List<AudioFormat>, quality: Quality): AudioFormat? {
+enum class CodecPreference(val label: String) {
+    OPUS("Opus"),
+    AAC("AAC"),
+}
+
+fun selectAudioFormat(
+    formats: List<AudioFormat>,
+    quality: Quality,
+    codec: CodecPreference = CodecPreference.OPUS,
+): AudioFormat? {
     val audioOnly = formats.filter { it.mimeType.startsWith("audio/") }
-    return audioOnly.firstOrNull { it.itag == quality.preferredItag }
+    val preferredCodec = audioOnly.filter { format ->
+        when (codec) {
+            CodecPreference.OPUS -> format.codecLabel() == "Opus"
+            CodecPreference.AAC -> format.codecLabel() == "AAC"
+        }
+    }
+    return preferredCodec.firstOrNull { it.itag == quality.preferredItag }
+        ?: preferredCodec.maxByOrNull { it.bitrate }
+        ?: audioOnly.firstOrNull { it.itag == quality.preferredItag }
         ?: audioOnly.maxByOrNull { it.bitrate }
 }
 

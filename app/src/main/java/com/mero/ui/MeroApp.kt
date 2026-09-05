@@ -59,6 +59,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.mero.MeroApplication
 import com.mero.data.EqPresets
+import com.mero.data.CodecPreference
 import com.mero.data.HomeSection
 import com.mero.data.titleCase
 import com.mero.domain.RepeatMode
@@ -179,6 +180,22 @@ private fun MeroContent(
     val scope = rememberCoroutineScope()
     val container = remember { (context.applicationContext as MeroApplication).container }
     val connection = remember { PlayerConnection() }
+    val qualityPrefs = remember {
+        context.getSharedPreferences("quality", android.content.Context.MODE_PRIVATE)
+    }
+    var streamCodec by remember {
+        mutableStateOf(
+            runCatching { CodecPreference.valueOf(qualityPrefs.getString("stream", CodecPreference.OPUS.name)!!) }
+                .getOrDefault(CodecPreference.OPUS),
+        )
+    }
+    var downloadCodec by remember {
+        mutableStateOf(
+            runCatching { CodecPreference.valueOf(qualityPrefs.getString("download", CodecPreference.OPUS.name)!!) }
+                .getOrDefault(CodecPreference.OPUS),
+        )
+    }
+    LaunchedEffect(streamCodec) { container.streamRepository.setCodecPreference(streamCodec) }
     val downloadPrefs = remember {
         context.getSharedPreferences("downloads", android.content.Context.MODE_PRIVATE)
     }
@@ -1108,6 +1125,24 @@ private fun MeroContent(
                         },
                         onChooseDownloadFolder = { folderPicker.launch(null) },
                         downloadFolderSelected = downloadFolderUri != null,
+                        streamCodec = streamCodec,
+                        onStreamCodecChange = {
+                            streamCodec = it
+                            qualityPrefs.edit().putString("stream", it.name).apply()
+                            container.streamRepository.setCodecPreference(it)
+                        },
+                        downloadCodec = downloadCodec,
+                        onDownloadCodecChange = {
+                            downloadCodec = it
+                            qualityPrefs.edit().putString("download", it.name).apply()
+                        },
+                        onBatterySettingsClick = {
+                            runCatching {
+                                context.startActivity(
+                                    android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+                                )
+                            }
+                        },
                         playerVariant = playerVariant,
                         onPlayerVariantChange = { playerVariant = it },
                         onBack = { navController.popBackStack() },
@@ -1138,7 +1173,7 @@ private fun MeroContent(
                         } else {
                             runCatching {
                                 com.mero.playback.MediaCache.download(
-                                    container.downloadDataSourceFactory(context),
+                                    container.downloadDataSourceFactory(context, downloadCodec),
                                     song.id,
                                 ) {}
                                 downloadFolderUri?.let { folder ->

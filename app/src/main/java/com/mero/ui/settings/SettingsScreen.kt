@@ -57,6 +57,7 @@ import com.mero.ui.components.GroupHeader
 import com.mero.ui.components.MeroChip
 import com.mero.ui.components.PreferenceRow
 import com.mero.ui.player.PlayerVariant
+import com.mero.data.CodecPreference
 import com.mero.ui.theme.MeroAccent
 
 @Composable
@@ -87,6 +88,11 @@ fun SettingsScreen(
             text = { Text("This removes every song stored on the device. Your playlists and listening history stay intact.") },
         onChooseDownloadFolder: () -> Unit,
         downloadFolderSelected: Boolean,
+        streamCodec: CodecPreference,
+        onStreamCodecChange: (CodecPreference) -> Unit,
+        downloadCodec: CodecPreference,
+        onDownloadCodecChange: (CodecPreference) -> Unit,
+        onBatterySettingsClick: () -> Unit,
             confirmButton = {
                 TextButton(onClick = {
                     confirmClearDownloads = false
@@ -265,11 +271,23 @@ fun SettingsScreen(
                         onCheckedChange = { onToggle("autopause", it) },
                     )
                 }
-                PreferenceRow(Icons.Rounded.Hd, "Streaming quality", "Opus ~160 kbps") {
-                    Text("High", fontSize = 13.sp, color = scheme.onSurfaceVariant)
+                PreferenceRow(Icons.Rounded.Hd, "Streaming codec", "Choose the audio format used while streaming")
+                Row(
+                    Modifier.padding(start = 54.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CodecPreference.entries.forEach { option ->
+                        MeroChip(option.label, option == streamCodec, onClick = { onStreamCodecChange(option) })
+                    }
                 }
-                PreferenceRow(Icons.Rounded.SdCard, "Download quality", "Opus ~160 kbps") {
-                    Text("High", fontSize = 13.sp, color = scheme.onSurfaceVariant)
+                PreferenceRow(Icons.Rounded.SdCard, "Download codec", "Choose the audio format saved to the device")
+                Row(
+                    Modifier.padding(start = 54.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CodecPreference.entries.forEach { option ->
+                        MeroChip(option.label, option == downloadCodec, onClick = { onDownloadCodecChange(option) })
+                    }
                 }
                 HorizontalDivider(
                     Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
@@ -331,10 +349,10 @@ fun SettingsScreen(
                 GroupHeader("PLAYBACK RELIABILITY")
                 PreferenceRow(
                     icon = Icons.Rounded.BatteryAlert,
-                    label = "Battery optimisation",
-                    subtitle = "Xiaomi detected — Autostart and No restrictions are separate settings",
+                    label = "Background playback settings",
+                    subtitle = "Open Android battery settings so playback can continue with the screen off",
                     iconTint = scheme.error,
-                    onClick = {},
+                    onClick = onBatterySettingsClick,
                 ) {
                     Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
                 }

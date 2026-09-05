@@ -36,6 +36,10 @@ fun interface PlayerApi {
 
 class StreamRepository(private val api: PlayerApi) {
 
+    @Volatile
+    var codecPreference: CodecPreference = CodecPreference.OPUS
+        private set
+
     private val _lastResolved = MutableStateFlow<ResolvedStream?>(null)
 
     /** What the currently playing track actually resolved to, for the UI. */
@@ -62,9 +66,10 @@ class StreamRepository(private val api: PlayerApi) {
     suspend fun resolve(
         videoId: String,
         quality: Quality = Quality.HIGH,
+        codec: CodecPreference = codecPreference,
         forUi: Boolean = true,
     ): ResolvedStream {
-        val key = "$videoId:${quality.name}"
+        val key = "$videoId:${quality.name}:${codec.name}"
         cached(key)?.let {
             if (forUi) _lastResolved.value = it
             return it
@@ -79,7 +84,7 @@ class StreamRepository(private val api: PlayerApi) {
                 // subprocess: no error, no retry, just a spinner. Spec §9 wants
                 // failure visible and retryable, which needs it to fail first.
                 val formats = withTimeout(EXTRACT_TIMEOUT_MS) { api.formatsFor(videoId) }
-                val chosen = selectAudioFormat(formats, quality)
+                val chosen = selectAudioFormat(formats, quality, codec)
                     ?: error("No playable audio format for $videoId")
                 ResolvedStream(
                     url = chosen.url,
@@ -99,10 +104,14 @@ class StreamRepository(private val api: PlayerApi) {
      * never touches [lastResolved], which describes what is playing now.
      */
     suspend fun prefetch(videoId: String, quality: Quality = Quality.HIGH) {
-        if (cached("$videoId:${quality.name}") != null) return
+        if (cached("$videoId:${quality.name}:${codecPreference.name}") != null) return
         if (extractionLock.isLocked) return
         runCatching { resolve(videoId, quality, forUi = false) }
             .onFailure { Log.w(TAG, "prefetch of $videoId skipped: ${it.message}") }
+    }
+
+    fun setCodecPreference(value: CodecPreference) {
+        codecPreference = value
     }
 
     private fun cached(key: String): ResolvedStream? {
