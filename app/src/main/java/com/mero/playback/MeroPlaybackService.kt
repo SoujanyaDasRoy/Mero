@@ -31,8 +31,8 @@ class MeroPlaybackService : MediaSessionService() {
                 // 160 kbps stream that is pure dead time on top of extraction.
                 DefaultLoadControl.Builder()
                     .setBufferDurationsMs(
-                        /* minBufferMs = */ 15_000,
-                        /* maxBufferMs = */ 60_000,
+                        /* minBufferMs = */ 30_000,
+                        /* maxBufferMs = */ 300_000,
                         /* bufferForPlaybackMs = */ 500,
                         /* bufferForPlaybackAfterRebufferMs = */ 1_500,
                     )

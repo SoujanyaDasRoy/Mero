@@ -12,7 +12,6 @@ class ArtistRepository {
     suspend fun artist(browseId: String): Result<ArtistPageData> = runCatching {
         val page = YouTube.artist(browseId).getOrThrow()
         val albums = page.sections
-            .filter { it.title.contains("album", ignoreCase = true) || it.title.contains("discograph", ignoreCase = true) }
             .flatMap { section ->
                 val initial = section.items.mapNotNull { it as? AlbumItem }
                 val more = section.moreEndpoint?.let { endpoint -> loadAll(endpoint) }.orEmpty()

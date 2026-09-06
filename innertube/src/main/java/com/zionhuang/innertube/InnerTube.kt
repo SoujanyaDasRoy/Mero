@@ -20,6 +20,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import java.net.Proxy
 import java.util.*
+import java.util.concurrent.TimeUnit
 
 /**
  * Provide access to InnerTube endpoints.
@@ -67,8 +68,14 @@ class InnerTube {
             deflate(0.8F)
         }
 
-        if (proxy != null) {
-            engine {
+        engine {
+            config {
+                connectTimeout(10, TimeUnit.SECONDS)
+                readTimeout(15, TimeUnit.SECONDS)
+                writeTimeout(15, TimeUnit.SECONDS)
+                retryOnConnectionFailure(true)
+            }
+            if (proxy != null) {
                 proxy = this@InnerTube.proxy
             }
         }

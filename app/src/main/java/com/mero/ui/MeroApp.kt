@@ -1,5 +1,6 @@
 package com.mero.ui
 
+import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -66,6 +67,7 @@ import com.mero.domain.RepeatMode
 import com.mero.domain.SearchItem
 import com.mero.domain.SearchResultType
 import com.mero.domain.Song
+import com.mero.playback.MediaCache
 import com.mero.playback.PlayerConnection
 import com.mero.playback.SpatialMode
 import com.mero.playback.mediaItemFor
@@ -260,35 +262,17 @@ private fun MeroContent(
     var query by remember { mutableStateOf("") }
     var searchTab by remember { mutableStateOf("Songs") }
     var libraryTab by remember { mutableStateOf("Liked") }
-    // Recent searches survive the process, not just the composition: the point
-    // of a recent list is the search you ran yesterday.
-    val searchPrefs = remember {
-        context.getSharedPreferences("search", android.content.Context.MODE_PRIVATE)
-    }
-    var recentSearches by remember {
-        mutableStateOf(
-            searchPrefs.getString("recent", "")
-                .orEmpty()
-                .split(NL)
-                .filter { it.isNotBlank() },
-        )
-    }
-    LaunchedEffect(recentSearches) {
-        searchPrefs.edit().putString("recent", recentSearches.joinToString(NL)).apply()
-    }
     // A stable handful of the home seeds, Title Cased the same way the shelf
     // headings are, so an empty search box offers somewhere to start.
     val browseTopics = remember {
         container.homeRepository.seeds.shuffled().take(14).map { it.titleCase() }
     }
-    var submittedQuery by remember { mutableStateOf("") }
-    var suggestions by remember { mutableStateOf(com.mero.data.Suggestions(emptyList(), emptyList())) }
     var homeSections by remember { mutableStateOf(emptyList<HomeSection>()) }
     var homeLoading by remember { mutableStateOf(true) }
     var homeLoadingMore by remember { mutableStateOf(false) }
     var seedQueue by remember { mutableStateOf(emptyList<String>()) }
     var endedTick by remember { mutableIntStateOf(0) }
-    var retriedForError by remember { mutableStateOf(0L) }
+    var failedTrackId by remember { mutableStateOf<String?>(null) }
     var lyrics by remember { mutableStateOf(com.mero.data.Lyrics(emptyList(), false)) }
     var lyricsLoading by remember { mutableStateOf(false) }
     var addingToPlaylist by remember { mutableStateOf<Song?>(null) }
@@ -365,18 +349,30 @@ private fun MeroContent(
             // extraction + buffering, which made the button look dead.
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 playing = playWhenReady
+                markInteraction()
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 buffering = playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_ENDED) endedTick++
+                if (playbackState == Player.STATE_READY) failedTrackId = null
             }
 
             // The player owns the queue now, so the UI follows it rather than
             // driving it. Auto-advance, repeat and shuffle all land here.
             override fun onMediaItemTransition(item: androidx.media3.common.MediaItem?, reason: Int) {
-                val id = item?.mediaId ?: return
-                current = songsById[id] ?: current
+                failedTrackId = null
+                if (item == null) return
+                markInteraction()
+                val id = item.mediaId
+                val meta = item.mediaMetadata
+                val songFromMeta = Song(
+                    id = id,
+                    title = meta.title?.toString() ?: id,
+                    artist = meta.artist?.toString() ?: "",
+                    thumbnailUrl = meta.artworkUri?.toString(),
+                )
+                current = songsById[id] ?: songFromMeta
                 positionSec = 0
                 playerDurationSec = 0
                 refillInfinitePlayback()
@@ -404,16 +400,18 @@ private fun MeroContent(
             // retry is automatic, and drop the spinner either way.
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 buffering = false
-                current?.let {
-                    com.mero.playback.MediaCache.invalidateStreaming(it.id)
-                    container.streamRepository.invalidate(it.id)
+                val trackId = current?.id
+                if (trackId != null) {
+                    MediaCache.invalidateStreaming(trackId)
                 }
-                if (retriedForError != error.timestampMs) {
-                    retriedForError = error.timestampMs
+                if (trackId != null && failedTrackId != trackId) {
+                    failedTrackId = trackId
+                    container.streamRepository.invalidate(trackId)
                     controller.prepare()
                     controller.play()
                     return
                 }
+                failedTrackId = null
                 // Second failure on the same error: stop retrying and say so.
                 // Spec §9 — extraction failure is visible and retryable, never
                 // an indefinite spinner. Retrying is pressing play again.
@@ -433,14 +431,18 @@ private fun MeroContent(
     // Every refresh reshuffles the whole seed pool, so the feed is different
     // each time rather than cycling the same shelves.
     fun loadHome() {
-        homeLoading = true
-        homeSections = emptyList()
+        if (homeSections.isEmpty()) {
+            homeLoading = true
+        }
         val fresh = container.homeRepository.seeds.shuffled()
         val batch = fresh.take(FIRST_BATCH)
         seedQueue = fresh.drop(FIRST_BATCH)
         scope.launch {
             container.homeRepository.sectionsFor(batch).fold(
-                onSuccess = { homeSections = it; homeError = null },
+                onSuccess = { sections ->
+                    homeSections = sections
+                    homeError = null
+                },
                 onFailure = { homeError = it.message ?: it.toString() },
             )
             homeLoading = false
@@ -619,23 +621,10 @@ private fun MeroContent(
     }
 
     // The first track of a session is the one that feels slow, so resolve the
-    // most recently played one before anybody presses anything.
+    // most recently played or first queue track before anybody presses anything.
     LaunchedEffect(Unit) {
-        val warm = recentlyPlayed.firstOrNull() ?: return@LaunchedEffect
+        val warm = recentlyPlayed.firstOrNull() ?: persistedQueue.firstOrNull() ?: return@LaunchedEffect
         container.streamRepository.prefetch(warm.id)
-    }
-
-    // Suggestions as you type. Debounced so a fast typist doesn't fire a
-    // request per keystroke, and skipped once the query has been submitted
-    // (at that point the results list is what matters).
-    LaunchedEffect(query) {
-        if (query.isBlank() || query == submittedQuery) {
-            suggestions = com.mero.data.Suggestions(emptyList(), emptyList())
-            return@LaunchedEffect
-        }
-        delay(150)
-        container.searchRepository.suggest(query)
-            .onSuccess { suggestions = it }
     }
 
     // Scaffold measures the bottom bar and pads the NavHost by it, so the
@@ -753,59 +742,90 @@ private fun MeroContent(
 
                 composable<SearchRoute> {
                     var results by remember { mutableStateOf<List<SearchItem>>(emptyList()) }
+                    var continuationToken by remember { mutableStateOf<String?>(null) }
+                    var isSearching by remember { mutableStateOf(false) }
+                    var isLoadingMore by remember { mutableStateOf(false) }
                     var searchError by remember { mutableStateOf<String?>(null) }
-                    fun requestSearch(term: String) {
+
+                    // Active live search as the user writes ("since writing")
+                    LaunchedEffect(query, searchTab) {
+                        val trimmed = query.trim()
+                        if (trimmed.isBlank()) {
+                            results = emptyList()
+                            continuationToken = null
+                            isSearching = false
+                            searchError = null
+                            return@LaunchedEffect
+                        }
+                        delay(250) // 250ms active typing debounce
+                        isSearching = true
+                        container.searchRepository.searchItemsPage(
+                            trimmed,
+                            when (searchTab) {
+                                "Albums" -> SearchResultType.Album
+                                "Artists" -> SearchResultType.Artist
+                                "Playlists" -> SearchResultType.Playlist
+                                else -> SearchResultType.Song
+                            },
+                        ).fold(
+                            onSuccess = { page ->
+                                results = page.items
+                                continuationToken = page.continuation
+                                searchError = null
+                                isSearching = false
+                                page.items.firstOrNull()?.song?.let(::warmForPlayback)
+                            },
+                            onFailure = { e ->
+                                searchError = e.message ?: e.toString()
+                                isSearching = false
+                            },
+                        )
+                    }
+
+                    fun loadMoreResults() {
+                        val token = continuationToken ?: return
+                        val trimmed = query.trim()
+                        if (trimmed.isBlank() || isLoadingMore || isSearching) return
+                        isLoadingMore = true
                         scope.launch {
-                            container.searchRepository.searchItems(
-                                term,
+                            container.searchRepository.searchItemsPage(
+                                trimmed,
                                 when (searchTab) {
                                     "Albums" -> SearchResultType.Album
                                     "Artists" -> SearchResultType.Artist
                                     "Playlists" -> SearchResultType.Playlist
                                     else -> SearchResultType.Song
                                 },
+                                continuation = token,
                             ).fold(
-                                onSuccess = { items ->
-                                    results = items
-                                    searchError = null
-                                    items.firstOrNull()?.song?.let(::warmForPlayback)
+                                onSuccess = { page ->
+                                    val existingIds = results.map { it.id }.toSet()
+                                    val newItems = page.items.filter { it.id !in existingIds }
+                                    results = results + newItems
+                                    continuationToken = page.continuation
+                                    isLoadingMore = false
                                 },
-                                onFailure = { e -> searchError = e.message ?: e.toString() },
+                                onFailure = {
+                                    isLoadingMore = false
+                                },
                             )
                         }
                     }
+
                     SearchScreen(
-                        recentSearches = recentSearches,
                         browseTopics = browseTopics,
-                        onRemoveRecent = { term -> recentSearches = recentSearches - term },
                         query = query,
                         onQueryChange = { query = it },
-                        suggestions = suggestions.queries,
-                        suggestedSongs = suggestions.songs,
-                        onSuggestionClick = { term ->
-                            query = term
-                            submittedQuery = term
-                            recentSearches = (listOf(term) + (recentSearches - term)).take(10)
-                            scope.launch {
-                                requestSearch(term)
-                            }
-                        },
                         onSearch = {
-                            val term = query.trim()
-                            submittedQuery = term
-                            if (term.isNotEmpty()) {
-                                recentSearches = (listOf(term) + (recentSearches - term)).take(10)
-                            }
-                            scope.launch {
-                                requestSearch(query)
-                            }
+                            // Focus clear / instant active search
                         },
                         selectedTab = searchTab,
-                        onTabChange = {
-                            searchTab = it
-                            if (submittedQuery.isNotBlank()) requestSearch(submittedQuery)
-                        },
+                        onTabChange = { searchTab = it },
                         results = results,
+                        isSearching = isSearching,
+                        isLoadingMore = isLoadingMore,
+                        hasMoreResults = continuationToken != null,
+                        onLoadMore = { loadMoreResults() },
                         nowPlayingId = current?.id,
                         onResultClick = { item ->
                             when (item.type) {
@@ -823,10 +843,6 @@ private fun MeroContent(
                         onSongMore = { menuSong = it },
                         contentPadding = contentPadding,
                     )
-                    // ponytail: plain overlay, not proper SearchScreen error UI —
-                    // this is a diagnostic scaffold to see the real exception, not
-                    // the final error surface. Replace with SearchScreen's own
-                    // error state once the actual failure is known.
                     searchError?.let { msg ->
                         androidx.compose.material3.Text(
                             "Search failed: $msg",
@@ -1153,103 +1169,6 @@ private fun MeroContent(
             }
         }
 
-        menuSong?.let { song ->
-            SongMenuSheet(
-                song = song,
-                liked = likedSongs.any { it.id == song.id },
-                onPlayNext = { connection.playNextInQueue(song) },
-                onAddToQueue = { connection.addToQueue(listOf(song)) },
-                onAddToPlaylist = { menuSong = null; addingToPlaylist = song },
-                onToggleLike = { scope.launch { library.toggleLiked(song) } },
-                downloaded = downloadedSongs.any { it.id == song.id },
-                onDownload = {
-                    val already = downloadedSongs.any { it.id == song.id }
-                    // A download takes a minute and the only feedback available
-                    // without a progress UI is saying so at both ends.
-                    toast(if (already) "Removing from device" else "Downloading ${song.title} to device")
-                    scope.launch(Dispatchers.IO) {
-                        if (already) {
-                            com.mero.playback.MediaCache.removeDownload(song.id)
-                            library.markDownloaded(song, false)
-                        } else {
-                            runCatching {
-                                com.mero.playback.MediaCache.download(
-                                    container.downloadDataSourceFactory(context, downloadCodec),
-                                    song.id,
-                                ) {}
-                                downloadFolderUri?.let { folder ->
-                                    com.mero.playback.MediaCache.exportDownload(
-                                        context = context,
-                                        folderUri = android.net.Uri.parse(folder),
-                                        videoId = song.id,
-                                        title = song.title,
-                                        artist = song.artist,
-                                    )
-                                }
-                            }.fold(
-                                onSuccess = {
-                                    library.markDownloaded(song, true)
-                                    withContext(Dispatchers.Main) { toast("Downloaded ${song.title}") }
-                                },
-                                onFailure = {
-                                    com.mero.playback.MediaCache.removeDownload(song.id)
-                                    withContext(Dispatchers.Main) {
-                                        toast("Download failed: ${it.message}")
-                                    }
-                                },
-                            )
-                        }
-                    }
-                },
-                onStartRadio = {
-                    scope.launch {
-                        container.radioRepository.radioFor(song.id)
-                            .onSuccess { playFrom(song, listOf(song) + it, "Radio") }
-                    }
-                },
-                onGoToArtist = {
-                    query = song.artist
-                    submittedQuery = ""
-                    navController.navigate(SearchRoute)
-                },
-                onShare = {
-                    context.startActivity(
-                        android.content.Intent.createChooser(
-                            android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(
-                                    android.content.Intent.EXTRA_TEXT,
-                                    "${song.title} - ${song.artist}" + NL +
-                                        "https://music.youtube.com/watch?v=${song.id}",
-                                )
-                            },
-                            "Share",
-                        ),
-                    )
-                },
-                onClose = { menuSong = null },
-            )
-        }
-
-        addingToPlaylist?.let { song ->
-            AddToPlaylistSheet(
-                song = song,
-                playlists = playlists,
-                onAdd = { playlistId ->
-                    scope.launch { library.addToPlaylist(playlistId, song) }
-                    addingToPlaylist = null
-                },
-                onCreateAndAdd = { name ->
-                    scope.launch {
-                        val id = library.createPlaylist(name)
-                        library.addToPlaylist(id, song)
-                    }
-                    addingToPlaylist = null
-                },
-                onClose = { addingToPlaylist = null },
-            )
-        }
-
         /* ---- Expanded player and its sheets. Outside the NavHost by design. ---- */
 
         val song = current
@@ -1331,7 +1250,121 @@ private fun MeroContent(
                     )
                 }
             }
+        }
 
+        menuSong?.let { song ->
+            SongMenuSheet(
+                song = song,
+                liked = likedSongs.any { it.id == song.id },
+                onPlayNext = { connection.playNextInQueue(song) },
+                onAddToQueue = { connection.addToQueue(listOf(song)) },
+                onAddToPlaylist = { menuSong = null; addingToPlaylist = song },
+                onToggleLike = { scope.launch { library.toggleLiked(song) } },
+                downloaded = downloadedSongs.any { it.id == song.id },
+                onDownload = {
+                    val already = downloadedSongs.any { it.id == song.id }
+                    // A download takes a minute and the only feedback available
+                    // without a progress UI is saying so at both ends.
+                    toast(if (already) "Removing from device" else "Downloading ${song.title} to device")
+                    scope.launch(Dispatchers.IO) {
+                        if (already) {
+                            com.mero.playback.MediaCache.removeDownload(song.id)
+                            library.markDownloaded(song, false)
+                        } else {
+                            runCatching {
+                                com.mero.playback.MediaCache.download(
+                                    container.downloadDataSourceFactory(context, downloadCodec),
+                                    song.id,
+                                ) {}
+                                downloadFolderUri?.let { folder ->
+                                    com.mero.playback.MediaCache.exportDownload(
+                                        context = context,
+                                        folderUri = android.net.Uri.parse(folder),
+                                        videoId = song.id,
+                                        title = song.title,
+                                        artist = song.artist,
+                                    )
+                                }
+                            }.fold(
+                                onSuccess = {
+                                    library.markDownloaded(song, true)
+                                    withContext(Dispatchers.Main) { toast("Downloaded ${song.title}") }
+                                },
+                                onFailure = {
+                                    com.mero.playback.MediaCache.removeDownload(song.id)
+                                    withContext(Dispatchers.Main) {
+                                        toast("Download failed: ${it.message}")
+                                    }
+                                },
+                            )
+                        }
+                    }
+                },
+                onStartRadio = {
+                    scope.launch {
+                        container.radioRepository.radioFor(song.id)
+                            .onSuccess { playFrom(song, listOf(song) + it, "Radio") }
+                    }
+                },
+                onGoToArtist = {
+                    menuSong = null
+                    scope.launch {
+                        container.searchRepository.searchItems(song.artist, SearchResultType.Artist)
+                            .onSuccess { artists ->
+                                val best = artists.firstOrNull()
+                                if (best != null) {
+                                    navController.navigate(ArtistRoute(best.browseId ?: best.id))
+                                } else {
+                                    query = song.artist
+                                    navController.navigate(SearchRoute)
+                                }
+                            }
+                            .onFailure {
+                                query = song.artist
+                                navController.navigate(SearchRoute)
+                            }
+                    }
+                },
+                onShare = {
+                    val shareText = if (song.id.matches(Regex("[A-Za-z0-9_-]{11}"))) {
+                        "${song.title} - ${song.artist}\nhttps://music.youtube.com/watch?v=${song.id}"
+                    } else {
+                        "${song.title} - ${song.artist}"
+                    }
+                    context.startActivity(
+                        Intent.createChooser(
+                            Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, shareText)
+                            },
+                            "Share ${song.title}",
+                        ),
+                    )
+                },
+                onClose = { menuSong = null },
+            )
+        }
+
+        addingToPlaylist?.let { song ->
+            AddToPlaylistSheet(
+                song = song,
+                playlists = playlists,
+                onAdd = { playlistId ->
+                    scope.launch { library.addToPlaylist(playlistId, song) }
+                    addingToPlaylist = null
+                },
+                onCreateAndAdd = { name ->
+                    scope.launch {
+                        val id = library.createPlaylist(name)
+                        library.addToPlaylist(id, song)
+                    }
+                    addingToPlaylist = null
+                },
+                onClose = { addingToPlaylist = null },
+            )
+        }
+
+        if (song != null) {
             when (overlay) {
                 "queue" -> QueueSheet(
                     current = song,
@@ -1401,7 +1434,7 @@ private fun MeroContent(
     }
 }
 
-private const val FIRST_BATCH = 4
+private const val FIRST_BATCH = 2
 private const val NEXT_BATCH = 3
 
 private data class NavItem(

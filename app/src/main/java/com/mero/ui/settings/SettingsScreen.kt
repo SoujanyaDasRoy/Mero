@@ -265,7 +265,7 @@ fun SettingsScreen(
                 PreferenceRow(
                     Icons.Rounded.MotionPhotosPause,
                     "Pause when idle",
-                    "Stops after an hour with no interaction",
+                    if (toggles["infinite"] == true) "Disabled while Infinite playback is active" else "Stops after an hour with no interaction",
                 ) {
                     Switch(
                         checked = toggles["autopause"] == true,

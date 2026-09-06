@@ -1,5 +1,6 @@
 package com.mero.data
 
+import org.junit.Assert
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -52,5 +53,17 @@ class FormatSelectionTest {
     @Test
     fun `returns null for empty list`() {
         assertNull(selectAudioFormat(emptyList(), Quality.HIGH))
+    }
+
+    @Test
+    fun `isUrlExpired detects expired URL based on expire query parameter`() {
+        val nowSec = 1_700_000_000L
+        val expiredUrl = "https://rr---sn.googlevideo.com/videoplayback?expire=1700000050&id=123"
+        val validUrl = "https://rr---sn.googlevideo.com/videoplayback?expire=1700020000&id=123"
+        val noExpireParam = "https://example.com/audio.webm"
+
+        Assert.assertTrue(isUrlExpired(expiredUrl, thresholdSec = 120, nowSec = nowSec))
+        Assert.assertFalse(isUrlExpired(validUrl, thresholdSec = 120, nowSec = nowSec))
+        Assert.assertFalse(isUrlExpired(noExpireParam, thresholdSec = 120, nowSec = nowSec))
     }
 }

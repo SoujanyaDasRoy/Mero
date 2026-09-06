@@ -3,6 +3,7 @@ package com.mero.data
 import com.mero.domain.SearchItem
 import com.mero.domain.SearchResultType
 import com.mero.domain.Song
+import com.mero.domain.asClock
 import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.models.AlbumItem
 import com.zionhuang.innertube.models.ArtistItem
@@ -29,6 +30,11 @@ data class Suggestions(
     val isEmpty: Boolean get() = queries.isEmpty() && songs.isEmpty()
 }
 
+data class SearchResultPage(
+    val items: List<SearchItem>,
+    val continuation: String?,
+)
+
 fun interface SuggestApi {
     suspend fun suggest(query: String): Suggestions
 }
@@ -43,22 +49,28 @@ class SearchRepository(
         return runCatching { api.searchSongs(query.trim()) }
     }
 
-    suspend fun searchItems(query: String, type: SearchResultType): Result<List<SearchItem>> {
-        if (query.isBlank()) return Result.success(emptyList())
+    suspend fun searchItemsPage(
+        query: String,
+        type: SearchResultType,
+        continuation: String? = null,
+    ): Result<SearchResultPage> {
+        if (query.isBlank()) return Result.success(SearchResultPage(emptyList(), null))
         return runCatching {
-            var page = YouTube.search(query.trim(), type.filter()).getOrThrow()
-            val items = LinkedHashMap<String, SearchItem>()
-            var pages = 1
-            while (true) {
-                page.items.mapNotNull { it.toSearchItem() }.forEach { items.putIfAbsent(it.id, it) }
-                val continuation = page.continuation
-                // Render a useful first page quickly; two pages give breadth
-                // without making every search wait on a long continuation crawl.
-                if (continuation == null || pages++ >= 2) break
-                page = YouTube.searchContinuation(continuation).getOrNull() ?: break
+            val page = if (continuation.isNullOrBlank()) {
+                YouTube.search(query.trim(), type.filter()).getOrThrow()
+            } else {
+                YouTube.searchContinuation(continuation).getOrThrow()
             }
-            items.values.toList()
+            val items = page.items.mapNotNull { it.toSearchItem() }
+            SearchResultPage(
+                items = items,
+                continuation = page.continuation,
+            )
         }
+    }
+
+    suspend fun searchItems(query: String, type: SearchResultType): Result<List<SearchItem>> {
+        return searchItemsPage(query, type).map { it.items }
     }
 
     /**
@@ -79,18 +91,28 @@ private fun SearchResultType.filter() = when (this) {
 }
 
 private fun YTItem.toSearchItem(): SearchItem? = when (this) {
-    is SongItem -> SearchItem(
-        id = id,
-        title = title,
-        subtitle = artists.joinToString(", ") { it.name },
-        thumbnailUrl = thumbnail.atArtworkSize(),
-        type = SearchResultType.Song,
-        song = toDomain(),
-    )
+    is SongItem -> {
+        val durationText = duration?.asClock()
+        val artistsText = artists.joinToString(", ") { it.name }
+        val subtitleText = if (!durationText.isNullOrBlank()) {
+            "$artistsText · $durationText"
+        } else {
+            artistsText
+        }
+        SearchItem(
+            id = id,
+            title = title,
+            subtitle = subtitleText,
+            thumbnailUrl = thumbnail.atArtworkSize(),
+            type = SearchResultType.Song,
+            song = toDomain(),
+        )
+    }
     is AlbumItem -> SearchItem(
         id = browseId,
         title = title,
         subtitle = listOfNotNull(artists?.joinToString(", ") { it.name }, year?.toString())
+            .filter { it.isNotBlank() }
             .joinToString(" · "),
         thumbnailUrl = thumbnail.atArtworkSize(),
         type = SearchResultType.Album,
@@ -107,7 +129,9 @@ private fun YTItem.toSearchItem(): SearchItem? = when (this) {
     is PlaylistItem -> SearchItem(
         id = id,
         title = title,
-        subtitle = listOfNotNull(author?.name, songCountText).joinToString(" · "),
+        subtitle = listOfNotNull(author?.name, songCountText)
+            .filter { it.isNotBlank() }
+            .joinToString(" · "),
         thumbnailUrl = thumbnail.atArtworkSize(),
         type = SearchResultType.Playlist,
         browseId = id,

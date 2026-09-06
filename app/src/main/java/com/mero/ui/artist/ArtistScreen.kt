@@ -1,5 +1,6 @@
 package com.mero.ui.artist
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -82,20 +83,23 @@ fun ArtistScreen(
                 }
                 if (data.albums.isNotEmpty()) {
                     item {
-                        Text("Albums", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp), fontWeight = FontWeight.Medium)
+                        Text("Albums & Singles", Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp), fontWeight = FontWeight.Medium)
                     }
                     items(data.albums, key = { it.browseId }) { album ->
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onAlbumClick(album) }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Artwork(album.thumbnailUrl, size = 56, radius = 8)
                             Column(Modifier.weight(1f)) {
-                                Text(album.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(album.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
                                 Text(album.year?.toString() ?: "Album", fontSize = 13.sp, color = scheme.onSurfaceVariant)
                             }
-                            IconButton(onClick = { onAlbumClick(album) }) { Text("Play", fontSize = 12.sp) }
+                            Text("Play", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = scheme.primary)
                         }
                     }
                 }

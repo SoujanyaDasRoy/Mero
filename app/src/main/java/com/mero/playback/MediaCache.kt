@@ -111,8 +111,8 @@ object MediaCache {
         artist: String,
     ) {
         val cache = downloads ?: error("Download cache is not initialized")
-        val folder = DocumentFile.fromTreeUri(context, folderUri)
-            ?: error("Selected download folder is no longer available")
+        val folder = runCatching { DocumentFile.fromTreeUri(context, folderUri) }.getOrNull()
+            ?: error("Selected download folder is no longer available or accessible")
         val fileName = "Mero-${videoId}-${safeName(title)}-${safeName(artist)}.webm"
         folder.findFile(fileName)?.delete()
         val file = folder.createFile("audio/webm", fileName)

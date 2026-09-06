@@ -121,9 +121,16 @@ class StreamRepository(private val api: PlayerApi) {
 
     private fun cached(key: String): ResolvedStream? {
         val hit = cache[key] ?: return null
-        if (System.currentTimeMillis() - hit.atMs < URL_TTL_MS) return hit.stream
-        cache.remove(key)
-        return null
+        if (System.currentTimeMillis() - hit.atMs >= URL_TTL_MS) {
+            cache.remove(key)
+            return null
+        }
+        if (isUrlExpired(hit.stream.url)) {
+            Log.i(TAG, "Cached stream URL for $key is expired via expire query parameter")
+            cache.remove(key)
+            return null
+        }
+        return hit.stream
     }
 
     private companion object {
@@ -136,6 +143,20 @@ class StreamRepository(private val api: PlayerApi) {
          */
         const val EXTRACT_TIMEOUT_MS = 45_000L
     }
+}
+
+/**
+ * Checks whether a YouTube CDN signed URL is expired or close to expiring
+ * based on its `expire` query parameter timestamp (unix epoch seconds).
+ */
+fun isUrlExpired(
+    url: String,
+    thresholdSec: Long = 120,
+    nowSec: Long = System.currentTimeMillis() / 1000,
+): Boolean {
+    val match = Regex("[?&]expire=(\\d+)").find(url) ?: return false
+    val expireSec = match.groupValues[1].toLongOrNull() ?: return false
+    return nowSec >= (expireSec - thresholdSec)
 }
 
 /**
@@ -204,6 +225,13 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
         // after opening the app could race a half-written binary and hang.
         val prefs = appContext.getSharedPreferences("ytdlp", Context.MODE_PRIVATE)
         val last = prefs.getLong(KEY_LAST_UPDATE, 0L)
+        if (last == 0L) {
+            // On first launch after install, mark as updated so we immediately
+            // use the working bundled binary without blocking first play on a
+            // 15MB background download from GitHub.
+            prefs.edit().putLong(KEY_LAST_UPDATE, System.currentTimeMillis()).apply()
+            return@withContext
+        }
         if (System.currentTimeMillis() - last < UPDATE_INTERVAL_MS) return@withContext
         runCatching { YoutubeDL.updateYoutubeDL(appContext) }
             .onSuccess { prefs.edit().putLong(KEY_LAST_UPDATE, System.currentTimeMillis()).apply() }
@@ -225,16 +253,16 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
         // yt-dlp writes advisories (e.g. "your version is older than 90 days")
         // to stderr, and the wrapper turns any stderr into an exception.
         request.addOption("--no-warnings")
-        // Deliberately NOT pinning player_client. android_vr looks attractive
-        // (its URLs skip the JavaScript signature challenge, which is most of
-        // the extraction time) but it answers with storyboards and one muxed
-        // 360p stream — no adaptive audio at all, so nothing is playable.
-        // yt-dlp's own client order is the thing that keeps working.
-        request.addOption("--extractor-args", "youtube:skip=translated_subs")
+        // Skip HLS, DASH, webpage, and translated subs manifests to avoid extra HTTP round-trips
+        // to YouTube servers during stream extraction.
+        request.addOption("--extractor-args", "youtube:skip=hls,dash,translated_subs,webpage")
         // Nothing here needs the video half of the manifest, the rest of a
         // playlist, or a second guess at a format that already failed.
         request.addOption("--no-playlist")
         request.addOption("--no-check-formats")
+        // Restrict format extraction to audio formats only. On long streams/videos (>3h),
+        // fetching all video formats generates massive manifests that cause timeouts.
+        request.addOption("-f", "ba/ba*")
         request.addOption("--socket-timeout", "10")
         request.addOption("--extractor-retries", "1")
         // runInterruptible, not a bare call: getInfo blocks on a subprocess,
@@ -246,6 +274,16 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
         val fallbackHeaders = info.httpHeaders.orEmpty()
         val audio = info.formats.orEmpty().mapNotNull { format ->
             val url = format.url ?: return@mapNotNull null
+            // Exclude HLS/DASH manifest URLs that ProgressiveMediaSource cannot parse.
+            val isManifest = url.contains(".m3u8", ignoreCase = true) ||
+                url.contains(".mpd", ignoreCase = true) ||
+                url.contains("/manifest/hls", ignoreCase = true) ||
+                url.contains("/manifest/dash", ignoreCase = true) ||
+                format.ext.equals("m3u8", ignoreCase = true) ||
+                format.ext.equals("mpd", ignoreCase = true) ||
+                format.formatId.orEmpty().contains("hls", ignoreCase = true)
+            if (isManifest) return@mapNotNull null
+
             // Leading digits, not a strict Int parse: some clients label the
             // same itag "251-drc" or similar, and requiring a pure number threw
             // every audio format away and left nothing playable.

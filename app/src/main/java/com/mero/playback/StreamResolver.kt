@@ -7,6 +7,8 @@ import com.mero.data.StreamRepository
 import com.mero.data.CodecPreference
 import kotlinx.coroutines.runBlocking
 
+import com.mero.data.isUrlExpired
+
 /**
  * Swaps a `mero://<videoId>` URI for a live CDN URL at the moment ExoPlayer
  * actually opens the stream — never earlier. That's what makes the six-hour URL
@@ -29,9 +31,29 @@ class StreamResolver(
     override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
         if (dataSpec.uri.scheme != "mero") return dataSpec
         val videoId = videoIdFrom(dataSpec.uri)
-        val stream = runBlocking { repo.resolve(videoId, codec = codec ?: repo.codecPreference) }
+        var stream = runBlocking { repo.resolve(videoId, codec = codec ?: repo.codecPreference) }
+        if (isUrlExpired(stream.url)) {
+            repo.invalidate(videoId)
+            stream = runBlocking { repo.resolve(videoId, codec = codec ?: repo.codecPreference) }
+        }
+        val resolvedUrl = appendOrUpdateRange(stream.url, dataSpec.position, dataSpec.length)
         return dataSpec
-            .withUri(stream.url.toUri())
+            .withUri(resolvedUrl.toUri())
             .withAdditionalHeaders(stream.headers)
+    }
+}
+
+internal fun appendOrUpdateRange(url: String, position: Long, length: Long): String {
+    if ((position <= 0) && (length <= 0)) return url
+    val rangeVal = if (length > 0) {
+        "$position-${position + length - 1}"
+    } else {
+        "$position-"
+    }
+    return if (url.contains("range=")) {
+        url.replace(Regex("range=[^&]+"), "range=$rangeVal")
+    } else {
+        val separator = if (url.contains("?")) "&" else "?"
+        "$url${separator}range=$rangeVal"
     }
 }

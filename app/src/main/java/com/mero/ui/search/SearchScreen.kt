@@ -1,11 +1,12 @@
 package com.mero.ui.search
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -22,22 +24,25 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mero.domain.SearchItem
@@ -49,18 +54,17 @@ private val SEARCH_TABS = listOf("Songs", "Albums", "Artists", "Playlists")
 
 @Composable
 fun SearchScreen(
-    recentSearches: List<String>,
     browseTopics: List<String>,
-    onRemoveRecent: (String) -> Unit,
     query: String,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
     selectedTab: String,
     onTabChange: (String) -> Unit,
     results: List<SearchItem>,
-    suggestions: List<String>,
-    suggestedSongs: List<Song>,
-    onSuggestionClick: (String) -> Unit,
+    isSearching: Boolean,
+    isLoadingMore: Boolean,
+    hasMoreResults: Boolean,
+    onLoadMore: () -> Unit,
     nowPlayingId: String?,
     onResultClick: (SearchItem) -> Unit,
     onSongMore: (Song) -> Unit,
@@ -68,9 +72,10 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val focusManager = LocalFocusManager.current
 
     Column(modifier.fillMaxSize()) {
-        Box(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)) {
+        Box(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)) {
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -89,7 +94,7 @@ fun SearchScreen(
                 Box(Modifier.weight(1f)) {
                     if (query.isEmpty()) {
                         Text(
-                            "Songs, albums, artists",
+                            "Search songs, artists, albums...",
                             fontSize = 16.sp,
                             color = scheme.onSurfaceVariant,
                         )
@@ -101,93 +106,72 @@ fun SearchScreen(
                         textStyle = TextStyle(color = scheme.onSurface, fontSize = 16.sp),
                         cursorBrush = SolidColor(scheme.primary),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+                        keyboardActions = KeyboardActions(onSearch = {
+                            focusManager.clearFocus()
+                            onSearch()
+                        }),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(40.dp)) {
-                    Icon(
-                        if (query.isEmpty()) Icons.Rounded.Mic else Icons.Rounded.Close,
-                        contentDescription = if (query.isEmpty()) "Voice search" else "Clear",
-                        tint = scheme.onSurfaceVariant,
-                    )
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(40.dp)) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "Clear",
+                            tint = scheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
 
-        val showingSuggestions = suggestions.isNotEmpty() || suggestedSongs.isNotEmpty()
-
-        if (showingSuggestions) {
-            // Live suggestions while typing — the user shouldn't have to finish
-            // the word and hit search to see what YouTube would match.
-            LazyColumn(
-                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
-            ) {
-                items(suggestions, key = { "q-$it" }) { term ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .clickable { onSuggestionClick(term) }
-                            .padding(start = 16.dp, end = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        Icon(
-                            Icons.Rounded.Search,
-                            contentDescription = null,
-                            tint = scheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Text(
-                            term,
-                            Modifier.weight(1f),
-                            fontSize = 16.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-                if (suggestedSongs.isNotEmpty()) {
-                    item {
-                        Text(
-                            "Songs",
-                            Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = scheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                items(suggestedSongs, key = { it.id }) { song ->
-                    SongRow(
-                        song = song,
-                        highlighted = song.id == nowPlayingId,
-                        onClick = { onSuggestionClick(song.title) },
-                    )
-                }
+        Box(Modifier.fillMaxWidth().height(4.dp)) {
+            if (isSearching) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                    color = scheme.primary,
+                    trackColor = scheme.surfaceContainerHigh,
+                )
             }
-        } else if (query.isBlank()) {
+        }
+
+        if (query.isBlank()) {
             SearchIdle(
-                recentSearches = recentSearches,
                 browseTopics = browseTopics,
-                onRemoveRecent = onRemoveRecent,
-                onQueryChange = { onQueryChange(it); onSearch() },
+                onTopicClick = { topic -> onQueryChange(topic) },
                 contentPadding = contentPadding,
             )
         } else {
             Row(
                 Modifier
                     .horizontalScroll(rememberScrollState())
-                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 SEARCH_TABS.forEach { tab ->
                     MeroChip(tab, selected = tab == selectedTab, onClick = { onTabChange(tab) })
                 }
             }
+
+            val listState = rememberLazyListState()
+
+            val shouldLoadMore = remember {
+                derivedStateOf {
+                    val totalItems = listState.layoutInfo.totalItemsCount
+                    val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                    totalItems > 0 && lastVisibleIndex >= totalItems - 4
+                }
+            }
+
+            LaunchedEffect(shouldLoadMore.value) {
+                if (shouldLoadMore.value && hasMoreResults && !isLoadingMore && !isSearching) {
+                    onLoadMore()
+                }
+            }
+
             LazyColumn(
-                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+                state = listState,
+                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 80.dp),
             ) {
                 items(results, key = { it.id }) { result ->
                     val rowSong = result.song ?: Song(
@@ -204,89 +188,58 @@ fun SearchScreen(
                         onMore = result.song?.let { { onSongMore(it) } },
                     )
                 }
+
+                if (isLoadingMore) {
+                    item(key = "loading-more") {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(28.dp),
+                                color = scheme.primary,
+                                strokeWidth = 2.5.dp,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SearchIdle(
-    recentSearches: List<String>,
     browseTopics: List<String>,
-    onRemoveRecent: (String) -> Unit,
-    onQueryChange: (String) -> Unit,
+    onTopicClick: (String) -> Unit,
     contentPadding: PaddingValues,
 ) {
     val scheme = MaterialTheme.colorScheme
-    LazyColumn(contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding())) {
-        // An empty search box used to be an empty screen for anyone who had not
-        // searched before. Somewhere to start beats a blank page.
+    LazyColumn(contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 80.dp)) {
         if (browseTopics.isNotEmpty()) {
             item {
                 Text(
-                    "Browse",
-                    Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = scheme.onSurfaceVariant,
+                    "Browse Music & Genres",
+                    Modifier.padding(start = 16.dp, top = 16.dp, bottom = 12.dp),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = scheme.onSurface,
                 )
-                androidx.compose.foundation.layout.FlowRow(
+                FlowRow(
                     Modifier.padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     browseTopics.forEach { topic ->
-                        com.mero.ui.components.MeroChip(
+                        MeroChip(
                             label = topic,
                             selected = false,
-                            onClick = { onQueryChange(topic) },
+                            onClick = { onTopicClick(topic) },
                         )
                     }
-                }
-            }
-        }
-        if (recentSearches.isEmpty()) return@LazyColumn
-        item {
-            Text(
-                "Recent searches",
-                Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = scheme.onSurfaceVariant,
-            )
-        }
-        items(recentSearches) { term ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(start = 16.dp, end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Icon(
-                    Icons.Rounded.History,
-                    contentDescription = null,
-                    tint = scheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp),
-                )
-                Text(
-                    term,
-                    Modifier
-                        .weight(1f)
-                        .clickable { onQueryChange(term) },
-                    fontSize = 16.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                IconButton(onClick = { onRemoveRecent(term) }) {
-                    Icon(
-                        Icons.Rounded.Close,
-                        contentDescription = "Remove",
-                        tint = scheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
-                    )
                 }
             }
         }
