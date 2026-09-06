@@ -18,7 +18,9 @@ import com.mero.playback.StreamResolver
 import com.mero.data.HomeRepository
 import com.mero.data.ArtistRepository
 import com.mero.data.CodecPreference
+import com.mero.data.FallbackPlayerApi
 import com.mero.data.ImportRepository
+import com.mero.data.InnerTubePlayerApi
 import com.mero.data.InnerTubeSearchApi
 import com.mero.data.LibraryRepository
 import com.mero.data.RadioRepository
@@ -70,11 +72,11 @@ class AppContainer(context: Context) {
     val sleepTimer: SleepTimer by lazy { SleepTimer() }
     val libraryRepository: LibraryRepository by lazy { LibraryRepository(database.dao()) }
 
-    // YtDlpPlayerApi, not InnerTubePlayerApi — see StreamRepository.kt's note
-    // on InnerTubePlayerApi for why.
     val ytDlpApi: YtDlpPlayerApi by lazy { YtDlpPlayerApi(context.applicationContext) }
 
-    val streamRepository: StreamRepository by lazy { StreamRepository(ytDlpApi) }
+    val streamRepository: StreamRepository by lazy {
+        StreamRepository(FallbackPlayerApi(InnerTubePlayerApi, ytDlpApi))
+    }
 
     /**
      * HTTP -> resolve mero:// to a live CDN URL -> cache the bytes on disk.

@@ -160,28 +160,52 @@ fun isUrlExpired(
 }
 
 /**
- * Backed by innertube's anonymous [YouTube.player] — no cookie, no sign-in.
- *
- * Currently unused (see [YtDlpPlayerApi]): YouTube rejects this request with
- * 400 "Precondition check failed" — the vendored innertube module has no PO
- * token support, and neither does upstream (z-huang/InnerTune#1748, open since
- * Dec 2024, 231 comments, unresolved). Kept in place: a `resync-innertube` pull
- * is a one-line swap back in AppContainer if upstream ever fixes it, and search
- * still uses this same object (search was never broken, only /player).
+ * Backed by innertube's anonymous [YouTube.player] — fast (~200ms) direct API call.
  */
 object InnerTubePlayerApi : PlayerApi {
+    private val defaultHeaders = mapOf(
+        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer" to "https://music.youtube.com/",
+    )
+
     override suspend fun formatsFor(videoId: String): List<AudioFormat> {
         val response = YouTube.player(videoId).getOrThrow()
         val streamingData = response.streamingData
             ?: error("No streamingData for $videoId (playability: ${response.playabilityStatus.status})")
-        return streamingData.adaptiveFormats.mapNotNull { format ->
+        val formats = streamingData.adaptiveFormats.mapNotNull { format ->
             val url = format.url ?: return@mapNotNull null
+            val isAudioOnly = format.mimeType.startsWith("audio/")
+            if (!isAudioOnly) return@mapNotNull null
             AudioFormat(
                 itag = format.itag,
                 url = url,
                 mimeType = format.mimeType,
                 bitrate = format.bitrate,
+                headers = defaultHeaders,
             )
+        }
+        if (formats.isEmpty()) {
+            error("No audio formats returned by InnerTube for $videoId")
+        }
+        return formats
+    }
+}
+
+/**
+ * Combines two [PlayerApi] implementations: tries primary first for instant loading,
+ * falling back to secondary if primary fails or returns no playable formats.
+ */
+class FallbackPlayerApi(
+    private val primary: PlayerApi,
+    private val fallback: PlayerApi,
+) : PlayerApi {
+    override suspend fun formatsFor(videoId: String): List<AudioFormat> {
+        return runCatching {
+            val formats = primary.formatsFor(videoId)
+            if (formats.isNotEmpty()) formats else error("Primary player API returned empty formats")
+        }.getOrElse { primaryError ->
+            Log.w(TAG, "Primary player API failed for $videoId (${primaryError.message}); using fallback")
+            fallback.formatsFor(videoId)
         }
     }
 }
