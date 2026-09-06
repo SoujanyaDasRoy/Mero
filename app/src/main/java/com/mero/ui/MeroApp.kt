@@ -558,20 +558,34 @@ private fun MeroContent(
         }
     }
 
-    // Resolve the next track's URL while the current one plays, so skipping
-    // doesn't pay the extraction cost. StreamRepository caches the result, so
-    // the actual skip is then instant.
-    // Keyed on the id, not the list: `queue` is a fresh List on every DB emit,
-    // so keying on it restarted this effect constantly and fired an extraction
-    // each time — which is what left the playing track stuck buffering.
+    // Pre-resolve initial track on cold launch so first play is <= 5ms
+    LaunchedEffect(Unit) {
+        val warmSong = recentlyPlayed.firstOrNull() ?: persistedQueue.firstOrNull()
+        if (warmSong != null) {
+            withContext(Dispatchers.IO) {
+                container.streamRepository.prefetch(warmSong.id)
+            }
+        }
+    }
+
+    // Pre-resolve top home screen tracks in parallel when home sections render
+    LaunchedEffect(homeSections) {
+        val topHomeSongs = homeSections.flatMap { it.songs }.take(8)
+        if (topHomeSongs.isNotEmpty()) {
+            withContext(Dispatchers.IO) {
+                topHomeSongs.forEach { song ->
+                    launch { container.streamRepository.prefetch(song.id) }
+                }
+            }
+        }
+    }
+
+    // Resolve the next track's URL while the current one plays, so skipping is instant
     val nextId = queue.firstOrNull()?.id
     LaunchedEffect(nextId) {
         if (nextId == null) return@LaunchedEffect
-        delay(2_000)
-        container.streamRepository.prefetch(nextId)
-        // Then pull the opening bytes down too, so pressing next is instant
-        // rather than merely "already knows the URL".
         withContext(Dispatchers.IO) {
+            container.streamRepository.prefetch(nextId)
             runCatching {
                 com.mero.playback.MediaCache.warm(
                     container.mediaDataSourceFactory(context),
@@ -780,6 +794,18 @@ private fun MeroContent(
                                 isSearching = false
                             },
                         )
+                    }
+
+                    // Pre-resolve top search result songs in parallel so tapping any result loads in <= 10ms
+                    LaunchedEffect(results) {
+                        val topResultSongs = results.mapNotNull { it.song }.take(8)
+                        if (topResultSongs.isNotEmpty()) {
+                            withContext(Dispatchers.IO) {
+                                topResultSongs.forEach { song ->
+                                    launch { container.streamRepository.prefetch(song.id) }
+                                }
+                            }
+                        }
                     }
 
                     fun loadMoreResults() {

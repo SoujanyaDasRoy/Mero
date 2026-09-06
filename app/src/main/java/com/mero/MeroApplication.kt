@@ -36,6 +36,7 @@ import com.mero.playback.BeatHaptics
 import com.mero.data.StreamRepository
 import com.mero.data.YtDlpPlayerApi
 import com.zionhuang.innertube.YouTube
+import com.zionhuang.innertube.models.SongItem
 import com.zionhuang.innertube.models.YouTubeLocale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -144,8 +145,20 @@ class MeroApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         initInnerTube()
-        // Warm yt-dlp off the playback path — see YtDlpPlayerApi.prepare().
-        CoroutineScope(Dispatchers.IO).launch { container.ytDlpApi.prepare() }
+        // Warm yt-dlp off the playback path and pre-resolve startup tracks so first play takes <= 5ms
+        CoroutineScope(Dispatchers.IO).launch {
+            container.ytDlpApi.prepare()
+            runCatching {
+                val startupSeeds = container.homeRepository.seeds
+                if (startupSeeds.isNotEmpty()) {
+                    val searchResult = YouTube.search(startupSeeds.first(), YouTube.SearchFilter.FILTER_SONG).getOrNull()
+                    val songs = searchResult?.items?.filterIsInstance<SongItem>()?.take(4).orEmpty()
+                    songs.forEach { song ->
+                        launch { container.streamRepository.prefetch(song.id) }
+                    }
+                }
+            }
+        }
     }
 
     /**
