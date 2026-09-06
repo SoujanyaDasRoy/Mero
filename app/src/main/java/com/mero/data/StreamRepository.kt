@@ -253,9 +253,9 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
         // yt-dlp writes advisories (e.g. "your version is older than 90 days")
         // to stderr, and the wrapper turns any stderr into an exception.
         request.addOption("--no-warnings")
-        // Skip HLS, DASH, webpage, and translated subs manifests to avoid extra HTTP round-trips
+        // Skip HLS, DASH and translated subs manifests to avoid extra HTTP round-trips
         // to YouTube servers during stream extraction.
-        request.addOption("--extractor-args", "youtube:skip=hls,dash,translated_subs,webpage")
+        request.addOption("--extractor-args", "youtube:skip=hls,dash,translated_subs")
         // Nothing here needs the video half of the manifest, the rest of a
         // playlist, or a second guess at a format that already failed.
         request.addOption("--no-playlist")
