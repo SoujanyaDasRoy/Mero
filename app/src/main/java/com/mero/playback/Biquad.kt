@@ -104,6 +104,38 @@ class Biquad {
     }
 }
 
+/** Combined gain of a cascade at one frequency, in dB. */
+fun cascadeMagnitudeDb(
+    coefficients: List<BiquadCoefficients>,
+    freq: Double,
+    sampleRate: Int,
+): Double {
+    val w = 2.0 * PI * freq / sampleRate
+    val cos1 = cos(-w); val sin1 = sin(-w)
+    val cos2 = cos(-2 * w); val sin2 = sin(-2 * w)
+    var db = 0.0
+    for (c in coefficients) {
+        val numRe = c.b0 + c.b1 * cos1 + c.b2 * cos2
+        val numIm = c.b1 * sin1 + c.b2 * sin2
+        val denRe = 1.0 + c.a1 * cos1 + c.a2 * cos2
+        val denIm = c.a1 * sin1 + c.a2 * sin2
+        db += 20.0 * log10(hypot(numRe, numIm) / hypot(denRe, denIm))
+    }
+    return db
+}
+
+/** Log-spaced probe frequencies from 20 Hz to just under Nyquist. */
+private inline fun overAudibleRange(sampleRate: Int, steps: Int, body: (Double) -> Unit) {
+    val lowHz = 20.0
+    val highHz = minOf(20_000.0, sampleRate / 2.0 - 1)
+    val ratio = (highHz / lowHz).pow(1.0 / steps)
+    var freq = lowHz
+    repeat(steps + 1) {
+        body(freq)
+        freq *= ratio
+    }
+}
+
 /**
  * The loudest point of a cascade's response, in dB, or 0 if it only cuts.
  *
@@ -117,30 +149,35 @@ class Biquad {
 fun cascadePeakDb(coefficients: List<BiquadCoefficients>, sampleRate: Int): Float {
     if (coefficients.isEmpty()) return 0f
     var peak = 0.0
-    // Log-spaced across the audible range; fine enough that a one-octave band's
-    // peak cannot hide between two probes.
-    val steps = 240
-    val lowHz = 20.0
-    val highHz = minOf(20_000.0, sampleRate / 2.0 - 1)
-    val ratio = (highHz / lowHz).pow(1.0 / steps)
-    var freq = lowHz
-    repeat(steps + 1) {
-        val w = 2.0 * PI * freq / sampleRate
-        val cos1 = cos(-w); val sin1 = sin(-w)
-        val cos2 = cos(-2 * w); val sin2 = sin(-2 * w)
-        var db = 0.0
-        for (c in coefficients) {
-            val numRe = c.b0 + c.b1 * cos1 + c.b2 * cos2
-            val numIm = c.b1 * sin1 + c.b2 * sin2
-            val denRe = 1.0 + c.a1 * cos1 + c.a2 * cos2
-            val denIm = c.a1 * sin1 + c.a2 * sin2
-            val mag = hypot(numRe, numIm) / hypot(denRe, denIm)
-            db += 20.0 * log10(mag)
-        }
+    // Fine enough that a one-octave band's peak cannot hide between two probes.
+    overAudibleRange(sampleRate, steps = 240) { freq ->
+        val db = cascadeMagnitudeDb(coefficients, freq, sampleRate)
         if (db > peak) peak = db
-        freq *= ratio
     }
     return peak.toFloat()
+}
+
+/**
+ * The curve the equalizer is actually applying, sampled for drawing.
+ *
+ * The band sliders show ten numbers; what reaches the ear is the sum of ten
+ * overlapping filters, which is a different shape — two neighbours at +6 dB
+ * make more than +6 dB between them. Drawing the real response is the only way
+ * the screen stops lying about what it is doing.
+ *
+ * Returned log-spaced across the audible range, so it maps straight onto a
+ * frequency axis drawn the same way.
+ */
+fun equalizerResponseDb(bandsDb: List<Int>, sampleRate: Int, points: Int = 128): FloatArray {
+    val coefficients = EqBands.frequencies.mapIndexed { index, freq ->
+        peakingEq(freq, bandsDb.getOrElse(index) { 0 }.toFloat(), EqBands.Q, sampleRate)
+    }
+    val out = FloatArray(points + 1)
+    var i = 0
+    overAudibleRange(sampleRate, steps = points) { freq ->
+        out[i++] = cascadeMagnitudeDb(coefficients, freq, sampleRate).toFloat()
+    }
+    return out
 }
 
 /** The ten octave-spaced bands the equalizer screen draws. */

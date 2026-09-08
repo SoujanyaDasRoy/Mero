@@ -22,6 +22,9 @@ class AudioEffects {
     /** The stage installed in the player's audio pipeline. */
     val processor = EqualizerAudioProcessor()
 
+    /** Reads the post-equalizer signal, for the spectrum on the EQ screen. */
+    val spectrum = SpectrumAnalyser()
+
     var enabled: Boolean = true
         private set
     var bands: List<Int> = EqPresets.presets.getValue("Flat")

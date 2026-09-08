@@ -51,7 +51,11 @@ class MeroPlaybackService : MediaSessionService() {
             )
             .setRenderersFactory(
                 // Mero's own audio stages live in here — see MeroRenderersFactory.
-                MeroRenderersFactory(this, container.audioEffects.processor),
+                MeroRenderersFactory(
+                    this,
+                    container.audioEffects.processor,
+                    container.audioEffects.spectrum,
+                ),
             )
             .setHandleAudioBecomingNoisy(true)
             .build()

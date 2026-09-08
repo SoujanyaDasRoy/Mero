@@ -342,6 +342,10 @@ private fun MeroContent(
         else -> likedSongs
     }
     var homeError by remember { mutableStateOf<String?>(null) }
+    var hapticIntensity by remember {
+        mutableStateOf(container.settings.float("haptics", 0f))
+            .also { container.beatHaptics.setIntensity(it.value) }
+    }
     var eqEnabled by remember { mutableStateOf(true) }
     var preset by remember { mutableStateOf("Flat") }
     var bands by remember { mutableStateOf(EqPresets.presets.getValue("Flat")) }
@@ -994,7 +998,33 @@ private fun MeroContent(
                 }
 
                 composable<Equalizer> {
+                    // The analyser only runs its FFT while this screen is up.
+                    val spectrum = audioEffects.spectrum
+                    DisposableEffect(Unit) {
+                        spectrum.listening = true
+                        onDispose { spectrum.listening = false }
+                    }
+                    val levels by spectrum.bands.collectAsStateWithLifecycle()
+                    // Bass band drives the haptics; the analyser is already
+                    // producing it, so this costs nothing extra.
+                    LaunchedEffect(levels) {
+                        container.beatHaptics.onLowBandLevel(
+                            levels.getOrElse(1) { 0f },
+                            android.os.SystemClock.elapsedRealtime(),
+                        )
+                    }
+                    val responseDb = remember(bands) {
+                        com.mero.playback.equalizerResponseDb(bands, sampleRate = 48_000)
+                    }
                     EqualizerScreen(
+                        spectrumLevels = levels,
+                        responseDb = responseDb,
+                        hapticIntensity = hapticIntensity,
+                        onHapticIntensityChange = {
+                            hapticIntensity = it
+                            container.beatHaptics.setIntensity(it)
+                            container.settings.putFloat("haptics", it)
+                        },
                         enabled = eqEnabled,
                         onEnabledChange = { eqEnabled = it; audioEffects.setEnabled(it) },
                         preset = preset,

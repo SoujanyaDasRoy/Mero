@@ -26,12 +26,15 @@ robolectric = "4.14"
 # (this artifact doesn't publish GitHub Releases) 2026-09-04.
 youtubedlAndroid = "0.18.1"
 room = "2.6.1"
+# Real FFT for the equalizer spectrum. BSD-2, which GPL-3.0 may redistribute.
+jtransforms = "3.1"
 reorderable = "3.1.0"
 splashscreen = "1.2.0"
 palette = "1.0.0"
 ksp = "2.1.0-1.0.29"
 
 [libraries]
+jtransforms = { group = "com.github.wendykierp", name = "JTransforms", version.ref = "jtransforms" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentfile" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }

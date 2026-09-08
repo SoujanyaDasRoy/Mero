@@ -93,6 +93,7 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.datasource)
+    implementation(libs.jtransforms)
     implementation(libs.kotlinx.coroutines.guava)
 
     // Escape hatch: innertube's /player is currently rejected by YouTube

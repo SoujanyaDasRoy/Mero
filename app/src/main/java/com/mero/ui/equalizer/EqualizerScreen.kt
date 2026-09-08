@@ -1,5 +1,10 @@
 package com.mero.ui.equalizer
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -53,6 +58,10 @@ fun EqualizerScreen(
     onPresetChange: (String) -> Unit,
     bands: List<Int>,
     onBandChange: (Int, Int) -> Unit,
+    spectrumLevels: FloatArray,
+    responseDb: FloatArray,
+    hapticIntensity: Float,
+    onHapticIntensityChange: (Float) -> Unit,
     preamp: Float,
     onPreampChange: (Float) -> Unit,
     toggles: Map<String, Boolean>,
@@ -126,17 +135,29 @@ fun EqualizerScreen(
                     )
                     Text("−12 dB", fontSize = 11.sp, color = scheme.onSurfaceVariant)
                 }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom,
-                ) {
-                    bands.forEachIndexed { index, db ->
-                        BandSlider(
-                            db = db,
-                            hz = EqPresets.bandLabels.getOrElse(index) { "" },
-                            onChange = { onBandChange(index, it) },
-                        )
+                Box(Modifier.fillMaxWidth()) {
+                    // Behind the sliders: what is playing, and what the curve
+                    // does to it. The sliders show ten numbers; neither of
+                    // these can be read off them.
+                    SpectrumAndCurve(
+                        levels = spectrumLevels,
+                        responseDb = responseDb,
+                        modifier = Modifier
+                            .matchParentSize()
+                            .padding(horizontal = 8.dp),
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        bands.forEachIndexed { index, db ->
+                            BandSlider(
+                                db = db,
+                                hz = EqPresets.bandLabels.getOrElse(index) { "" },
+                                onChange = { onBandChange(index, it) },
+                            )
+                        }
                     }
                 }
             }
@@ -156,6 +177,12 @@ fun EqualizerScreen(
                 "A fixed lift for quiet tracks. Per-track matching is not built yet.",
                 toggles["norm"] == true,
             ) { onToggle("norm", it) }
+            LabelledSlider(
+                "Beat haptics",
+                if (hapticIntensity == 0f) "Off" else "${(hapticIntensity * 100).roundToInt()}%",
+                hapticIntensity,
+                onHapticIntensityChange,
+            )
             EqSwitch(
                 "Skip silence",
                 "Trims silent passages — ExoPlayer handles this natively",
@@ -270,5 +297,56 @@ private fun EqSwitch(
         onClick = if (enabled) ({ onChange(!checked) }) else null,
     ) {
         Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+    }
+}
+
+/**
+ * The live spectrum, with the equalizer's own response curve over it.
+ *
+ * Two things the ten sliders cannot say. The bars are what is actually coming
+ * out of the player — tapped after the equalizer, so they move when a band
+ * moves. The line is the curve those bands add up to, which is not the shape
+ * the slider handles trace: neighbouring bands overlap, so two at +6 dB make
+ * more than +6 dB between them.
+ */
+@Composable
+private fun SpectrumAndCurve(
+    levels: FloatArray,
+    responseDb: FloatArray,
+    modifier: Modifier = Modifier,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val bar = scheme.primary.copy(alpha = 0.13f)
+    val line = scheme.primary.copy(alpha = 0.85f)
+
+    Canvas(modifier) {
+        val w = size.width
+        val h = size.height
+        if (w <= 0f || h <= 0f) return@Canvas
+
+        if (levels.isNotEmpty()) {
+            val slot = w / levels.size
+            val barWidth = slot * 0.34f
+            levels.forEachIndexed { index, level ->
+                val barHeight = (h * level).coerceIn(0f, h)
+                drawRect(
+                    color = bar,
+                    topLeft = Offset(index * slot + (slot - barWidth) / 2f, h - barHeight),
+                    size = Size(barWidth, barHeight),
+                )
+            }
+        }
+
+        if (responseDb.size >= 2) {
+            // ±12 dB maps to the full height, matching the scale the sliders
+            // and the "+12 dB / −12 dB" labels already use.
+            fun y(db: Float) = h / 2f - (db / 12f).coerceIn(-1f, 1f) * (h / 2f)
+            val path = Path()
+            responseDb.forEachIndexed { index, db ->
+                val x = w * index / (responseDb.size - 1).toFloat()
+                if (index == 0) path.moveTo(x, y(db)) else path.lineTo(x, y(db))
+            }
+            drawPath(path, color = line, style = Stroke(width = 2.dp.toPx()))
+        }
     }
 }

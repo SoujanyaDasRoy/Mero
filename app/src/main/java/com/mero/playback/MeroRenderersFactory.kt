@@ -17,6 +17,7 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 class MeroRenderersFactory(
     context: Context,
     private val equalizer: EqualizerAudioProcessor,
+    private val spectrum: SpectrumAnalyser,
 ) : DefaultRenderersFactory(context) {
 
     override fun buildAudioSink(
@@ -25,7 +26,10 @@ class MeroRenderersFactory(
         enableAudioTrackPlaybackParams: Boolean,
     ): AudioSink =
         DefaultAudioSink.Builder(context)
-            .setAudioProcessors(arrayOf<AudioProcessor>(equalizer))
+            // Order matters: the spectrum taps the signal after the
+            // equalizer, so the bars show what is actually being heard rather
+            // than what the decoder produced.
+            .setAudioProcessors(arrayOf<AudioProcessor>(equalizer, spectrum.asProcessor()))
             // Float output is deliberately off. The equalizer works in 16-bit
             // PCM, and asking the sink for float would only add a conversion
             // either side of it — the arithmetic in between is double

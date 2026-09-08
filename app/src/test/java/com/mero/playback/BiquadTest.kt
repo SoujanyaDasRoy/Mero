@@ -123,4 +123,41 @@ class BiquadTest {
             }
         }
     }
+
+    @Test
+    fun `the drawn response is flat when every band is zero`() {
+        val curve = equalizerResponseDb(List(EqBands.count) { 0 }, sampleRate)
+        for (db in curve) assertEquals(0.0, db.toDouble(), 1e-6)
+    }
+
+    @Test
+    fun `the drawn response rises where a band is boosted`() {
+        val bands = MutableList(EqBands.count) { 0 }.also { it[5] = 8 } // 1 kHz
+        val curve = equalizerResponseDb(bands, sampleRate, points = 256)
+        // Curve is log-spaced 20 Hz..~20 kHz, so 1 kHz sits near the middle.
+        val peak = curve.max()
+        assertEquals(8.0, peak.toDouble(), 0.2)
+        // and the ends are untouched
+        assertEquals(0.0, curve.first().toDouble(), 0.6)
+        assertEquals(0.0, curve.last().toDouble(), 0.6)
+    }
+
+    @Test
+    fun `overlapping boosts sum to more than either alone`() {
+        val single = equalizerResponseDb(
+            MutableList(EqBands.count) { 0 }.also { it[5] = 6 },
+            sampleRate,
+            points = 256,
+        ).max()
+        val neighbours = equalizerResponseDb(
+            MutableList(EqBands.count) { 0 }.also { it[5] = 6; it[6] = 6 },
+            sampleRate,
+            points = 256,
+        ).max()
+        // This is exactly why headroom cannot come from the largest band.
+        assertTrue(
+            "two neighbours at +6 dB peaked at $neighbours, one alone at $single",
+            neighbours > single + 1f,
+        )
+    }
 }
