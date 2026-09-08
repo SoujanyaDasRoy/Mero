@@ -134,15 +134,22 @@ fun MeroApp() {
     ) {
         var splashDone by remember { mutableStateOf(false) }
 
+        // The background is painted edge to edge and the inset padding applied
+        // to the content inside it — not to the Surface itself.
+        //
+        // Padding the Surface left it not painting behind the status bar, so
+        // what showed there was `android:windowBackground`, a hardcoded #141218
+        // that knows nothing about the theme. In light mode that was a black
+        // band across the top of a cream app, and the dark status icons sitting
+        // on it were invisible.
         Surface(
-            Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.systemBars),
+            Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
         ) {
+            Box(Modifier.windowInsetsPadding(WindowInsets.systemBars)) {
             if (!splashDone) {
                 MeroSplash(onFinished = { splashDone = true })
-                return@Surface
+                return@Box
             }
             MeroContent(
                 accent = accent,
@@ -160,6 +167,7 @@ fun MeroApp() {
                     }
                 },
             )
+            }
         }
     }
 }

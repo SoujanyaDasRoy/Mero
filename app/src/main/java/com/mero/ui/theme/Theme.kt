@@ -9,6 +9,10 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import android.app.Activity
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -256,6 +260,23 @@ fun MeroTheme(
     }
 
     val scheme = if (amoled && darkMode) base.amoled() else base
+
+    // The status and navigation bar icons follow *this* theme, not the
+    // system's. enableEdgeToEdge() decides their colour from the device's dark
+    // mode setting, which is the wrong source once the app has its own Light
+    // mode and Pure black switches: set Mero to dark on a light phone and the
+    // clock and notification icons were drawn dark on a dark background, i.e.
+    // invisible. The reverse happened in light mode on a dark phone.
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        val window = (view.context as Activity).window
+        SideEffect {
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !darkMode
+                isAppearanceLightNavigationBars = !darkMode
+            }
+        }
+    }
 
     CompositionLocalProvider(
         LocalMeroExtras provides MeroExtras(playerTint = playerTintFor(accent)),

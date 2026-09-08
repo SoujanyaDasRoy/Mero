@@ -1,5 +1,7 @@
 package com.mero.playback
 
+import android.app.PendingIntent
+import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
@@ -10,6 +12,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.mero.MainActivity
 import com.mero.MeroApplication
 
 /**
@@ -65,7 +68,24 @@ class MeroPlaybackService : MediaSessionService() {
             }
         })
 
-        mediaSession = MediaSession.Builder(this, SkipIgnoresRepeatOne(player)).build()
+        mediaSession = MediaSession.Builder(this, SkipIgnoresRepeatOne(player))
+            // Without this the notification is not tappable: Media3 only makes
+            // it open something if the session says what to open. Tapping it
+            // did nothing at all.
+            //
+            // FLAG_ACTIVITY_SINGLE_TOP so it returns to the running instance
+            // rather than stacking a second one, which would build a fresh
+            // MediaController and leave the player mid-track behind it.
+            .setSessionActivity(
+                PendingIntent.getActivity(
+                    this,
+                    0,
+                    Intent(this, MainActivity::class.java)
+                        .setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+                ),
+            )
+            .build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession
