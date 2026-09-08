@@ -70,7 +70,6 @@ import com.mero.domain.SearchResultType
 import com.mero.domain.Song
 import com.mero.playback.MediaCache
 import com.mero.playback.PlayerConnection
-import com.mero.playback.SpatialMode
 import com.mero.playback.mediaItemFor
 import com.mero.ui.equalizer.EqualizerScreen
 import com.mero.ui.artist.ArtistScreen
@@ -287,6 +286,8 @@ private fun MeroContent(
     var query by remember { mutableStateOf("") }
     var searchTab by remember { mutableStateOf("Songs") }
     var libraryTab by remember { mutableStateOf("Liked") }
+    /** Set when a full screen was opened from the expanded player. */
+    var cameFromPlayer by remember { mutableStateOf(false) }
     var homeSections by remember { mutableStateOf(emptyList<HomeSection>()) }
     // Every seed gets a tile straight away; the artwork arrives as the matching
     // home shelf loads. Driving the grid off loaded shelves alone left it
@@ -345,10 +346,16 @@ private fun MeroContent(
     var preset by remember { mutableStateOf("Flat") }
     var bands by remember { mutableStateOf(EqPresets.presets.getValue("Flat")) }
     var preamp by remember { mutableStateOf(audioEffects.preamp) }
-    var booster by remember { mutableStateOf(audioEffects.booster) }
-    var reverb by remember { mutableStateOf(audioEffects.reverbIntensity) }
-    var spatialMode by remember { mutableStateOf(audioEffects.spatialMode) }
     var radioRequests by remember { mutableStateOf(emptySet<String>()) }
+
+    /** Leaves a screen the player sent us to, putting the player back as it was. */
+    fun leaveEqualizer() {
+        navController.popBackStack()
+        if (cameFromPlayer) {
+            cameFromPlayer = false
+            expanded = true
+        }
+    }
 
     fun refillInfinitePlayback() {
         val controller = connection.controller ?: return
@@ -1004,31 +1011,21 @@ private fun MeroContent(
                         },
                         preamp = preamp,
                         onPreampChange = { preamp = it; audioEffects.setPreamp(it) },
-                        booster = booster,
-                        onBoosterChange = { booster = it; audioEffects.setBooster(it) },
-                        reverb = reverb,
-                        onReverbChange = { reverb = it; audioEffects.setReverb(it) },
                         toggles = toggles,
                         onToggle = { key, value ->
                             onToggle(key, value)
                             when (key) {
                                 "norm" -> audioEffects.setNormalization(value)
-                                "spatial" -> {
-                                    spatialMode = if (value) SpatialMode.Wide else SpatialMode.Off
-                                    audioEffects.setSpatial(value)
-                                }
                             }
                         },
-                        spatialMode = spatialMode,
-                        onSpatialModeChange = {
-                            spatialMode = it
-                            audioEffects.setSpatialMode(it)
-                            onToggle("spatial", it != SpatialMode.Off)
-                        },
-                        spatialSupported = audioEffects.spatialSupported,
-                        onBack = { navController.popBackStack() },
+                        onBack = { leaveEqualizer() },
                         contentPadding = contentPadding,
                     )
+                    // The system back gesture never reaches the screen's own
+                    // back arrow, and without this it popped to whatever browse
+                    // screen was underneath — so opening the equalizer from a
+                    // playing track and pressing back landed on Home.
+                    BackHandler(enabled = cameFromPlayer) { leaveEqualizer() }
                 }
 
                 composable<PlaylistRoute> { entry ->
@@ -1169,7 +1166,13 @@ private fun MeroContent(
                         onAccentChange = onAccentChange,
                         toggles = toggles,
                         onToggle = onToggle,
-                        onEqualizerClick = { navController.navigate(Equalizer) },
+                        onEqualizerClick = {
+                            // Reached from Settings, so back belongs to Settings.
+                            // Clearing the flag matters because leaving the
+                            // equalizer any other way than back leaves it set.
+                            cameFromPlayer = false
+                            navController.navigate(Equalizer)
+                        },
                         onImportClick = { navController.navigate(ImportRoute) },
                         onSleepTimerClick = { overlay = "sleep" },
                         sleepSummary = when {
@@ -1314,6 +1317,10 @@ private fun MeroContent(
                             onQueue = { overlay = "queue" },
                             onLyrics = { overlay = "lyrics" },
                             onEqualizer = {
+                                // The player has to collapse — it is an overlay
+                                // above the NavHost and would cover the screen
+                                // being opened — so remember to bring it back.
+                                cameFromPlayer = true
                                 expanded = false
                                 navController.navigate(Equalizer)
                             },

@@ -1,9 +1,7 @@
 package com.mero.playback
 
 import android.media.audiofx.DynamicsProcessing
-import android.media.audiofx.EnvironmentalReverb
 import android.media.audiofx.LoudnessEnhancer
-import android.media.audiofx.Virtualizer
 import android.util.Log
 import com.mero.data.EqPresets
 import kotlin.math.max
@@ -12,12 +10,6 @@ import kotlin.math.roundToInt
 private const val BANDS = 10
 private const val CHANNELS = 2
 private const val TAG = "MeroAudioFx"
-
-enum class SpatialMode(val label: String) {
-    Off("Off"),
-    Wide("Stereo Wide"),
-    Immersive("Immersive Room"),
-}
 
 /**
  * The real DSP behind the equalizer screen.
@@ -34,8 +26,6 @@ class AudioEffects {
     private var sessionId: Int? = null
     private var processing: DynamicsProcessing? = null
     private var loudness: LoudnessEnhancer? = null
-    private var virtualizer: Virtualizer? = null
-    private var reverb: EnvironmentalReverb? = null
 
     var enabled: Boolean = true
         private set
@@ -44,20 +34,7 @@ class AudioEffects {
     /** 0f..1f from the UI slider, mapped to −12..+12 dB. */
     var preamp: Float = 0.5f
         private set
-    /** 0f..1f from the UI slider, mapped to 0..12 dB of safe output lift. */
-    var booster: Float = 0f
-        private set
-    /** 0f..1f room ambience intensity. */
-    var reverbIntensity: Float = 0f
-        private set
     var normalization: Boolean = false
-        private set
-    var spatialMode: SpatialMode = SpatialMode.Off
-        private set
-    val spatial: Boolean get() = spatialMode != SpatialMode.Off
-
-    /** True when the device can actually widen the stereo image. */
-    var spatialSupported: Boolean = false
         private set
 
     /**
@@ -70,17 +47,9 @@ class AudioEffects {
      * strictly worse than not running it at all.
      */
     private val isTransparent: Boolean
-        get() = !enabled || (
-            bands.all { it == 0 } &&
-                preampDb() == 0f &&
-                boosterDb() == 0f &&
-                reverbIntensity == 0f &&
-                !normalization &&
-                spatialMode == SpatialMode.Off
-            )
+        get() = !enabled || (bands.all { it == 0 } && preampDb() == 0f && !normalization)
 
     private fun preampDb(): Float = (preamp * 24f) - 12f
-    private fun boosterDb(): Float = booster * 12f
 
     /**
      * Called by the playback service once ExoPlayer has an audio session.
@@ -93,10 +62,11 @@ class AudioEffects {
      * — an occupied effect chain pushes the track off the deep-buffer output
      * onto a smaller-buffer path, which is where the glitching came from — and
      * `4 effects moved, 0 effects started`, four effects on the session doing
-     * nothing. EnvironmentalReverb never even survived creation:
-     * `registerEffect() memory limit exceeded for Fx Insert Environmental
-     * Reverb, Memory 91 KB`, status -38. On the Flat preset, which is where
-     * most listening happens, the chain is now empty.
+     * nothing. The reverb never even survived creation — `registerEffect()
+     * memory limit exceeded for Fx Insert Environmental Reverb, Memory 91 KB`,
+     * status -38 — and has since been removed along with the spatial and
+     * booster controls that could never be made to work. On the Flat preset,
+     * which is where most listening happens, the chain is now empty.
      */
     fun attach(audioSessionId: Int) {
         if (audioSessionId == 0 || audioSessionId == sessionId) return
@@ -113,12 +83,8 @@ class AudioEffects {
     private fun releaseEffects() {
         runCatching { processing?.release() }
         runCatching { loudness?.release() }
-        runCatching { virtualizer?.release() }
-        runCatching { reverb?.release() }
         processing = null
         loudness = null
-        virtualizer = null
-        reverb = null
     }
 
     /** Creates [effect] on the session the first time it is genuinely needed. */
@@ -132,8 +98,6 @@ class AudioEffects {
             when (effect) {
                 is DynamicsProcessing -> effect.release()
                 is LoudnessEnhancer -> effect.release()
-                is Virtualizer -> effect.release()
-                is EnvironmentalReverb -> effect.release()
             }
         }.onFailure { Log.w(TAG, "failed to release $what") }
     }
@@ -145,14 +109,7 @@ class AudioEffects {
         apply()
     }
     fun setPreamp(value: Float) { preamp = value; apply() }
-    fun setBooster(value: Float) { booster = value.coerceIn(0f, 1f); apply() }
-    fun setReverb(value: Float) { reverbIntensity = value.coerceIn(0f, 1f); apply() }
     fun setNormalization(value: Boolean) { normalization = value; apply() }
-    fun setSpatial(value: Boolean) {
-        spatialMode = if (value) SpatialMode.Wide else SpatialMode.Off
-        apply()
-    }
-    fun setSpatialMode(value: SpatialMode) { spatialMode = value; apply() }
 
     private fun buildConfig(): DynamicsProcessing.Config =
         DynamicsProcessing.Config.Builder(
@@ -191,12 +148,8 @@ class AudioEffects {
             return
         }
 
-        val wantsEq = enabled &&
-            (bands.any { it != 0 } || preampDb() != 0f || boosterDb() != 0f)
-        val wantsLoudness = enabled && (boosterDb() > 0f || normalization)
-        val wantsSpatial = enabled && spatialMode != SpatialMode.Off
-        val wantsReverb = enabled &&
-            (reverbIntensity > 0f || spatialMode == SpatialMode.Immersive)
+        val wantsEq = enabled && (bands.any { it != 0 } || preampDb() != 0f)
+        val wantsLoudness = enabled && normalization
 
         if (wantsEq) {
             processing = ensure(processing, { DynamicsProcessing(0, session, buildConfig()) }, "equalizer")
@@ -207,19 +160,6 @@ class AudioEffects {
             loudness = ensure(loudness, { LoudnessEnhancer(session) }, "loudness enhancer")
         } else {
             releaseOne("loudness enhancer", loudness); loudness = null
-        }
-        if (wantsSpatial) {
-            virtualizer = ensure(virtualizer, { Virtualizer(0, session) }, "spatial audio")
-                ?.also { spatialSupported = it.strengthSupported }
-        } else {
-            releaseOne("spatial audio", virtualizer); virtualizer = null
-        }
-        if (wantsReverb) {
-            // Least likely to fit the session's effect memory budget, so it is
-            // created last and its absence is not fatal to the rest.
-            reverb = ensure(reverb, { EnvironmentalReverb(0, session) }, "reverb")
-        } else {
-            releaseOne("reverb", reverb); reverb = null
         }
 
         applySettings()
@@ -242,10 +182,7 @@ class AudioEffects {
             }
 
             val preampDb = if (enabled) preampDb() else 0f
-            val outputLiftDb = if (enabled) boosterDb() else 0f
-            // Reserve headroom for the post-EQ booster so loudness gains do not
-            // turn an already boosted band into hard digital clipping.
-            dp.setInputGainAllChannelsTo(preampDb - maxBoost - outputLiftDb)
+            dp.setInputGainAllChannelsTo(preampDb - maxBoost)
 
             dp.setLimiterAllChannelsTo(
                 DynamicsProcessing.Limiter(
@@ -268,41 +205,12 @@ class AudioEffects {
 
         runCatching {
             loudness?.let {
-                val gainMb = if (enabled) {
-                    (boosterDb() * 1000f).roundToInt() + if (normalization) 150 else 0
-                } else {
-                    0
-                }
+                val gainMb = if (enabled && normalization) 150 else 0
                 it.enabled = enabled && gainMb > 0
                 if (it.enabled) it.setTargetGain(gainMb)
             }
         }.onFailure { Log.e(TAG, "failed to apply loudness enhancer", it) }
 
-        runCatching {
-            virtualizer?.let {
-                it.enabled = enabled && spatial && spatialSupported
-                if (it.enabled) {
-                    it.setStrength(if (spatialMode == SpatialMode.Immersive) 900 else 650)
-                }
-            }
-        }.onFailure { Log.e(TAG, "failed to apply spatial audio", it) }
 
-        runCatching {
-            reverb?.let { effect ->
-                val modeRoom = if (spatialMode == SpatialMode.Immersive) 0.25f else 0f
-                val amount = if (enabled) max(reverbIntensity, modeRoom) else 0f
-                effect.enabled = amount > 0f
-                if (amount > 0f) {
-                    effect.roomLevel = (-1000f + amount * 850f).toInt().toShort()
-                    effect.roomHFLevel = (-1800f + amount * 1200f).toInt().toShort()
-                    effect.decayTime = (350f + amount * 900f).toInt()
-                    effect.decayHFRatio = (450f + amount * 250f).toInt().toShort()
-                    effect.reflectionsLevel = (-1800f + amount * 1300f).toInt().toShort()
-                    effect.reverbLevel = (-2200f + amount * 1500f).toInt().toShort()
-                    effect.diffusion = (700f + amount * 250f).toInt().toShort()
-                    effect.density = (650f + amount * 300f).toInt().toShort()
-                }
-            }
-        }.onFailure { Log.e(TAG, "failed to apply reverb", it) }
     }
 }

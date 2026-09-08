@@ -49,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -83,6 +84,7 @@ fun SearchScreen(
 ) {
     val scheme = MaterialTheme.colorScheme
     val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
 
     Column(modifier.fillMaxSize()) {
         Box(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)) {
@@ -190,7 +192,18 @@ fun SearchScreen(
                         song = rowSong,
                         subtitle = result.subtitle,
                         highlighted = result.song?.id == nowPlayingId,
-                        onClick = { onResultClick(result) },
+                        onClick = {
+                            // Picking a result is the end of typing. Without
+                            // this the track started but the keyboard stayed
+                            // up, covering half the screen and needing a back
+                            // press of its own to dismiss.
+                            // Both: clearing focus alone leaves the IME up on
+                            // some keyboards, and hiding alone leaves the field
+                            // focused so the next tap re-opens it.
+                            keyboard?.hide()
+                            focusManager.clearFocus()
+                            onResultClick(result)
+                        },
                         onMore = result.song?.let { { onSongMore(it) } },
                     )
                 }
