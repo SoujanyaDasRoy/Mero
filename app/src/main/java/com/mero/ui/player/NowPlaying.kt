@@ -82,7 +82,6 @@ enum class PlayerVariant(val label: String) {
 data class PlayerUi(
     val song: Song,
     val source: String,
-    val positionSec: Int,
     val playing: Boolean,
     val liked: Boolean,
     val shuffle: Boolean,
@@ -102,6 +101,16 @@ data class PlayerUi(
     val effectiveDurationSec: Int
         get() = if (durationSec > 0) durationSec else song.durationSec
 }
+
+/**
+ * The play position, read late.
+ *
+ * Deliberately a lambda rather than an `Int` on [PlayerUi]: it changes twice a
+ * second, and as a field it gave the whole data class a new identity on every
+ * tick, so all three player layouts recomposed at 2Hz to move one bar. Passed
+ * this way, the only composable that reads it is [SeekBar].
+ */
+typealias PositionSec = () -> Int
 
 data class PlayerActions(
     val onCollapse: () -> Unit,
@@ -123,18 +132,24 @@ data class PlayerActions(
 fun NowPlayingScreen(
     variant: PlayerVariant,
     ui: PlayerUi,
+    position: PositionSec,
     actions: PlayerActions,
     modifier: Modifier = Modifier,
 ) = when (variant) {
-    PlayerVariant.Standard -> StandardPlayer(ui, actions, modifier)
-    PlayerVariant.FullBleed -> FullBleedPlayer(ui, actions, modifier)
-    PlayerVariant.QueueForward -> QueueForwardPlayer(ui, actions, modifier)
+    PlayerVariant.Standard -> StandardPlayer(ui, position, actions, modifier)
+    PlayerVariant.FullBleed -> FullBleedPlayer(ui, position, actions, modifier)
+    PlayerVariant.QueueForward -> QueueForwardPlayer(ui, position, actions, modifier)
 }
 
 /* ------------------------------- A · Standard ------------------------------ */
 
 @Composable
-private fun StandardPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modifier) {
+private fun StandardPlayer(
+    ui: PlayerUi,
+    position: PositionSec,
+    actions: PlayerActions,
+    modifier: Modifier,
+) {
     val scheme = MaterialTheme.colorScheme
     val fallbackTint = LocalMeroExtras.current.playerTint
 
@@ -198,7 +213,7 @@ private fun StandardPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modif
                 artistSize = 16,
             )
             Spacer(Modifier.height(18.dp))
-            SeekBar(ui, actions.onSeek, thumb = 16)
+            SeekBar(ui, position, actions.onSeek, thumb = 16)
         }
 
         // Transport sits low.
@@ -264,7 +279,12 @@ private fun StandardPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modif
 /* ------------------------------ B · Full-bleed ----------------------------- */
 
 @Composable
-private fun FullBleedPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modifier) {
+private fun FullBleedPlayer(
+    ui: PlayerUi,
+    position: PositionSec,
+    actions: PlayerActions,
+    modifier: Modifier,
+) {
     val scheme = MaterialTheme.colorScheme
 
     Column(
@@ -328,7 +348,7 @@ private fun FullBleedPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modi
             )
 
             Spacer(Modifier.height(24.dp))
-            SeekBar(ui, actions.onSeek, thumb = 16)
+            SeekBar(ui, position, actions.onSeek, thumb = 16)
 
             Spacer(Modifier.weight(1f))
             Row(
@@ -367,7 +387,12 @@ private fun FullBleedPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modi
 /* ---------------------------- C · Queue-forward ---------------------------- */
 
 @Composable
-private fun QueueForwardPlayer(ui: PlayerUi, actions: PlayerActions, modifier: Modifier) {
+private fun QueueForwardPlayer(
+    ui: PlayerUi,
+    position: PositionSec,
+    actions: PlayerActions,
+    modifier: Modifier,
+) {
     val scheme = MaterialTheme.colorScheme
 
     Column(
@@ -412,7 +437,7 @@ private fun QueueForwardPlayer(ui: PlayerUi, actions: PlayerActions, modifier: M
         }
 
         Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 12.dp)) {
-            SeekBar(ui, actions.onSeek, thumb = 12, timeSize = 11)
+            SeekBar(ui, position, actions.onSeek, thumb = 12, timeSize = 11)
         }
 
         // Like and Lyrics ride in the transport row here; shuffle and repeat move
@@ -621,16 +646,18 @@ private fun TitleBlock(
 @Composable
 private fun SeekBar(
     ui: PlayerUi,
+    position: PositionSec,
     onSeek: (Float) -> Unit,
     thumb: Int,
     timeSize: Int = 12,
 ) {
     val scheme = MaterialTheme.colorScheme
     val duration = ui.effectiveDurationSec
+    val positionSec = position()
     val pct = if (duration == 0) {
         0f
     } else {
-        (ui.positionSec.toFloat() / duration).coerceIn(0f, 1f)
+        (positionSec.toFloat() / duration).coerceIn(0f, 1f)
     }
     Column {
         Box(
@@ -683,7 +710,7 @@ private fun SeekBar(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                ui.positionSec.asClock(),
+                positionSec.asClock(),
                 fontSize = timeSize.sp,
                 color = scheme.onSurfaceVariant,
             )

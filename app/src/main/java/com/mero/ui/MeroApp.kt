@@ -81,6 +81,7 @@ import com.mero.ui.player.NowPlayingScreen
 import com.mero.ui.player.PlayerActions
 import com.mero.ui.player.PlayerUi
 import com.mero.ui.player.PlayerVariant
+import com.mero.ui.player.PositionSec
 import com.mero.ui.player.QueueSheet
 import com.mero.ui.player.SleepTimerSheet
 import com.mero.ui.components.SongMenuSheet
@@ -244,8 +245,13 @@ private fun MeroContent(
     var current by remember { mutableStateOf<Song?>(null) }
     var playing by remember { mutableStateOf(false) }
     var buffering by remember { mutableStateOf(false) }
-    var playerDurationSec by remember { mutableIntStateOf(0) }
-    var positionSec by remember { mutableIntStateOf(0) }
+    // Held as state objects rather than `by` delegates on purpose. The ticker
+    // writes these twice a second; if MeroApp *read* them while composing, its
+    // scope — which is the whole app — would be invalidated at 2Hz. Everything
+    // downstream takes `() -> Int`, so the read happens in the seek bar.
+    val playerDuration = remember { mutableIntStateOf(0) }
+    val position = remember { mutableIntStateOf(0) }
+    val positionOf: PositionSec = remember { { position.intValue } }
     var expanded by remember { mutableStateOf(false) }
     var overlay by remember { mutableStateOf<String?>(null) }
     var liked by remember { mutableStateOf(false) }
@@ -379,8 +385,8 @@ private fun MeroContent(
                     thumbnailUrl = meta.artworkUri?.toString(),
                 )
                 current = songsById[id] ?: songFromMeta
-                positionSec = 0
-                playerDurationSec = 0
+                position.intValue = 0
+                playerDuration.intValue = 0
                 refillInfinitePlayback()
             }
 
@@ -484,11 +490,11 @@ private fun MeroContent(
     LaunchedEffect(playing, current, connection.controller) {
         while (playing && current != null) {
             val c = connection.controller
-            positionSec = ((c?.currentPosition ?: 0L) / 1000).toInt()
+            position.intValue = ((c?.currentPosition ?: 0L) / 1000).toInt()
             // C.TIME_UNSET shows up as a negative duration until the stream is
             // actually loaded, hence the guard.
             val reported = c?.duration ?: 0L
-            if (reported > 0) playerDurationSec = (reported / 1000).toInt()
+            if (reported > 0) playerDuration.intValue = (reported / 1000).toInt()
             delay(500)
         }
     }
@@ -527,8 +533,8 @@ private fun MeroContent(
         val list = if (context.any { it.id == song.id }) context else listOf(song) + context
         songsById = songsById + list.associateBy { it.id }
         current = song
-        positionSec = 0
-        playerDurationSec = 0
+        position.intValue = 0
+        playerDuration.intValue = 0
         playing = true
         buffering = true
         markInteraction()
@@ -670,9 +676,9 @@ private fun MeroContent(
                             song = song,
                             playing = playing,
                             buffering = buffering,
-                            progress = run {
-                                val d = effectiveDuration(playerDurationSec, song)
-                                if (d == 0) 0f else (positionSec.toFloat() / d).coerceIn(0f, 1f)
+                            progress = {
+                                val d = effectiveDuration(playerDuration.intValue, song)
+                                if (d == 0) 0f else (position.intValue.toFloat() / d).coerceIn(0f, 1f)
                             },
                             onExpand = { expanded = true },
                             onPlayPause = { togglePlayback() },
@@ -682,7 +688,7 @@ private fun MeroContent(
                                     if (it.currentPosition < 3_000 && it.hasPreviousMediaItem()) {
                                         it.seekToPreviousMediaItem()
                                     } else {
-                                        positionSec = 0
+                                        position.intValue = 0
                                         it.seekTo(0)
                                     }
                                 }
@@ -1177,7 +1183,6 @@ private fun MeroContent(
                         ui = PlayerUi(
                             song = song,
                             source = playSource,
-                            positionSec = positionSec,
                             playing = playing,
                             liked = liked,
                             shuffle = shuffle,
@@ -1185,8 +1190,9 @@ private fun MeroContent(
                             upNext = queue,
                             qualityLabel = resolved?.label,
                             buffering = buffering,
-                            durationSec = playerDurationSec,
+                            durationSec = playerDuration.intValue,
                         ),
+                        position = positionOf,
                         actions = PlayerActions(
                             onCollapse = { expanded = false },
                             onPlayPause = { togglePlayback() },
@@ -1198,7 +1204,7 @@ private fun MeroContent(
                                     if (it.currentPosition < 3_000 && it.hasPreviousMediaItem()) {
                                         it.seekToPreviousMediaItem()
                                     } else {
-                                        positionSec = 0
+                                        position.intValue = 0
                                         it.seekTo(0)
                                     }
                                 }
@@ -1212,8 +1218,9 @@ private fun MeroContent(
                                 // search metadata is approximate — every seek
                                 // landed somewhere other than where it was
                                 // dropped.
-                                val newPosSec = (it * effectiveDuration(playerDurationSec, song)).toInt()
-                                positionSec = newPosSec
+                                val newPosSec =
+                                    (it * effectiveDuration(playerDuration.intValue, song)).toInt()
+                                position.intValue = newPosSec
                                 connection.controller?.seekTo(newPosSec * 1000L)
                             },
                             onLike = {
@@ -1365,7 +1372,7 @@ private fun MeroContent(
             when (overlay) {
                 "queue" -> QueueSheet(
                     current = song,
-                    positionSec = positionSec,
+                    position = positionOf,
                     queue = queue,
                     onClose = { overlay = null },
                     // Queue edits go to the player's timeline; the DB copy
@@ -1416,13 +1423,13 @@ private fun MeroContent(
 
                 "lyrics" -> LyricsSheet(
                     song = song,
-                    positionSec = positionSec,
+                    position = positionOf,
                     lines = lyrics.lines,
                     synced = lyrics.synced,
                     loading = lyricsLoading,
                     onClose = { overlay = null },
                     onSeek = { sec ->
-                        positionSec = sec
+                        position.intValue = sec
                         connection.controller?.seekTo(sec * 1000L)
                     },
                 )

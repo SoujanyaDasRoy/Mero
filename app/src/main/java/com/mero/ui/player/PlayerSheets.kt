@@ -63,7 +63,9 @@ fun MiniPlayer(
     song: Song,
     playing: Boolean,
     buffering: Boolean = false,
-    progress: Float,
+    // Read late: it ticks at 2Hz, and as a plain Float it recomposed every
+    // caller above the mini-player along with it.
+    progress: () -> Float,
     onExpand: () -> Unit,
     onPlayPause: () -> Unit,
     onPrevious: () -> Unit,
@@ -133,7 +135,7 @@ fun MiniPlayer(
             }
         }
         LinearProgressIndicator(
-            progress = { progress },
+            progress = progress,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = 12.dp)
@@ -148,7 +150,7 @@ fun MiniPlayer(
 @Composable
 fun QueueSheet(
     current: Song,
-    positionSec: Int,
+    position: PositionSec,
     queue: List<Song>,
     onClose: () -> Unit,
     onClear: () -> Unit,
@@ -232,7 +234,7 @@ fun QueueSheet(
                         maxLines = 1,
                     )
                 }
-                Text(positionSec.asClock(), fontSize = 12.sp, color = scheme.onSurfaceVariant)
+                Text(position().asClock(), fontSize = 12.sp, color = scheme.onSurfaceVariant)
             }
         }
 
@@ -327,7 +329,7 @@ fun QueueSheet(
 @Composable
 fun LyricsSheet(
     song: Song,
-    positionSec: Int,
+    position: PositionSec,
     lines: List<LyricLine>,
     synced: Boolean,
     loading: Boolean,
@@ -337,7 +339,7 @@ fun LyricsSheet(
 ) {
     val scheme = MaterialTheme.colorScheme
     val activeIndex = if (synced) {
-        lines.indexOfLast { it.atSec <= positionSec }.coerceAtLeast(0)
+        lines.indexOfLast { it.atSec <= position() }.coerceAtLeast(0)
     } else {
         -1
     }
