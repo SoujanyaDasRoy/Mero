@@ -54,7 +54,7 @@ class HomeRepository {
     )
 
     /** Fetches one shelf per seed, in parallel. Seeds that return nothing are dropped. */
-    suspend fun sectionsFor(seedBatch: List<String>): Result<List<HomeSection>> = runCatching {
+    suspend fun sectionsFor(seedBatch: List<String>): Result<List<HomeSection>> = runCatchingCancellable {
         coroutineScope {
             seedBatch
                 .map { seed ->

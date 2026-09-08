@@ -46,7 +46,7 @@ class SearchRepository(
 
     suspend fun search(query: String): Result<List<Song>> {
         if (query.isBlank()) return Result.success(emptyList())
-        return runCatching { api.searchSongs(query.trim()) }
+        return runCatchingCancellable { api.searchSongs(query.trim()) }
     }
 
     suspend fun searchItemsPage(
@@ -55,9 +55,9 @@ class SearchRepository(
         continuation: String? = null,
     ): Result<SearchResultPage> {
         if (query.isBlank()) return Result.success(SearchResultPage(emptyList(), null))
-        return runCatching {
+        return runCatchingCancellable {
             if (type == SearchResultType.Playlist && continuation.isNullOrBlank()) {
-                return@runCatching firstPlaylistPage(query.trim())
+                return@runCatchingCancellable firstPlaylistPage(query.trim())
             }
             val page = if (continuation.isNullOrBlank()) {
                 YouTube.search(query.trim(), type.filter()).getOrThrow()
@@ -85,10 +85,10 @@ class SearchRepository(
      * keeps going.
      */
     private suspend fun firstPlaylistPage(query: String): SearchResultPage {
-        val featured = runCatching {
+        val featured = runCatchingCancellable {
             YouTube.search(query, YouTube.SearchFilter.FILTER_FEATURED_PLAYLIST).getOrThrow()
         }.getOrNull()
-        val community = runCatching {
+        val community = runCatchingCancellable {
             YouTube.search(query, YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST).getOrThrow()
         }.getOrNull()
 
@@ -111,7 +111,7 @@ class SearchRepository(
      */
     suspend fun suggest(query: String): Result<Suggestions> {
         if (query.isBlank()) return Result.success(Suggestions(emptyList(), emptyList()))
-        return runCatching { suggestApi.suggest(query.trim()) }
+        return runCatchingCancellable { suggestApi.suggest(query.trim()) }
     }
 }
 

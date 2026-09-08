@@ -43,7 +43,7 @@ class ImportRepository(private val searchRepository: SearchRepository) {
 
     // ---------------------------------------------------------------- YouTube
 
-    suspend fun importYouTube(url: String): Result<ImportResult> = runCatching {
+    suspend fun importYouTube(url: String): Result<ImportResult> = runCatchingCancellable {
         val id = youTubePlaylistId(url) ?: error("That does not look like a YouTube playlist link.")
         var page = YouTube.playlist(id).getOrThrow()
         val songs = LinkedHashMap<String, Song>()
@@ -103,7 +103,7 @@ class ImportRepository(private val searchRepository: SearchRepository) {
         clientId: String,
         clientSecret: String,
         onProgress: (Int, Int) -> Unit = { _, _ -> },
-    ): Result<ImportResult> = runCatching {
+    ): Result<ImportResult> = runCatchingCancellable {
         val id = spotifyPlaylistId(url) ?: error("That does not look like a Spotify playlist link.")
         require(clientId.isNotBlank() && clientSecret.isNotBlank()) {
             "Add your Spotify client id and secret in Settings first."

@@ -2,6 +2,7 @@ package com.mero.ui.artist
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -9,10 +10,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -109,12 +114,7 @@ fun ArtistScreen(
                                 )
                                 Text("Playlist", fontSize = 13.sp, color = scheme.onSurfaceVariant)
                             }
-                            Text(
-                                "Play",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = scheme.primary,
-                            )
+                            PlayAffordance()
                         }
                     }
                 }
@@ -136,7 +136,7 @@ fun ArtistScreen(
                                 Text(album.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
                                 Text(album.year?.toString() ?: "Album", fontSize = 13.sp, color = scheme.onSurfaceVariant)
                             }
-                            Text("Play", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = scheme.primary)
+                            PlayAffordance()
                         }
                     }
                 }
@@ -146,5 +146,33 @@ fun ArtistScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * The end-of-row play mark on albums and playlists.
+ *
+ * It used to be the word "Play" in accent colour, which read as a button but
+ * was not one — the whole row is the tap target, so the word both said
+ * something the row already implied and invited a press that was not
+ * separately handled. A glyph states the same thing without claiming to be a
+ * control of its own, and it survives translation and long titles.
+ */
+@Composable
+private fun PlayAffordance() {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(scheme.surfaceContainerHighest),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Rounded.PlayArrow,
+            contentDescription = null,
+            tint = scheme.primary,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }

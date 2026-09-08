@@ -10,7 +10,7 @@ import com.zionhuang.innertube.models.SongItem
 import com.zionhuang.innertube.pages.ArtistItemsPage
 
 class ArtistRepository {
-    suspend fun artist(browseId: String): Result<ArtistPageData> = runCatching {
+    suspend fun artist(browseId: String): Result<ArtistPageData> = runCatchingCancellable {
         val page = YouTube.artist(browseId).getOrThrow()
 
         // Each section is expanded once and then partitioned. Expanding per
@@ -43,7 +43,7 @@ class ArtistRepository {
         )
     }
 
-    suspend fun albumSongs(browseId: String): Result<List<Song>> = runCatching {
+    suspend fun albumSongs(browseId: String): Result<List<Song>> = runCatchingCancellable {
         YouTube.album(browseId).getOrThrow().songs.map { it.toDomain() }
     }
 
@@ -54,7 +54,7 @@ class ArtistRepository {
      * often the most useful thing a search returns — an artist's "Essentials"
      * is a better answer to their name than any single track.
      */
-    suspend fun playlistSongs(playlistId: String): Result<List<Song>> = runCatching {
+    suspend fun playlistSongs(playlistId: String): Result<List<Song>> = runCatchingCancellable {
         val page = YouTube.playlist(playlistId).getOrThrow()
         val songs = LinkedHashMap<String, Song>()
         page.songs.forEach { songs.putIfAbsent(it.id, it.toDomain()) }

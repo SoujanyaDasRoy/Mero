@@ -146,7 +146,7 @@ class StreamRepository(private val api: PlayerApi) {
         val key = "$videoId:${quality.name}:${codecPreference.name}"
         if (cached(key) != null) return
         if (extractionSlot.availablePermits == 0) return
-        runCatching {
+        runCatchingCancellable {
             resolve(videoId, quality, codec = codecPreference, forUi = false)
         }.onFailure { Log.w(TAG, "prefetch of $videoId skipped: ${it.message}") }
     }
@@ -222,7 +222,7 @@ class FallbackPlayerApi(
 ) : PlayerApi {
     override suspend fun formatsFor(videoId: String): List<AudioFormat> {
         val started = System.currentTimeMillis()
-        return runCatching { primary.formatsFor(videoId) }
+        return runCatchingCancellable { primary.formatsFor(videoId) }
             .onSuccess {
                 Log.i(TAG, "resolved $videoId via fast path in ${System.currentTimeMillis() - started}ms")
             }
@@ -264,7 +264,7 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
      */
     suspend fun prepare() = withContext(Dispatchers.IO) {
         if (!prepared.compareAndSet(false, true)) return@withContext
-        runCatching { YoutubeDL.init(appContext) }
+        runCatchingCancellable { YoutubeDL.init(appContext) }
             .onFailure { Log.e(TAG, "yt-dlp init failed", it) }
 
         val prefs = appContext.getSharedPreferences("ytdlp", Context.MODE_PRIVATE)
@@ -289,7 +289,7 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
         // half-written binary — and a play that arrives mid-update waits for
         // it rather than extracting with the one being replaced.
         binaryLock.withLock {
-            runCatching { YoutubeDL.updateYoutubeDL(appContext) }
+            runCatchingCancellable { YoutubeDL.updateYoutubeDL(appContext) }
                 .onSuccess {
                     Log.i(TAG, "yt-dlp updated")
                     prefs.edit().putLong(KEY_LAST_UPDATE, System.currentTimeMillis()).apply()

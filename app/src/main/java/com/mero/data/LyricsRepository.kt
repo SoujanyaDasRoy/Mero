@@ -40,7 +40,7 @@ class LyricsRepository {
     suspend fun lyricsFor(song: Song): Lyrics = withContext(Dispatchers.IO) {
         cache[song.id]?.let { return@withContext it }
 
-        val result = runCatching { fetch(song) }.getOrDefault(Lyrics(emptyList(), false))
+        val result = runCatchingCancellable { fetch(song) }.getOrDefault(Lyrics(emptyList(), false))
         cache[song.id] = result
         result
     }

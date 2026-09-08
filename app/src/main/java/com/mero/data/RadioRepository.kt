@@ -17,7 +17,7 @@ import com.zionhuang.innertube.models.WatchEndpoint
 class RadioRepository {
 
     /** Tracks to continue with after [videoId], excluding the seed itself. */
-    suspend fun radioFor(videoId: String): Result<List<Song>> = runCatching {
+    suspend fun radioFor(videoId: String): Result<List<Song>> = runCatchingCancellable {
         YouTube.next(WatchEndpoint(videoId = videoId)).getOrThrow()
             .items
             .filter { it.id.isNotBlank() && it.id != videoId }
