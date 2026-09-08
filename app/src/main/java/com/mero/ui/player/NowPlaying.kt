@@ -56,6 +56,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -125,6 +127,8 @@ data class PlayerActions(
     val onLyrics: () -> Unit,
     val onEqualizer: () -> Unit = {},
     val onSleepTimer: () -> Unit = {},
+    /** Opens search for the artist whose name was tapped. */
+    val onArtist: (String) -> Unit = {},
     val onMore: () -> Unit = {},
 )
 
@@ -165,12 +169,18 @@ private fun StandardPlayer(
         label = "playerBackdrop",
     )
 
+    // The backdrop is a wash over the theme's own surface, not a replacement
+    // for it. Painted at full strength it followed only the album art, so a
+    // dark cover put a near-black band across the top of a light theme and the
+    // "playing from" line and the overflow button vanished into it.
+    val backdrop = backdropOver(tint, scheme.surfaceContainer, scheme.surface.luminance() > 0.5f)
+
     Column(
         modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    0f to tint,
+                    0f to backdrop,
                     0.46f to scheme.surfaceContainer,
                     1f to scheme.surfaceContainer,
                 ),
@@ -208,6 +218,7 @@ private fun StandardPlayer(
                 song = ui.song,
                 liked = ui.liked,
                 onLike = actions.onLike,
+                onArtist = actions.onArtist,
                 titleSize = 24,
                 titleLineHeight = 32,
                 artistSize = 16,
@@ -249,27 +260,17 @@ private fun StandardPlayer(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextIconButton(Icons.Rounded.Lyrics, "Lyrics", actions.onLyrics)
-            IconButton(onClick = actions.onEqualizer) {
-                Icon(
-                    Icons.Rounded.GraphicEq,
-                    "Equalizer",
-                    Modifier.size(22.dp),
-                    tint = scheme.onSurfaceVariant,
-                )
-            }
-            IconButton(onClick = actions.onSleepTimer) {
-                Icon(
-                    Icons.Rounded.Bedtime,
-                    "Sleep timer",
-                    Modifier.size(22.dp),
-                    tint = scheme.onSurfaceVariant,
-                )
-            }
-            TextIconButton(Icons.Rounded.QueueMusic, "Queue", actions.onQueue)
+            // Four equal destinations, labelled the same way. Two of these
+            // used to be icon-and-label and two were bare icons, so half the
+            // row looked like a control and half like decoration, and the
+            // unlabelled pair were the two nobody could name.
+            PlayerTool(Icons.Rounded.Lyrics, "Lyrics", actions.onLyrics, Modifier.weight(1f))
+            PlayerTool(Icons.Rounded.GraphicEq, "Equalizer", actions.onEqualizer, Modifier.weight(1f))
+            PlayerTool(Icons.Rounded.Bedtime, "Sleep", actions.onSleepTimer, Modifier.weight(1f))
+            PlayerTool(Icons.Rounded.QueueMusic, "Queue", actions.onQueue, Modifier.weight(1f))
         }
         Spacer(Modifier.height(8.dp))
     }
@@ -341,6 +342,7 @@ private fun FullBleedPlayer(
                 song = ui.song,
                 liked = ui.liked,
                 onLike = actions.onLike,
+                onArtist = actions.onArtist,
                 titleSize = 28,
                 titleLineHeight = 36,
                 artistSize = 16,
@@ -596,6 +598,7 @@ private fun TitleBlock(
     song: Song,
     liked: Boolean,
     onLike: () -> Unit,
+    onArtist: (String) -> Unit = {},
     titleSize: Int,
     titleLineHeight: Int,
     artistSize: Int,
@@ -619,12 +622,18 @@ private fun TitleBlock(
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
             )
+            // The artist is a way into their catalogue, not a caption. It is
+            // tinted rather than underlined so it reads as a link without
+            // shouting over the title above it.
             Text(
                 song.artist,
-                Modifier.basicMarquee(iterations = Int.MAX_VALUE),
+                Modifier
+                    .basicMarquee(iterations = Int.MAX_VALUE)
+                    .clickable(enabled = song.artist.isNotBlank()) { onArtist(song.artist) },
                 fontSize = artistSize.sp,
                 lineHeight = 24.sp,
-                color = scheme.onSurfaceVariant,
+                color = if (song.artist.isBlank()) scheme.onSurfaceVariant else scheme.primary,
+                fontWeight = FontWeight.Medium,
                 maxLines = 1,
             )
         }
@@ -860,3 +869,45 @@ private fun ScrimIconButton(icon: ImageVector, label: String, onClick: () -> Uni
         Icon(icon, label, tint = Color(0xFFEDE7F0))
     }
 }
+
+/**
+ * One of the four tools under the transport controls.
+ *
+ * Equal width, icon over label, tinted from the theme rather than a fixed
+ * colour so it holds up in light mode as well as dark.
+ */
+@Composable
+private fun PlayerTool(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = label, Modifier.size(21.dp), tint = scheme.onSurfaceVariant)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            label,
+            fontSize = 11.sp,
+            color = scheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * Mixes an artwork colour into the surface it sits on.
+ *
+ * A light theme gets a hint of the cover; a dark one keeps the fuller wash it
+ * was designed around. Either way the result is anchored to the theme, so text
+ * drawn on it stays readable whatever the album art happens to be.
+ */
+private fun backdropOver(tint: Color, surface: Color, lightTheme: Boolean): Color =
+    tint.copy(alpha = if (lightTheme) 0.22f else 0.85f).compositeOver(surface)

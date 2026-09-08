@@ -239,7 +239,7 @@ fun SettingsScreen(
                 PreferenceRow(
                     Icons.Rounded.GraphicEq,
                     "Equalizer",
-                    "10-band, normalization, crossfade",
+                    "10-band, preamp, spatial audio",
                     onClick = onEqualizerClick,
                 ) {
                     Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)

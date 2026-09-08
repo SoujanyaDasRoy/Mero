@@ -19,6 +19,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontVariation
+import androidx.compose.ui.text.font.Font
+import com.mero.R
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
@@ -222,20 +225,46 @@ private fun ColorScheme.amoled(): ColorScheme = copy(
     surfaceContainerHighest = Color(0xFF232026),
 )
 
+/**
+ * Manrope, bundled as a single variable font.
+ *
+ * Roboto is what every Android app looks like, which is fine for a settings
+ * screen and forgettable for a music player — the thing on screen most of the
+ * time here is a track title, and the typeface is most of what that reads as.
+ * Manrope is a geometric sans with slightly open counters, so it stays legible
+ * at the 11sp of a control label while having a recognisable shape at the 24sp
+ * of a Now Playing title.
+ *
+ * One 162 KB file rather than four static weights: the weight axis is
+ * interpolated, so Regular through Bold cost nothing extra. SIL Open Font
+ * License, which GPL-3.0 is free to redistribute — see LICENSES/.
+ */
+@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+private val Manrope = FontFamily(
+    Font(R.font.manrope, FontWeight.Normal, variationSettings = FontVariation.Settings(FontVariation.weight(400))),
+    Font(R.font.manrope, FontWeight.Medium, variationSettings = FontVariation.Settings(FontVariation.weight(550))),
+    Font(R.font.manrope, FontWeight.SemiBold, variationSettings = FontVariation.Settings(FontVariation.weight(650))),
+    Font(R.font.manrope, FontWeight.Bold, variationSettings = FontVariation.Settings(FontVariation.weight(750))),
+)
+
 private val Type = Typography().let { base ->
-    // Roboto is the platform default on Android, so FontFamily.Default already
-    // resolves to it — no font files to ship.
+    fun TextStyle.mero() = copy(fontFamily = Manrope)
     base.copy(
-        titleLarge = base.titleLarge.copy(
-            fontFamily = FontFamily.Default,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Medium,
-        ),
-        titleMedium = base.titleMedium.copy(fontSize = 18.sp, fontWeight = FontWeight.Medium),
-        bodyLarge = base.bodyLarge.copy(fontSize = 16.sp),
-        bodyMedium = base.bodyMedium.copy(fontSize = 14.sp),
-        bodySmall = base.bodySmall.copy(fontSize = 12.sp),
-        labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+        displayLarge = base.displayLarge.mero(),
+        displayMedium = base.displayMedium.mero(),
+        displaySmall = base.displaySmall.mero(),
+        headlineLarge = base.headlineLarge.mero(),
+        headlineMedium = base.headlineMedium.mero(),
+        headlineSmall = base.headlineSmall.mero(),
+        titleLarge = base.titleLarge.mero().copy(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
+        titleMedium = base.titleMedium.mero().copy(fontSize = 18.sp, fontWeight = FontWeight.Medium),
+        titleSmall = base.titleSmall.mero(),
+        bodyLarge = base.bodyLarge.mero().copy(fontSize = 16.sp),
+        bodyMedium = base.bodyMedium.mero().copy(fontSize = 14.sp),
+        bodySmall = base.bodySmall.mero().copy(fontSize = 12.sp),
+        labelLarge = TextStyle(fontFamily = Manrope, fontSize = 14.sp, fontWeight = FontWeight.Medium),
+        labelMedium = base.labelMedium.mero(),
+        labelSmall = base.labelSmall.mero(),
     )
 }
 

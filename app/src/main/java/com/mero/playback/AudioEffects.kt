@@ -82,23 +82,35 @@ class AudioEffects {
     private fun preampDb(): Float = (preamp * 24f) - 12f
     private fun boosterDb(): Float = booster * 12f
 
-    /** Called by the playback service once ExoPlayer has an audio session. */
+    /**
+     * Called by the playback service once ExoPlayer has an audio session.
+     *
+     * Deliberately attaches nothing. Effects are created by [apply] only while
+     * a setting actually asks for one, and torn down again when it stops.
+     *
+     * Creating all four up front was audible. AudioFlinger reported
+     * `mismatch between requested flags (00000008) and output flags (00000002)`
+     * — an occupied effect chain pushes the track off the deep-buffer output
+     * onto a smaller-buffer path, which is where the glitching came from — and
+     * `4 effects moved, 0 effects started`, four effects on the session doing
+     * nothing. EnvironmentalReverb never even survived creation:
+     * `registerEffect() memory limit exceeded for Fx Insert Environmental
+     * Reverb, Memory 91 KB`, status -38. On the Flat preset, which is where
+     * most listening happens, the chain is now empty.
+     */
     fun attach(audioSessionId: Int) {
         if (audioSessionId == 0 || audioSessionId == sessionId) return
         release()
         sessionId = audioSessionId
-        runCatching {
-            processing = DynamicsProcessing(0, audioSessionId, buildConfig())
-            loudness = LoudnessEnhancer(audioSessionId)
-            virtualizer = Virtualizer(0, audioSessionId).also {
-                spatialSupported = it.strengthSupported
-            }
-            reverb = EnvironmentalReverb(0, audioSessionId)
-        }.onFailure { Log.e(TAG, "failed to attach audio effects", it) }
         apply()
     }
 
     fun release() {
+        releaseEffects()
+        sessionId = null
+    }
+
+    private fun releaseEffects() {
         runCatching { processing?.release() }
         runCatching { loudness?.release() }
         runCatching { virtualizer?.release() }
@@ -106,7 +118,24 @@ class AudioEffects {
         processing = null
         loudness = null
         virtualizer = null
-        sessionId = null
+        reverb = null
+    }
+
+    /** Creates [effect] on the session the first time it is genuinely needed. */
+    private inline fun <T> ensure(current: T?, create: () -> T, what: String): T? =
+        current ?: runCatching(create)
+            .onFailure { Log.w(TAG, "device would not create $what: ${it.message}") }
+            .getOrNull()
+
+    private fun releaseOne(what: String, effect: Any?) {
+        runCatching {
+            when (effect) {
+                is DynamicsProcessing -> effect.release()
+                is LoudnessEnhancer -> effect.release()
+                is Virtualizer -> effect.release()
+                is EnvironmentalReverb -> effect.release()
+            }
+        }.onFailure { Log.w(TAG, "failed to release $what") }
     }
 
     fun setEnabled(value: Boolean) { enabled = value; apply() }
@@ -153,7 +182,54 @@ class AudioEffects {
      *    It now hard-limits just below full scale as a backstop.
      */
     private fun apply() {
-        val dp = processing ?: return
+        val session = sessionId ?: return
+
+        // Nothing asked for: hold no effects at all, so the track keeps the
+        // deep-buffer output path.
+        if (isTransparent) {
+            releaseEffects()
+            return
+        }
+
+        val wantsEq = enabled &&
+            (bands.any { it != 0 } || preampDb() != 0f || boosterDb() != 0f)
+        val wantsLoudness = enabled && (boosterDb() > 0f || normalization)
+        val wantsSpatial = enabled && spatialMode != SpatialMode.Off
+        val wantsReverb = enabled &&
+            (reverbIntensity > 0f || spatialMode == SpatialMode.Immersive)
+
+        if (wantsEq) {
+            processing = ensure(processing, { DynamicsProcessing(0, session, buildConfig()) }, "equalizer")
+        } else {
+            releaseOne("equalizer", processing); processing = null
+        }
+        if (wantsLoudness) {
+            loudness = ensure(loudness, { LoudnessEnhancer(session) }, "loudness enhancer")
+        } else {
+            releaseOne("loudness enhancer", loudness); loudness = null
+        }
+        if (wantsSpatial) {
+            virtualizer = ensure(virtualizer, { Virtualizer(0, session) }, "spatial audio")
+                ?.also { spatialSupported = it.strengthSupported }
+        } else {
+            releaseOne("spatial audio", virtualizer); virtualizer = null
+        }
+        if (wantsReverb) {
+            // Least likely to fit the session's effect memory budget, so it is
+            // created last and its absence is not fatal to the rest.
+            reverb = ensure(reverb, { EnvironmentalReverb(0, session) }, "reverb")
+        } else {
+            releaseOne("reverb", reverb); reverb = null
+        }
+
+        applySettings()
+    }
+
+    private fun applySettings() {
+        // Each block guards its own effect. An early return on a missing
+        // equalizer would skip spatial audio and reverb, which no longer come
+        // as a set now that they are created independently.
+        processing?.let { dp ->
         runCatching {
             var maxBoost = 0f
             for (i in 0 until BANDS) {
@@ -188,6 +264,7 @@ class AudioEffects {
             // the limiter is not transparent by construction.
             dp.enabled = !isTransparent
         }.onFailure { Log.e(TAG, "failed to apply equalizer", it) }
+        }
 
         runCatching {
             loudness?.let {

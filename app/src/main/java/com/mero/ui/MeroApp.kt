@@ -62,6 +62,8 @@ import com.mero.MeroApplication
 import com.mero.data.EqPresets
 import com.mero.data.CodecPreference
 import com.mero.data.HomeSection
+import com.mero.data.SettingsStore
+import com.mero.data.titleCase
 import com.mero.domain.RepeatMode
 import com.mero.domain.SearchItem
 import com.mero.domain.SearchResultType
@@ -111,20 +113,17 @@ import kotlinx.serialization.Serializable
 
 @Composable
 fun MeroApp() {
+    val appContext = LocalContext.current.applicationContext
     // UI-layer state only. Replaced by PlayerConnection over a MediaController in
     // M2 — see docs/architecture.md, "Playback state is not screen state".
-    var accent by remember { mutableStateOf(MeroAccent.Violet) }
-    var toggles by remember {
+    val settings = remember(LocalContext.current) { SettingsStore(appContext) }
+    var accent by remember {
         mutableStateOf(
-            mapOf(
-                "dynamic" to false, "dark" to true, "amoled" to false, "wifi" to true,
-                "norm" to false, "silence" to false, "gapless" to true, "spatial" to false,
-                // On by default: music that stops dead at the end of a queue is
-                // the more surprising behaviour of the two.
-                "infinite" to true, "autopause" to false,
-            ),
+            runCatching { MeroAccent.valueOf(settings.string(SettingsStore.ACCENT, MeroAccent.Violet.name)) }
+                .getOrDefault(MeroAccent.Violet),
         )
     }
+    var toggles by remember { mutableStateOf(settings.toggles(TOGGLE_DEFAULTS)) }
 
     MeroTheme(
         accent = accent,
@@ -153,10 +152,10 @@ fun MeroApp() {
             }
             MeroContent(
                 accent = accent,
-                onAccentChange = { accent = it },
+                onAccentChange = { accent = it; settings.putString(SettingsStore.ACCENT, it.name) },
                 toggles = toggles,
                 onToggle = { key, value ->
-                    toggles = when {
+                    val updated = when {
                         key == "infinite" && value ->
                             toggles + ("infinite" to true) + ("autopause" to false)
                         key == "autopause" && value && toggles["infinite"] == true ->
@@ -165,6 +164,13 @@ fun MeroApp() {
                             toggles + ("dark" to false) + ("amoled" to false)
                         else -> toggles + (key to value)
                     }
+                    // Persist every key the rule touched, not just the tapped
+                    // one: turning infinite playback on also clears autopause,
+                    // and that consequence has to survive a restart too.
+                    updated.forEach { (k, v) ->
+                        if (toggles[k] != v) settings.putToggle(k, v)
+                    }
+                    toggles = updated
                 },
             )
             }
@@ -268,12 +274,34 @@ private fun MeroContent(
     // MediaItem only carries ids and display metadata, so the domain objects
     // the UI needs are looked up by the id the player reports back.
     var songsById by remember { mutableStateOf(emptyMap<String, Song>()) }
-    var playerVariant by remember { mutableStateOf(PlayerVariant.Standard) }
+    var playerVariant by remember {
+        mutableStateOf(
+            runCatching {
+                PlayerVariant.valueOf(
+                    container.settings.string(SettingsStore.PLAYER_VARIANT, PlayerVariant.Standard.name),
+                )
+            }.getOrDefault(PlayerVariant.Standard),
+        )
+    }
 
     var query by remember { mutableStateOf("") }
     var searchTab by remember { mutableStateOf("Songs") }
     var libraryTab by remember { mutableStateOf("Liked") }
     var homeSections by remember { mutableStateOf(emptyList<HomeSection>()) }
+    // Every seed gets a tile straight away; the artwork arrives as the matching
+    // home shelf loads. Driving the grid off loaded shelves alone left it
+    // showing whatever few had come back so far.
+    val genreCards = remember(homeSections) {
+        container.homeRepository.seeds.map { seed ->
+            val title = seed.titleCase()
+            com.mero.ui.search.GenreCardData(
+                title = title,
+                artworkUrl = homeSections
+                    .firstOrNull { it.title.equals(title, ignoreCase = true) }
+                    ?.songs?.firstOrNull()?.thumbnailUrl,
+            )
+        }
+    }
     var homeLoading by remember { mutableStateOf(true) }
     var homeLoadingMore by remember { mutableStateOf(false) }
     var seedQueue by remember { mutableStateOf(emptyList<String>()) }
@@ -320,7 +348,6 @@ private fun MeroContent(
     var booster by remember { mutableStateOf(audioEffects.booster) }
     var reverb by remember { mutableStateOf(audioEffects.reverbIntensity) }
     var spatialMode by remember { mutableStateOf(audioEffects.spatialMode) }
-    var crossfade by remember { mutableStateOf(0.5f) }
     var radioRequests by remember { mutableStateOf(emptySet<String>()) }
 
     fun refillInfinitePlayback() {
@@ -839,6 +866,8 @@ private fun MeroContent(
                     }
 
                     SearchScreen(
+                        genres = genreCards,
+                        onGenreClick = { genre -> query = genre },
                         query = query,
                         onQueryChange = { query = it },
                         onSearch = {
@@ -979,8 +1008,6 @@ private fun MeroContent(
                         onBoosterChange = { booster = it; audioEffects.setBooster(it) },
                         reverb = reverb,
                         onReverbChange = { reverb = it; audioEffects.setReverb(it) },
-                        crossfade = crossfade,
-                        onCrossfadeChange = { crossfade = it },
                         toggles = toggles,
                         onToggle = { key, value ->
                             onToggle(key, value)
@@ -1190,7 +1217,10 @@ private fun MeroContent(
                             }
                         },
                         playerVariant = playerVariant,
-                        onPlayerVariantChange = { playerVariant = it },
+                        onPlayerVariantChange = {
+                            playerVariant = it
+                            container.settings.putString(SettingsStore.PLAYER_VARIANT, it.name)
+                        },
                         onBack = { navController.popBackStack() },
                         contentPadding = contentPadding,
                     )
@@ -1228,6 +1258,12 @@ private fun MeroContent(
                         position = positionOf,
                         actions = PlayerActions(
                             onCollapse = { expanded = false },
+                            onArtist = { name ->
+                                expanded = false
+                                query = name
+                                searchTab = "Songs"
+                                navController.navigate(SearchRoute)
+                            },
                             onPlayPause = { togglePlayback() },
                             onPrev = {
                                 // Below three seconds, "previous" means the
@@ -1516,3 +1552,17 @@ private const val NL = "\n"
 
 /** One hour of no interaction. */
 private const val INACTIVITY_PAUSE_MS = 60L * 60 * 1000
+
+/**
+ * What Mero does out of the box, before anyone has changed anything.
+ *
+ * One place, so [SettingsStore] can fall back to it per key rather than
+ * carrying a second copy of the same decisions.
+ */
+private val TOGGLE_DEFAULTS = mapOf(
+    "dynamic" to false, "dark" to true, "amoled" to false, "wifi" to true,
+    "norm" to false, "silence" to false, "gapless" to true, "spatial" to false,
+    // On by default: music that stops dead at the end of a queue is the more
+    // surprising behaviour of the two.
+    "infinite" to true, "autopause" to false,
+)

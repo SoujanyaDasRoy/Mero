@@ -1,0 +1,10 @@
+Manrope is bundled at app/src/main/res/font/manrope.ttf under the
+SIL Open Font License 1.1.
+
+Copyright (c) 2018 The Manrope Project Authors
+https://github.com/sharanda/manrope
+
+The full licence text is available at https://openfontlicense.org and is
+redistributed with the font's upstream project. OFL fonts may be bundled and
+redistributed with software, including under the GPL, provided they are not
+sold on their own and the licence travels with them.

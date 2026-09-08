@@ -60,8 +60,6 @@ fun EqualizerScreen(
     onBoosterChange: (Float) -> Unit,
     reverb: Float,
     onReverbChange: (Float) -> Unit,
-    crossfade: Float,
-    onCrossfadeChange: (Float) -> Unit,
     toggles: Map<String, Boolean>,
     onToggle: (String, Boolean) -> Unit,
     spatialMode: SpatialMode = SpatialMode.Off,
@@ -171,12 +169,6 @@ fun EqualizerScreen(
                 "${(reverb * 100).roundToInt()}%",
                 reverb,
                 onReverbChange,
-            )
-            LabelledSlider(
-                "Crossfade",
-                if (crossfade <= 0.01f) "Off" else "${(crossfade * 12).roundToInt()}s",
-                crossfade,
-                onCrossfadeChange,
             )
 
             EqSwitch(
