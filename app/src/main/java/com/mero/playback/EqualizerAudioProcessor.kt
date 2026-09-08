@@ -35,15 +35,15 @@ class EqualizerAudioProcessor : BaseAudioProcessor() {
      */
     private data class Settings(
         val enabled: Boolean,
-        val bandsDb: List<Int>,
+        val bands: List<EqBand>,
         val preampDb: Float,
     ) {
         val isTransparent: Boolean
-            get() = !enabled || (bandsDb.all { it == 0 } && preampDb == 0f)
+            get() = !enabled || (bands.isFlat && preampDb == 0f)
     }
 
     @Volatile
-    private var desired = Settings(enabled = true, bandsDb = List(EqBands.count) { 0 }, preampDb = 0f)
+    private var desired = Settings(enabled = true, bands = defaultBands(), preampDb = 0f)
 
     private var applied: Settings? = null
 
@@ -55,8 +55,8 @@ class EqualizerAudioProcessor : BaseAudioProcessor() {
         desired = desired.copy(enabled = value)
     }
 
-    fun setBands(bandsDb: List<Int>) {
-        desired = desired.copy(bandsDb = bandsDb.toList())
+    fun setBands(bands: List<EqBand>) {
+        desired = desired.copy(bands = bands.toList())
     }
 
     fun setPreampDb(value: Float) {
@@ -136,9 +136,9 @@ class EqualizerAudioProcessor : BaseAudioProcessor() {
      */
     private fun adopt(settings: Settings) {
         val rate = outputAudioFormat.sampleRate
-        val coefficients = (0 until EqBands.count).map { index ->
-            val db = if (settings.enabled) settings.bandsDb.getOrElse(index) { 0 }.toFloat() else 0f
-            peakingEq(EqBands.frequencies[index], db, EqBands.Q, rate)
+        val coefficients = settings.bands.map { band ->
+            val db = if (settings.enabled) band.gainDb else 0f
+            peakingEq(band.frequencyHz, db, band.q, rate)
         }
 
         // The reserved headroom is the cascade's real peak, not the biggest
@@ -148,7 +148,7 @@ class EqualizerAudioProcessor : BaseAudioProcessor() {
         gain = 10.0.pow(((settings.preampDb - peakDb) / 20.0)).toFloat()
 
         for (channel in filters) {
-            for (index in 0 until EqBands.count) channel[index].set(coefficients[index])
+            coefficients.forEachIndexed { index, c -> channel.getOrNull(index)?.set(c) }
         }
     }
 

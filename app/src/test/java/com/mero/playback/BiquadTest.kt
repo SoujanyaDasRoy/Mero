@@ -24,6 +24,12 @@ class BiquadTest {
 
     private val sampleRate = 48_000
 
+    /** Default bands with some gains applied, expressed the old readable way. */
+    private fun bandsWith(edit: (MutableList<Int>) -> Unit): List<EqBand> {
+        val gains = MutableList(EqBands.count) { 0 }.also(edit)
+        return applyGains(defaultBands(), gains)
+    }
+
     /**
      * Magnitude of the filter at [freq], evaluated straight from the transfer
      * function rather than by pushing a sweep through an FFT.
@@ -126,14 +132,13 @@ class BiquadTest {
 
     @Test
     fun `the drawn response is flat when every band is zero`() {
-        val curve = equalizerResponseDb(List(EqBands.count) { 0 }, sampleRate)
+        val curve = equalizerResponseDb(defaultBands(), sampleRate)
         for (db in curve) assertEquals(0.0, db.toDouble(), 1e-6)
     }
 
     @Test
     fun `the drawn response rises where a band is boosted`() {
-        val bands = MutableList(EqBands.count) { 0 }.also { it[5] = 8 } // 1 kHz
-        val curve = equalizerResponseDb(bands, sampleRate, points = 256)
+        val curve = equalizerResponseDb(bandsWith { it[5] = 8 }, sampleRate, points = 256)
         // Curve is log-spaced 20 Hz..~20 kHz, so 1 kHz sits near the middle.
         val peak = curve.max()
         assertEquals(8.0, peak.toDouble(), 0.2)
@@ -144,16 +149,8 @@ class BiquadTest {
 
     @Test
     fun `overlapping boosts sum to more than either alone`() {
-        val single = equalizerResponseDb(
-            MutableList(EqBands.count) { 0 }.also { it[5] = 6 },
-            sampleRate,
-            points = 256,
-        ).max()
-        val neighbours = equalizerResponseDb(
-            MutableList(EqBands.count) { 0 }.also { it[5] = 6; it[6] = 6 },
-            sampleRate,
-            points = 256,
-        ).max()
+        val single = equalizerResponseDb(bandsWith { it[5] = 6 }, sampleRate, points = 256).max()
+        val neighbours = equalizerResponseDb(bandsWith { it[5] = 6; it[6] = 6 }, sampleRate, points = 256).max()
         // This is exactly why headroom cannot come from the largest band.
         assertTrue(
             "two neighbours at +6 dB peaked at $neighbours, one alone at $single",

@@ -358,14 +358,16 @@ private fun MeroContent(
     // keeps its own and they swap over when the output does.
     val outputRoute by container.outputRoute.route.collectAsStateWithLifecycle()
     var preset by remember { mutableStateOf("Flat") }
-    var bands by remember { mutableStateOf(EqPresets.presets.getValue("Flat")) }
+    var bands by remember { mutableStateOf(com.mero.playback.defaultBands()) }
+    var selectedBand by remember { mutableIntStateOf(5) }
     var preamp by remember { mutableStateOf(audioEffects.preamp) }
 
     LaunchedEffect(outputRoute) {
         val store = container.settings
         val key = outputRoute.key
         preset = store.string(SettingsStore.presetKey(key), "Flat")
-        bands = store.ints(SettingsStore.bandsKey(key), EqPresets.presets.getValue("Flat"))
+        bands = com.mero.playback.decodeBands(store.string(SettingsStore.bandsKey(key), ""))
+            ?: com.mero.playback.defaultBands()
         preamp = store.float(SettingsStore.preampKey(key), 0.5f)
         audioEffects.setBands(bands)
         audioEffects.setPreamp(preamp)
@@ -375,7 +377,7 @@ private fun MeroContent(
         val store = container.settings
         val key = outputRoute.key
         store.putString(SettingsStore.presetKey(key), preset)
-        store.putInts(SettingsStore.bandsKey(key), bands)
+        store.putString(SettingsStore.bandsKey(key), com.mero.playback.encodeBands(bands))
         store.putFloat(SettingsStore.preampKey(key), preamp)
     }
     var radioRequests by remember { mutableStateOf(emptySet<String>()) }
@@ -1075,15 +1077,28 @@ private fun MeroContent(
                         preset = preset,
                         onPresetChange = { name ->
                             preset = name
-                            bands = EqPresets.presets.getValue(name)
+                            // A preset sets gains and leaves the frequencies
+                            // and widths a listener may have moved.
+                            bands = com.mero.playback.applyGains(
+                                bands,
+                                EqPresets.presets.getValue(name),
+                            )
                             audioEffects.setBands(bands)
                             saveEq()
                         },
                         bands = bands,
-                        onBandChange = { index, value ->
-                            bands = bands.toMutableList().also { it[index] = value }
+                        selectedBand = selectedBand,
+                        onSelectBand = { selectedBand = it },
+                        onResetBands = {
+                            bands = com.mero.playback.defaultBands()
+                            preset = "Flat"
+                            audioEffects.setBands(bands)
+                            saveEq()
+                        },
+                        onBandChange = { index, band ->
+                            bands = bands.toMutableList().also { it[index] = band }
                             preset = "Custom"
-                            audioEffects.setBand(index, value)
+                            audioEffects.setBand(index, band)
                             saveEq()
                         },
                         preamp = preamp,

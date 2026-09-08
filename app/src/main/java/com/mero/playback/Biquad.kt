@@ -168,10 +168,8 @@ fun cascadePeakDb(coefficients: List<BiquadCoefficients>, sampleRate: Int): Floa
  * Returned log-spaced across the audible range, so it maps straight onto a
  * frequency axis drawn the same way.
  */
-fun equalizerResponseDb(bandsDb: List<Int>, sampleRate: Int, points: Int = 128): FloatArray {
-    val coefficients = EqBands.frequencies.mapIndexed { index, freq ->
-        peakingEq(freq, bandsDb.getOrElse(index) { 0 }.toFloat(), EqBands.Q, sampleRate)
-    }
+fun equalizerResponseDb(bands: List<EqBand>, sampleRate: Int, points: Int = 128): FloatArray {
+    val coefficients = bands.map { peakingEq(it.frequencyHz, it.gainDb, it.q, sampleRate) }
     val out = FloatArray(points + 1)
     var i = 0
     overAudibleRange(sampleRate, steps = points) { freq ->

@@ -56,8 +56,11 @@ fun EqualizerScreen(
     onEnabledChange: (Boolean) -> Unit,
     preset: String,
     onPresetChange: (String) -> Unit,
-    bands: List<Int>,
-    onBandChange: (Int, Int) -> Unit,
+    bands: List<com.mero.playback.EqBand>,
+    onBandChange: (Int, com.mero.playback.EqBand) -> Unit,
+    selectedBand: Int,
+    onSelectBand: (Int) -> Unit,
+    onResetBands: () -> Unit,
     spectrumLevels: FloatArray,
     responseDb: FloatArray,
     hapticIntensity: Float,
@@ -126,44 +129,65 @@ fun EqualizerScreen(
                     .background(scheme.surfaceContainer)
                     .padding(start = 8.dp, end = 8.dp, top = 16.dp, bottom = 12.dp),
             ) {
+                EqCurve(
+                    bands = bands,
+                    spectrum = spectrumLevels,
+                    selectedIndex = selectedBand,
+                    onSelect = onSelectBand,
+                    onBandChange = onBandChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp),
+                )
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                        .padding(top = 6.dp, start = 4.dp, end = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text("+12 dB", fontSize = 11.sp, color = scheme.onSurfaceVariant)
-                    Text(
-                        "10-band · in-app DSP",
-                        fontSize = 11.sp,
-                        color = scheme.onSurfaceVariant,
-                    )
-                    Text("−12 dB", fontSize = 11.sp, color = scheme.onSurfaceVariant)
-                }
-                Box(Modifier.fillMaxWidth()) {
-                    // Behind the sliders: what is playing, and what the curve
-                    // does to it. The sliders show ten numbers; neither of
-                    // these can be read off them.
-                    SpectrumAndCurve(
-                        levels = spectrumLevels,
-                        responseDb = responseDb,
-                        modifier = Modifier
-                            .matchParentSize()
-                            .padding(horizontal = 8.dp),
-                    )
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom,
-                    ) {
-                        bands.forEachIndexed { index, db ->
-                            BandSlider(
-                                db = db,
-                                hz = EqPresets.bandLabels.getOrElse(index) { "" },
-                                onChange = { onBandChange(index, it) },
-                            )
-                        }
+                    listOf("20", "100", "500", "2k", "8k", "20k").forEach {
+                        Text(it, fontSize = 10.sp, color = scheme.onSurfaceVariant)
                     }
+                }
+            }
+
+            // The selected band, in numbers. Dragging sets gain and frequency;
+            // width has no natural gesture on a curve, so it gets a slider.
+            bands.getOrNull(selectedBand)?.let { band ->
+                Text(
+                    "Band ${selectedBand + 1}",
+                    Modifier.padding(start = 16.dp, top = 18.dp, bottom = 2.dp),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = scheme.onSurfaceVariant,
+                )
+                Text(
+                    "${formatHz(band.frequencyHz)}   ${formatDb(band.gainDb)}   Q ${
+                        (band.q * 100).roundToInt() / 100f
+                    }",
+                    Modifier.padding(start = 16.dp, end = 16.dp, bottom = 6.dp),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                LabelledSlider(
+                    "Width",
+                    if (band.q < 1f) "Wide" else if (band.q > 3f) "Narrow" else "Medium",
+                    ((band.q - com.mero.playback.EqBand.MIN_Q) /
+                        (com.mero.playback.EqBand.MAX_Q - com.mero.playback.EqBand.MIN_Q)),
+                ) { fraction ->
+                    onBandChange(
+                        selectedBand,
+                        band.copy(
+                            q = com.mero.playback.EqBand.MIN_Q +
+                                fraction * (com.mero.playback.EqBand.MAX_Q - com.mero.playback.EqBand.MIN_Q),
+                        ),
+                    )
+                }
+                Row(
+                    Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    MeroChip("Reset all bands", selected = false, onClick = onResetBands)
                 }
             }
 
@@ -240,70 +264,6 @@ fun EqualizerScreen(
     }
 }
 
-/**
- * Vertical −12..+12 dB band. Custom because Material 3 has no vertical slider —
- * everything else on this screen uses the stock control.
- */
-@Composable
-private fun BandSlider(db: Int, hz: String, onChange: (Int) -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    val trackPx = with(LocalDensity.current) { BAND_TRACK_DP.dp.toPx() }
-    val fraction = (db + 12) / 24f
-
-    fun setFromY(y: Float) {
-        val ratio = 1f - (y / trackPx).coerceIn(0f, 1f)
-        onChange((ratio * 24f - 12f).roundToInt().coerceIn(-12, 12))
-    }
-
-    Column(
-        Modifier.width(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            if (db > 0) "+$db" else "$db",
-            fontSize = 10.sp,
-            color = scheme.primary,
-            textAlign = TextAlign.Center,
-        )
-        Box(
-            Modifier
-                .width(32.dp)
-                .height(BAND_TRACK_DP.dp)
-                .pointerInput(Unit) {
-                    detectTapGestures { setFromY(it.y) }
-                }
-                .pointerInput(Unit) {
-                    detectDragGestures { change, _ -> setFromY(change.position.y) }
-                },
-            contentAlignment = Alignment.BottomCenter,
-        ) {
-            Box(
-                Modifier
-                    .width(4.dp)
-                    .height(BAND_TRACK_DP.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(scheme.outlineVariant),
-            )
-            Box(
-                Modifier
-                    .width(4.dp)
-                    .height((BAND_TRACK_DP * fraction).dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(scheme.primary),
-            )
-            Box(
-                Modifier
-                    .padding(bottom = (BAND_TRACK_DP * fraction).dp - 7.dp)
-                    .size(14.dp)
-                    .clip(RoundedCornerShape(7.dp))
-                    .background(scheme.primary),
-            )
-        }
-        Text(hz, fontSize = 9.sp, color = scheme.onSurfaceVariant)
-    }
-}
-
 @Composable
 private fun LabelledSlider(label: String, value: String, position: Float, onChange: (Float) -> Unit) {
     val scheme = MaterialTheme.colorScheme
@@ -342,53 +302,16 @@ private fun EqSwitch(
     }
 }
 
-/**
- * The live spectrum, with the equalizer's own response curve over it.
- *
- * Two things the ten sliders cannot say. The bars are what is actually coming
- * out of the player — tapped after the equalizer, so they move when a band
- * moves. The line is the curve those bands add up to, which is not the shape
- * the slider handles trace: neighbouring bands overlap, so two at +6 dB make
- * more than +6 dB between them.
- */
-@Composable
-private fun SpectrumAndCurve(
-    levels: FloatArray,
-    responseDb: FloatArray,
-    modifier: Modifier = Modifier,
-) {
-    val scheme = MaterialTheme.colorScheme
-    val bar = scheme.primary.copy(alpha = 0.13f)
-    val line = scheme.primary.copy(alpha = 0.85f)
-
-    Canvas(modifier) {
-        val w = size.width
-        val h = size.height
-        if (w <= 0f || h <= 0f) return@Canvas
-
-        if (levels.isNotEmpty()) {
-            val slot = w / levels.size
-            val barWidth = slot * 0.34f
-            levels.forEachIndexed { index, level ->
-                val barHeight = (h * level).coerceIn(0f, h)
-                drawRect(
-                    color = bar,
-                    topLeft = Offset(index * slot + (slot - barWidth) / 2f, h - barHeight),
-                    size = Size(barWidth, barHeight),
-                )
-            }
-        }
-
-        if (responseDb.size >= 2) {
-            // ±12 dB maps to the full height, matching the scale the sliders
-            // and the "+12 dB / −12 dB" labels already use.
-            fun y(db: Float) = h / 2f - (db / 12f).coerceIn(-1f, 1f) * (h / 2f)
-            val path = Path()
-            responseDb.forEachIndexed { index, db ->
-                val x = w * index / (responseDb.size - 1).toFloat()
-                if (index == 0) path.moveTo(x, y(db)) else path.lineTo(x, y(db))
-            }
-            drawPath(path, color = line, style = Stroke(width = 2.dp.toPx()))
-        }
+/** 1 kHz rather than 1000 Hz — the way anyone adjusting an equalizer reads it. */
+private fun formatHz(hz: Float): String =
+    if (hz >= 1_000f) {
+        val k = hz / 1_000f
+        if (k >= 10f) "${k.roundToInt()} kHz" else "${(k * 10).roundToInt() / 10f} kHz"
+    } else {
+        "${hz.roundToInt()} Hz"
     }
+
+private fun formatDb(db: Float): String {
+    val rounded = (db * 10).roundToInt() / 10f
+    return if (rounded > 0) "+$rounded dB" else "$rounded dB"
 }

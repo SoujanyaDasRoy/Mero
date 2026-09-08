@@ -80,7 +80,7 @@ class EqualizerAudioProcessorTest {
     @Test
     fun `a disabled equalizer is transparent even with bands set`() {
         val p = processor {
-            setBands(listOf(12, 12, 12, 12, 12, 12, 12, 12, 12, 12))
+            setBands(applyGains(defaultBands(), List(EqBands.count) { 12 }))
             setEnabled(false)
         }
         val input = sine(1_000.0, 1_024)
@@ -98,7 +98,7 @@ class EqualizerAudioProcessorTest {
 
         val flatPeak = peakOfTail(run(processor(), sine(1_000.0, frames)), frames)
         val boostedPeak = peakOfTail(
-            run(processor { setBands(bands) }, sine(1_000.0, frames)),
+            run(processor { setBands(applyGains(defaultBands(), bands)) }, sine(1_000.0, frames)),
             frames,
         )
 
@@ -115,7 +115,7 @@ class EqualizerAudioProcessorTest {
         val bands = MutableList(EqBands.count) { 0 }.also { it[0] = 12 } // 31 Hz
         val frames = sampleRate / 2
         val flat = peakOfTail(run(processor(), sine(4_000.0, frames)), frames)
-        val boosted = peakOfTail(run(processor { setBands(bands) }, sine(4_000.0, frames)), frames)
+        val boosted = peakOfTail(run(processor { setBands(applyGains(defaultBands(), bands)) }, sine(4_000.0, frames)), frames)
         // 4 kHz is untouched by a 31 Hz band, so it only sees the -12 dB of
         // headroom the boost reserved.
         assertEquals(-12.0, 20 * log10(boosted / flat), 1.0)
@@ -134,7 +134,7 @@ class EqualizerAudioProcessorTest {
 
     @Test
     fun `channels are filtered independently`() {
-        val p = processor { setBands(MutableList(EqBands.count) { 0 }.also { it[5] = 10 }) }
+        val p = processor { setBands(applyGains(defaultBands(), MutableList(EqBands.count) { 0 }.also { it[5] = 10 })) }
         val frames = 4_096
         // Left carries a tone, right is silent.
         val input = ByteBuffer.allocate(frames * channels * 2).order(ByteOrder.nativeOrder())
@@ -155,7 +155,7 @@ class EqualizerAudioProcessorTest {
 
     @Test
     fun `a loud signal with every band boosted does not clip`() {
-        val p = processor { setBands(List(EqBands.count) { 12 }) }
+        val p = processor { setBands(applyGains(defaultBands(), List(EqBands.count) { 12 })) }
         val frames = sampleRate / 4
         val out = run(p, sine(1_000.0, frames, amplitude = 0.99))
         var clipped = 0

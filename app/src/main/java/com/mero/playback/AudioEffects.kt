@@ -1,6 +1,5 @@
 package com.mero.playback
 
-import com.mero.data.EqPresets
 
 /**
  * The equalizer settings the UI edits, and the bridge to the DSP applying them.
@@ -33,7 +32,7 @@ class AudioEffects {
 
     var enabled: Boolean = true
         private set
-    var bands: List<Int> = EqPresets.presets.getValue("Flat")
+    var bands: List<EqBand> = defaultBands()
         private set
 
     /** 0f..1f from the UI slider, mapped to −12..+12 dB. */
@@ -55,13 +54,13 @@ class AudioEffects {
         push()
     }
 
-    fun setBands(value: List<Int>) {
+    fun setBands(value: List<EqBand>) {
         bands = value
         push()
     }
 
-    fun setBand(index: Int, gainDb: Int) {
-        bands = bands.toMutableList().also { it[index] = gainDb }
+    fun setBand(index: Int, band: EqBand) {
+        bands = bands.toMutableList().also { it[index] = band }
         push()
     }
 
