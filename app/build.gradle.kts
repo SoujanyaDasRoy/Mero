@@ -1,9 +1,20 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+}
+
+// Signing credentials come from a gitignored keystore.properties beside this
+// file's project root, never from literals here. Absent the file the release
+// build still assembles, just unsigned — enough to check that R8 has not
+// broken anything, not enough to hand to anyone.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
 }
 
 android {
@@ -14,8 +25,8 @@ android {
         applicationId = "com.mero"
         minSdk = 28
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.5.1"
+        versionCode = 10
+        versionName = "1.6.0"
     }
 
     // yt-dlp ships a Python runtime and ffmpeg per architecture, so a universal
@@ -31,8 +42,25 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            // The same keystore has to sign every release: a different one makes
+            // Android treat the APK as a different app, and the only way out for
+            // a friend is uninstalling and losing their library.
+            val store = keystoreProperties.getProperty("storeFile")
+            if (store != null) {
+                storeFile = file(store)
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
+                .takeIf { keystoreProperties.getProperty("storeFile") != null }
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
