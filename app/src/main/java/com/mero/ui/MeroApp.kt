@@ -74,7 +74,6 @@ import com.mero.playback.mediaItemFor
 import com.mero.ui.equalizer.EqualizerScreen
 import com.mero.ui.artist.ArtistScreen
 import com.mero.ui.home.HomeScreen
-import com.mero.ui.importer.ImportScreen
 import com.mero.ui.library.LibraryScreen
 import com.mero.ui.player.LyricsSheet
 import com.mero.ui.player.MiniPlayer
@@ -103,7 +102,6 @@ import kotlinx.serialization.Serializable
 @Serializable object Home
 @Serializable object SearchRoute
 @Serializable object Library
-@Serializable object Import
 @Serializable object Equalizer
 @Serializable object SettingsRoute
 @Serializable object ImportRoute
@@ -314,10 +312,7 @@ private fun MeroContent(
     var booster by remember { mutableStateOf(audioEffects.booster) }
     var reverb by remember { mutableStateOf(audioEffects.reverbIntensity) }
     var spatialMode by remember { mutableStateOf(audioEffects.spatialMode) }
-    var hapticIntensity by remember { mutableStateOf(container.beatHaptics.currentIntensity) }
     var crossfade by remember { mutableStateOf(0.5f) }
-    var importStep by remember { mutableIntStateOf(1) }
-    var importPicked by remember { mutableStateOf(setOf(0, 1, 3)) }
     var radioRequests by remember { mutableStateOf(emptySet<String>()) }
 
     fun refillInfinitePlayback() {
@@ -329,10 +324,21 @@ private fun MeroContent(
         radioRequests = radioRequests + seed
         scope.launch {
             container.radioRepository.radioFor(seed).onSuccess { more ->
-                if (more.isEmpty()) return@onSuccess
-                songsById = songsById + more.associateBy { it.id }
-                connection.addToQueue(more)
-                queue = queue + more
+                // Radio only excludes its own seed, so across refills it will
+                // hand back tracks already sitting in the timeline — including
+                // the one now playing, which then showed up under "next up" as
+                // well. Read the timeline live rather than from `queue`: the
+                // player may have advanced while the request was in flight.
+                val queued = buildSet {
+                    for (i in 0 until controller.mediaItemCount) {
+                        add(controller.getMediaItemAt(i).mediaId)
+                    }
+                }
+                val fresh = more.filterNot { it.id in queued }
+                if (fresh.isEmpty()) return@onSuccess
+                songsById = songsById + fresh.associateBy { it.id }
+                connection.addToQueue(fresh)
+                queue = queue + fresh
                 scope.launch { library.setQueue(queue) }
             }
         }
@@ -665,11 +671,7 @@ private fun MeroContent(
                             playing = playing,
                             buffering = buffering,
                             progress = run {
-                                val d = if (playerDurationSec > 0) {
-                                    playerDurationSec
-                                } else {
-                                    song.durationSec
-                                }
+                                val d = effectiveDuration(playerDurationSec, song)
                                 if (d == 0) 0f else (positionSec.toFloat() / d).coerceIn(0f, 1f)
                             },
                             onExpand = { expanded = true },
@@ -916,24 +918,6 @@ private fun MeroContent(
                     )
                 }
 
-                composable<Import> {
-                    ImportScreen(
-                        step = importStep,
-                        onStepChange = { importStep = it },
-                        picked = importPicked,
-                        onTogglePick = {
-                            importPicked = if (it in importPicked) {
-                                importPicked - it
-                            } else {
-                                importPicked + it
-                            }
-                        },
-                        onBack = { navController.popBackStack() },
-                        onDone = { importStep = 1; navController.popBackStack() },
-                        contentPadding = contentPadding,
-                    )
-                }
-
                 composable<Equalizer> {
                     EqualizerScreen(
                         enabled = eqEnabled,
@@ -956,11 +940,6 @@ private fun MeroContent(
                         onBoosterChange = { booster = it; audioEffects.setBooster(it) },
                         reverb = reverb,
                         onReverbChange = { reverb = it; audioEffects.setReverb(it) },
-                        hapticIntensity = hapticIntensity,
-                        onHapticIntensityChange = {
-                            hapticIntensity = it
-                            container.beatHaptics.setIntensity(it)
-                        },
                         crossfade = crossfade,
                         onCrossfadeChange = { crossfade = it },
                         toggles = toggles,
@@ -1134,8 +1113,11 @@ private fun MeroContent(
                         },
                         onClearCache = {
                             scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                context.cacheDir.resolve("artwork").deleteRecursively()
-                                context.cacheDir.resolve("media").deleteRecursively()
+                                // Through the owning caches, not the filesystem:
+                                // both keep an index that a directory delete
+                                // leaves pointing at files that no longer exist.
+                                coil3.SingletonImageLoader.get(context).diskCache?.clear()
+                                com.mero.playback.MediaCache.clearStreaming()
                             }
                         },
                         onClearDownloads = {
@@ -1223,7 +1205,14 @@ private fun MeroContent(
                             },
                             onNext = { playNext() },
                             onSeek = {
-                                val newPosSec = (it * song.durationSec).toInt()
+                                // Must be the same duration the bar was drawn
+                                // with. It used to seek against the metadata
+                                // duration while displaying the player's, so
+                                // whenever the two disagreed — which is often,
+                                // search metadata is approximate — every seek
+                                // landed somewhere other than where it was
+                                // dropped.
+                                val newPosSec = (it * effectiveDuration(playerDurationSec, song)).toInt()
                                 positionSec = newPosSec
                                 connection.controller?.seekTo(newPosSec * 1000L)
                             },
@@ -1441,6 +1430,13 @@ private fun MeroContent(
         }
     }
 }
+
+/**
+ * How long the track actually is: what the player reports once it knows, and
+ * the catalogue metadata only until then.
+ */
+private fun effectiveDuration(playerDurationSec: Int, song: Song): Int =
+    if (playerDurationSec > 0) playerDurationSec else song.durationSec
 
 private const val FIRST_BATCH = 2
 private const val NEXT_BATCH = 3

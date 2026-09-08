@@ -60,8 +60,6 @@ fun EqualizerScreen(
     onBoosterChange: (Float) -> Unit,
     reverb: Float,
     onReverbChange: (Float) -> Unit,
-    hapticIntensity: Float,
-    onHapticIntensityChange: (Float) -> Unit,
     crossfade: Float,
     onCrossfadeChange: (Float) -> Unit,
     toggles: Map<String, Boolean>,
@@ -173,12 +171,6 @@ fun EqualizerScreen(
                 "${(reverb * 100).roundToInt()}%",
                 reverb,
                 onReverbChange,
-            )
-            LabelledSlider(
-                "Beat haptics",
-                if (hapticIntensity == 0f) "Off" else "${(hapticIntensity * 100).roundToInt()}%",
-                hapticIntensity,
-                onHapticIntensityChange,
             )
             LabelledSlider(
                 "Crossfade",

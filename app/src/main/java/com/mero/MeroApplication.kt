@@ -30,7 +30,6 @@ import com.mero.data.db.MIGRATION_3_4
 import com.mero.data.db.MeroDatabase
 import com.mero.playback.SleepTimer
 import com.mero.playback.AudioEffects
-import com.mero.playback.BeatHaptics
 import com.mero.data.StreamRepository
 import com.mero.data.YtDlpPlayerApi
 import com.zionhuang.innertube.YouTube
@@ -64,7 +63,6 @@ class AppContainer(context: Context) {
 
     /** Shared between the equalizer screen and the playback service. */
     val audioEffects: AudioEffects by lazy { AudioEffects() }
-    val beatHaptics: BeatHaptics by lazy { BeatHaptics(context.applicationContext) }
 
     val lyricsRepository: LyricsRepository by lazy { LyricsRepository() }
 

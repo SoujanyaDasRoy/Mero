@@ -15,3 +15,6 @@ build/
 .idea/
 *.iml
 .DS_Store
+
+# Kotlin compiler daemon session files — build output, not source
+.kotlin/

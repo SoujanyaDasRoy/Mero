@@ -78,6 +78,20 @@ object MediaCache {
         }
     }
 
+    /**
+     * Empties the streaming cache through the live [SimpleCache].
+     *
+     * Deleting the directory instead leaves the cache's index and its content
+     * database describing files that are no longer there, and SimpleCache holds
+     * a lock on that folder for the process's lifetime — so the next read finds
+     * an entry, fails to open it, and playback breaks until the app restarts.
+     */
+    fun clearStreaming() {
+        instance?.let { cache ->
+            cache.keys.toList().forEach { key -> runCatching { cache.removeResource(key) } }
+        }
+    }
+
     /** Drops a partial streaming resource after a CDN/cache read failure. */
     fun invalidateStreaming(videoId: String) {
         instance?.removeResource(videoId)

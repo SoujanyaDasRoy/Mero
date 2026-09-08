@@ -15,9 +15,18 @@ import com.mero.data.isUrlExpired
  * expiry self-heal: a dead URL triggers a retry, which re-resolves here and
  * gets a fresh one. See docs/architecture.md, "Why ResolvingDataSource".
  *
- * The extractor's own request headers are attached to the DataSpec: YouTube's
- * CDN answers 403 to a media request whose User-Agent doesn't match the one
- * extraction was performed with.
+ * The extractor's own request headers are attached to the DataSpec, on the
+ * principle that a media request should look like the extraction that produced
+ * it.
+ *
+ * What is deliberately *not* done here is rewriting the URL's `range=` query
+ * parameter. That was added to work around playback stalling partway through a
+ * track, but the stall was a stale yt-dlp handing out URLs YouTube caps at
+ * about a megabyte — fixed at the source now. Meanwhile the rewrite applied the
+ * seek offset twice, once as `range=` and again as ExoPlayer's own `Range`
+ * header, so the server sliced the file and ExoPlayer then asked for a position
+ * past the end of that slice: HTTP 416, and every seek near the end of a track
+ * failed.
  *
  * `runBlocking` is intentional, not a bug to "fix" in review: this callback
  * runs on ExoPlayer's loading thread, which is designed to block, and the
@@ -36,24 +45,10 @@ class StreamResolver(
             repo.invalidate(videoId)
             stream = runBlocking { repo.resolve(videoId, codec = codec ?: repo.codecPreference) }
         }
-        val resolvedUrl = appendOrUpdateRange(stream.url, dataSpec.position, dataSpec.length)
+        // Only the URI is swapped. The byte offset stays ExoPlayer's business:
+        // it already sends a `Range` header, and googlevideo honours it.
         return dataSpec
-            .withUri(resolvedUrl.toUri())
+            .withUri(stream.url.toUri())
             .withAdditionalHeaders(stream.headers)
-    }
-}
-
-internal fun appendOrUpdateRange(url: String, position: Long, length: Long): String {
-    if ((position <= 0) && (length <= 0)) return url
-    val rangeVal = if (length > 0) {
-        "$position-${position + length - 1}"
-    } else {
-        "$position-"
-    }
-    return if (url.contains("range=")) {
-        url.replace(Regex("range=[^&]+"), "range=$rangeVal")
-    } else {
-        val separator = if (url.contains("?")) "&" else "?"
-        "$url${separator}range=$rangeVal"
     }
 }
