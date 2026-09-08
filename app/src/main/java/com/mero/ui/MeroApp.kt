@@ -62,7 +62,9 @@ import com.mero.MeroApplication
 import com.mero.data.EqPresets
 import com.mero.data.CodecPreference
 import com.mero.data.HomeSection
+import com.mero.data.MERO_SOURCE_URL
 import com.mero.data.SettingsStore
+import com.mero.data.UpdateState
 import com.mero.data.titleCase
 import com.mero.domain.RepeatMode
 import com.mero.domain.SearchItem
@@ -251,6 +253,12 @@ private fun MeroContent(
     val downloadedSongs by library.downloads.collectAsStateWithLifecycle(emptyList())
     val sleepRemaining by container.sleepTimer.remainingSec.collectAsStateWithLifecycle(null)
     val sleepAfterTrack by container.sleepTimer.stopAfterTrack.collectAsStateWithLifecycle(false)
+
+    val updates = container.updateRepository
+    val updateState by updates.state.collectAsStateWithLifecycle()
+    // One quiet check per cold start. It says nothing unless there is
+    // something to say — see UpdateRepository.check.
+    LaunchedEffect(Unit) { updates.check() }
 
     DisposableEffect(Unit) { onDispose { connection.release() } }
 
@@ -830,7 +838,10 @@ private fun MeroContent(
                         onLoadMore = { loadMoreHome() },
                         loadingMore = homeLoadingMore,
                         onSongClick = { song, context -> playFrom(song, context, "Home") },
-                        onSettingsClick = { navController.navigate(SettingsRoute) },
+                        recentlyPlayed = recentlyPlayed,
+                        updateAvailableVersion = (updateState as? UpdateState.Available)
+                            ?.release?.versionName,
+                        onUpdateClick = { navController.navigate(SettingsRoute) },
                         contentPadding = contentPadding,
                     )
                 }
@@ -1318,6 +1329,25 @@ private fun MeroContent(
                         },
                         onBack = { navController.popBackStack() },
                         contentPadding = contentPadding,
+                        appVersion = updates.installedVersion,
+                        updateState = updateState,
+                        onSourceClick = {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, android.net.Uri.parse(MERO_SOURCE_URL))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                            }
+                        },
+                        onCheckUpdates = { scope.launch { updates.check(manual = true) } },
+                        onDownloadUpdate = {
+                            (updateState as? UpdateState.Available)?.let { available ->
+                                scope.launch { updates.download(available.release) }
+                            }
+                        },
+                        onInstallUpdate = {
+                            (updateState as? UpdateState.Downloaded)?.let { updates.install(it.uri) }
+                        },
                     )
                 }
             }

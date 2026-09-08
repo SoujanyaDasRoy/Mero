@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,7 +53,14 @@ fun Artwork(
         contentAlignment = Alignment.Center,
     ) {
         if (url != null) {
-            AsyncImage(model = url, contentDescription = null, modifier = Modifier.size(size.dp))
+            // Cropped, not fitted: YouTube thumbnails are 16:9 and every one
+            // of them was being letterboxed inside a square with grey bars.
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(size.dp),
+            )
         } else {
             Icon(
                 icon,

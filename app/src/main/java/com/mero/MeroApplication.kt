@@ -36,6 +36,7 @@ import com.mero.data.db.MeroDatabase
 import com.mero.playback.SleepTimer
 import com.mero.playback.AudioEffects
 import com.mero.data.StreamRepository
+import com.mero.data.UpdateRepository
 import com.mero.data.YtDlpPlayerApi
 import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.models.SongItem
@@ -68,6 +69,7 @@ class AppContainer(context: Context) {
     val artistRepository: ArtistRepository by lazy { ArtistRepository() }
     val importRepository: ImportRepository by lazy { ImportRepository(searchRepository) }
     val radioRepository: RadioRepository by lazy { RadioRepository() }
+    val updateRepository: UpdateRepository by lazy { UpdateRepository(context.applicationContext) }
 
     /** Shared between the equalizer screen and the playback service. */
     val audioEffects: AudioEffects by lazy { AudioEffects() }

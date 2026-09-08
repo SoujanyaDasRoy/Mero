@@ -1,6 +1,8 @@
 package com.mero.ui.home
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -18,9 +20,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,12 +45,24 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import com.mero.R
 import com.mero.data.HomeSection
 import com.mero.domain.Song
 import com.mero.ui.components.Artwork
+import java.util.Calendar
 
+/**
+ * Home, with a shape instead of a stack.
+ *
+ * Every shelf used to be rendered identically — same card size, same heading
+ * weight, one after another — so the screen had no entry point. Nothing was
+ * first, nothing was yours, and the fastest way back to a song you played an
+ * hour ago was to search for it again.
+ *
+ * Now the top of the screen is about this listener (what they were playing,
+ * addressed by time of day), the first shelf is given room to be a feature,
+ * and discovery continues below it endlessly as before.
+ */
 @Composable
 fun HomeScreen(
     sections: List<HomeSection>,
@@ -56,7 +72,9 @@ fun HomeScreen(
     onLoadMore: () -> Unit,
     loadingMore: Boolean,
     onSongClick: (Song, List<Song>) -> Unit,
-    onSettingsClick: () -> Unit,
+    recentlyPlayed: List<Song>,
+    updateAvailableVersion: String?,
+    onUpdateClick: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -80,7 +98,7 @@ fun HomeScreen(
         Row(
             Modifier
                 .fillMaxWidth()
-                .height(64.dp)
+                .height(68.dp)
                 .padding(start = 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -88,22 +106,32 @@ fun HomeScreen(
                 painter = painterResource(R.drawable.mero_logo),
                 contentDescription = null,
                 modifier = Modifier
-                    .size(30.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(9.dp)),
             )
-            Text(
-                "Mero",
+            Column(
                 Modifier
                     .weight(1f)
-                    .padding(start = 10.dp),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Medium,
-            )
+                    .padding(start = 12.dp),
+            ) {
+                Text(
+                    greeting(),
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    "What are we listening to?",
+                    fontSize = 12.sp,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            // No settings gear here: the bottom bar already has one, and two
+            // ways into the same screen in one viewport is just noise.
             IconButton(onClick = onRetry) {
                 Icon(Icons.Rounded.Refresh, "Refresh", tint = scheme.onSurfaceVariant)
-            }
-            IconButton(onClick = onSettingsClick) {
-                Icon(Icons.Rounded.Settings, "Settings", tint = scheme.onSurfaceVariant)
             }
         }
 
@@ -131,49 +159,33 @@ fun HomeScreen(
                 state = listState,
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
-                for (section in sections) {
+                // Nothing else tells anyone a new build exists, so the one
+                // place everybody opens has to.
+                item {
+                    AnimatedVisibility(updateAvailableVersion != null) {
+                        UpdateBanner(updateAvailableVersion.orEmpty(), onUpdateClick)
+                    }
+                }
+
+                if (recentlyPlayed.isNotEmpty()) {
+                    item(key = "jump-back-in") {
+                        QuickPicks(
+                            songs = recentlyPlayed.take(6),
+                            onSongClick = { song -> onSongClick(song, recentlyPlayed) },
+                        )
+                    }
+                }
+
+                sections.forEachIndexed { index, section ->
                     item(key = section.title) {
-                        Column {
-                            Text(
-                                section.title,
-                                Modifier.padding(start = 16.dp, top = 12.dp, bottom = 10.dp),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                            )
-                            Row(
-                                Modifier
-                                    .horizontalScroll(rememberScrollState())
-                                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                section.songs.forEach { song ->
-                                    Column(
-                                        Modifier
-                                            .width(150.dp)
-                                            .clickable { onSongClick(song, section.songs) },
-                                    ) {
-                                        Artwork(song.thumbnailUrl, size = 150, radius = 12)
-                                        Text(
-                                            song.title,
-                                            Modifier.padding(top = 8.dp),
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                        Text(
-                                            song.artist,
-                                            fontSize = 12.sp,
-                                            color = scheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    }
-                                }
-                            }
+                        if (index == 0) {
+                            FeatureShelf(section, onSongClick)
+                        } else {
+                            Shelf(section, onSongClick)
                         }
                     }
                 }
+
                 item {
                     if (loadingMore) {
                         Box(
@@ -196,3 +208,218 @@ fun HomeScreen(
         }
     }
 }
+
+/**
+ * The songs this person actually played, two to a row.
+ *
+ * A wide short tile rather than another square card: these are known
+ * quantities being returned to, not things to browse, so the title matters
+ * more than the artwork and the row can be half the height.
+ */
+@Composable
+private fun QuickPicks(songs: List<Song>, onSongClick: (Song) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Column(Modifier.padding(top = 4.dp)) {
+        ShelfTitle("Jump back in")
+        songs.chunked(2).forEach { pair ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                pair.forEach { song ->
+                    Row(
+                        Modifier
+                            .weight(1f)
+                            .height(56.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(scheme.surfaceContainerHigh)
+                            .clickable { onSongClick(song) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Artwork(song.thumbnailUrl, size = 56, radius = 10)
+                        Text(
+                            song.title,
+                            Modifier.padding(horizontal = 10.dp),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                // Keeps a lone last item at half width instead of stretching it
+                // across the row, where it would read as a different component.
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+/** The first shelf, given the room to look like the front of the app. */
+@Composable
+private fun FeatureShelf(section: HomeSection, onSongClick: (Song, List<Song>) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Column(Modifier.padding(top = 8.dp)) {
+        ShelfTitle(section.title, subtitle = "Fresh every time you open Mero")
+        Row(
+            Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            section.songs.forEach { song ->
+                Column(
+                    Modifier
+                        .width(196.dp)
+                        .clickable { onSongClick(song, section.songs) },
+                ) {
+                    Box {
+                        Artwork(song.thumbnailUrl, size = 196, radius = 16)
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(10.dp)
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(19.dp))
+                                .background(scheme.primary),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Rounded.PlayArrow,
+                                contentDescription = null,
+                                tint = scheme.onPrimary,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                    Text(
+                        song.title,
+                        Modifier.padding(top = 10.dp),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        song.artist,
+                        fontSize = 12.sp,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Every shelf after the first. */
+@Composable
+private fun Shelf(section: HomeSection, onSongClick: (Song, List<Song>) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Column {
+        ShelfTitle(section.title)
+        Row(
+            Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            section.songs.forEach { song ->
+                Column(
+                    Modifier
+                        .width(146.dp)
+                        .clickable { onSongClick(song, section.songs) },
+                ) {
+                    Artwork(song.thumbnailUrl, size = 146, radius = 14)
+                    Text(
+                        song.title,
+                        Modifier.padding(top = 8.dp),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        song.artist,
+                        fontSize = 12.sp,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShelfTitle(title: String, subtitle: String? = null) {
+    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 10.dp)) {
+        Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        if (subtitle != null) {
+            Text(
+                subtitle,
+                Modifier.padding(top = 2.dp),
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun UpdateBanner(version: String, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        Modifier
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(scheme.primaryContainer)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Rounded.SystemUpdate,
+            null,
+            tint = scheme.onPrimaryContainer,
+            modifier = Modifier.size(20.dp),
+        )
+        Column(
+            Modifier
+                .weight(1f)
+                .padding(start = 12.dp),
+        ) {
+            Text(
+                "Mero $version is out",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = scheme.onPrimaryContainer,
+            )
+            Text(
+                "Tap to update",
+                fontSize = 12.sp,
+                color = scheme.onPrimaryContainer.copy(alpha = 0.8f),
+            )
+        }
+    }
+}
+
+/**
+ * Time-of-day greeting. Boundaries chosen for when people are awake rather
+ * than by the clock's quarters: "good evening" at five, not at six, and
+ * anything past ten at night is still night rather than a fresh morning.
+ */
+internal fun greetingFor(hour: Int): String = when (hour) {
+    in 5..11 -> "Good morning"
+    in 12..16 -> "Good afternoon"
+    in 17..21 -> "Good evening"
+    else -> "Still up?"
+}
+
+private fun greeting(): String = greetingFor(Calendar.getInstance().get(Calendar.HOUR_OF_DAY))
