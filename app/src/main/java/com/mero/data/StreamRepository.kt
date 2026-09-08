@@ -200,20 +200,38 @@ fun isUrlExpired(
     return nowSec >= (expireSec - thresholdSec)
 }
 
-/*
- * There was an InnerTubePlayerApi here, used as a "fast path" ahead of yt-dlp
- * via a FallbackPlayerApi wrapper. Both are deleted.
+/**
+ * Tries [primary] and falls back to [fallback] when it cannot produce a
+ * playable result.
  *
- * The anonymous /player endpoint answered HTTP 400 for every videoId tried —
- * a 100% failure rate, not an occasional miss — so the wrapper's only effect
- * was a guaranteed-wasted round trip before every single extraction. YouTube
- * requires a PO token there now, which is exactly the thing yt-dlp maintains
- * and the vendored innertube does not.
+ * There was a wrapper like this before and it made playback worse, so the
+ * difference matters. That one treated "the primary returned some formats" as
+ * success. Its primary was the anonymous `/player` with a client YouTube
+ * throttles, so it returned formats enthusiastically and the URLs died a
+ * minute into every track — while the fallback, which worked, was never
+ * reached because nothing had thrown.
  *
- * If upstream ever ships PO token support, this is worth trying again — behind
- * a check that it actually returns playable formats, not merely that the call
- * did not throw.
+ * The fix is not in this class. It is that a primary must not report success
+ * until it has checked its own output is usable; see
+ * [VisionOsPlayerApi.formatsFor], which fetches the tail of the file before
+ * returning. This wrapper only has to route the failure.
  */
+class FallbackPlayerApi(
+    private val primary: PlayerApi,
+    private val fallback: PlayerApi,
+) : PlayerApi {
+    override suspend fun formatsFor(videoId: String): List<AudioFormat> {
+        val started = System.currentTimeMillis()
+        return runCatching { primary.formatsFor(videoId) }
+            .onSuccess {
+                Log.i(TAG, "resolved $videoId via fast path in ${System.currentTimeMillis() - started}ms")
+            }
+            .getOrElse { error ->
+                Log.w(TAG, "fast path unusable for $videoId (${error.message}); using yt-dlp")
+                fallback.formatsFor(videoId)
+            }
+    }
+}
 
 /**
  * Escape hatch: resolves stream formats via an embedded yt-dlp instead of

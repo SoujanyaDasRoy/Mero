@@ -19,10 +19,12 @@ import com.mero.data.HomeRepository
 import com.mero.data.ArtistRepository
 import com.mero.data.CodecPreference
 import com.mero.data.ImportRepository
+import com.mero.data.FallbackPlayerApi
 import com.mero.data.InnerTubeSearchApi
 import com.mero.data.LibraryRepository
 import com.mero.data.RadioRepository
 import com.mero.data.SearchRepository
+import com.mero.data.VisionOsPlayerApi
 import com.mero.data.LyricsRepository
 import com.mero.data.db.MIGRATION_1_2
 import com.mero.data.db.MIGRATION_2_3
@@ -72,7 +74,7 @@ class AppContainer(context: Context) {
     val ytDlpApi: YtDlpPlayerApi by lazy { YtDlpPlayerApi(context.applicationContext) }
 
     val streamRepository: StreamRepository by lazy {
-        StreamRepository(ytDlpApi)
+        StreamRepository(FallbackPlayerApi(VisionOsPlayerApi(), ytDlpApi))
     }
 
     /**
