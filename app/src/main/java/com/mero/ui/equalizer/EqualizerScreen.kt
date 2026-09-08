@@ -62,6 +62,7 @@ fun EqualizerScreen(
     responseDb: FloatArray,
     hapticIntensity: Float,
     onHapticIntensityChange: (Float) -> Unit,
+    outputRoute: com.mero.playback.OutputRoute,
     crossfeed: Float,
     onCrossfeedChange: (Float) -> Unit,
     speed: Float,
@@ -178,7 +179,7 @@ fun EqualizerScreen(
 
             EqSwitch(
                 "Loudness normalization",
-                "A fixed lift for quiet tracks. Per-track matching is not built yet.",
+                "Matches every track to the same perceived level (EBU R128), so a quiet recording does not disappear after a loud one.",
                 toggles["norm"] == true,
             ) { onToggle("norm", it) }
             LabelledSlider(

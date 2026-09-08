@@ -55,6 +55,7 @@ class MeroPlaybackService : MediaSessionService() {
                     this,
                     container.audioEffects.processor,
                     container.audioEffects.crossfeedProcessor,
+                    container.audioEffects.dynamics,
                     container.audioEffects.spectrum,
                 ),
             )

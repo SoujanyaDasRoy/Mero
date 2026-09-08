@@ -25,6 +25,9 @@ class AudioEffects {
     /** Widens headphone listening out of the middle of the head. */
     val crossfeedProcessor = CrossfeedAudioProcessor()
 
+    /** Loudness matching and the limiter that makes it safe. */
+    val dynamics = DynamicsAudioProcessor()
+
     /** Reads the finished signal, for the spectrum on the EQ screen. */
     val spectrum = SpectrumAnalyser()
 
@@ -69,7 +72,7 @@ class AudioEffects {
 
     fun setNormalization(value: Boolean) {
         normalization = value
-        push()
+        dynamics.setNormalisation(value)
     }
 
     fun setCrossfeed(value: Float) {
@@ -79,19 +82,9 @@ class AudioEffects {
 
     private fun preampDb(): Float = (preamp * 24f) - 12f
 
-    /**
-     * Loudness normalization is a fixed lift for now, and says so.
-     *
-     * Evening out volume *between tracks* means measuring each one — EBU R128
-     * — which is phase 3 of the equalizer plan. Until then this is a modest
-     * uniform boost, and the headroom the processor reserves covers it, so it
-     * cannot clip.
-     */
-    private fun normalizationDb(): Float = if (normalization) 3f else 0f
-
     private fun push() {
         processor.setEnabled(enabled)
         processor.setBands(bands)
-        processor.setPreampDb(preampDb() + normalizationDb())
+        processor.setPreampDb(preampDb())
     }
 }

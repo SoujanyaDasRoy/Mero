@@ -18,6 +18,7 @@ class MeroRenderersFactory(
     context: Context,
     private val equalizer: EqualizerAudioProcessor,
     private val crossfeed: CrossfeedAudioProcessor,
+    private val dynamics: DynamicsAudioProcessor,
     private val spectrum: SpectrumAnalyser,
 ) : DefaultRenderersFactory(context) {
 
@@ -33,8 +34,11 @@ class MeroRenderersFactory(
             // Equalizer first — crossfeed should blend the tone the listener
             // actually chose. The spectrum taps last, so the bars show the
             // finished signal rather than an intermediate one.
+            // Tone, then space, then level, then measurement. The limiter has
+            // to see everything the others did, and the spectrum has to show
+            // what actually leaves.
             .setAudioProcessors(
-                arrayOf<AudioProcessor>(equalizer, crossfeed, spectrum.asProcessor()),
+                arrayOf<AudioProcessor>(equalizer, crossfeed, dynamics, spectrum.asProcessor()),
             )
             // Float output is deliberately off. The equalizer works in 16-bit
             // PCM, and asking the sink for float would only add a conversion

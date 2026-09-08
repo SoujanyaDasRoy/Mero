@@ -353,9 +353,31 @@ private fun MeroContent(
     // ExoPlayer resamples natively, so this is a setting rather than a stage.
     var playbackSpeed by remember { mutableStateOf(container.settings.float("speed", 1f)) }
     var eqEnabled by remember { mutableStateOf(true) }
+    // The equalizer belongs to the output it was dialled in for. A curve that
+    // rescues the phone speaker sounds bloated on headphones, so each route
+    // keeps its own and they swap over when the output does.
+    val outputRoute by container.outputRoute.route.collectAsStateWithLifecycle()
     var preset by remember { mutableStateOf("Flat") }
     var bands by remember { mutableStateOf(EqPresets.presets.getValue("Flat")) }
     var preamp by remember { mutableStateOf(audioEffects.preamp) }
+
+    LaunchedEffect(outputRoute) {
+        val store = container.settings
+        val key = outputRoute.key
+        preset = store.string(SettingsStore.presetKey(key), "Flat")
+        bands = store.ints(SettingsStore.bandsKey(key), EqPresets.presets.getValue("Flat"))
+        preamp = store.float(SettingsStore.preampKey(key), 0.5f)
+        audioEffects.setBands(bands)
+        audioEffects.setPreamp(preamp)
+    }
+
+    fun saveEq() {
+        val store = container.settings
+        val key = outputRoute.key
+        store.putString(SettingsStore.presetKey(key), preset)
+        store.putInts(SettingsStore.bandsKey(key), bands)
+        store.putFloat(SettingsStore.preampKey(key), preamp)
+    }
     var radioRequests by remember { mutableStateOf(emptySet<String>()) }
 
     /** Leaves a screen the player sent us to, putting the player back as it was. */
@@ -1029,6 +1051,7 @@ private fun MeroContent(
                     EqualizerScreen(
                         spectrumLevels = levels,
                         responseDb = responseDb,
+                        outputRoute = outputRoute,
                         crossfeed = crossfeed,
                         onCrossfeedChange = {
                             crossfeed = it
@@ -1054,15 +1077,17 @@ private fun MeroContent(
                             preset = name
                             bands = EqPresets.presets.getValue(name)
                             audioEffects.setBands(bands)
+                            saveEq()
                         },
                         bands = bands,
                         onBandChange = { index, value ->
                             bands = bands.toMutableList().also { it[index] = value }
                             preset = "Custom"
                             audioEffects.setBand(index, value)
+                            saveEq()
                         },
                         preamp = preamp,
-                        onPreampChange = { preamp = it; audioEffects.setPreamp(it) },
+                        onPreampChange = { preamp = it; audioEffects.setPreamp(it); saveEq() },
                         toggles = toggles,
                         onToggle = { key, value ->
                             onToggle(key, value)

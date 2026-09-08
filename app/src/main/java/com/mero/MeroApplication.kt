@@ -26,6 +26,7 @@ import com.mero.data.RadioRepository
 import com.mero.data.SearchRepository
 import com.mero.data.SettingsStore
 import com.mero.playback.BeatHaptics
+import com.mero.playback.OutputRouteWatcher
 import com.mero.data.VisionOsPlayerApi
 import com.mero.data.LyricsRepository
 import com.mero.data.db.MIGRATION_1_2
@@ -63,6 +64,7 @@ class AppContainer(context: Context) {
     val homeRepository: HomeRepository by lazy { HomeRepository() }
     val settings: SettingsStore by lazy { SettingsStore(context.applicationContext) }
     val beatHaptics: BeatHaptics by lazy { BeatHaptics(context.applicationContext) }
+    val outputRoute: OutputRouteWatcher by lazy { OutputRouteWatcher(context.applicationContext) }
     val artistRepository: ArtistRepository by lazy { ArtistRepository() }
     val importRepository: ImportRepository by lazy { ImportRepository(searchRepository) }
     val radioRepository: RadioRepository by lazy { RadioRepository() }
@@ -151,6 +153,7 @@ class MeroApplication : Application(), SingletonImageLoader.Factory {
         // handful of guessed tracks here used to run several extractions at
         // once and made the first real play slower, not faster.
         CoroutineScope(Dispatchers.IO).launch { container.ytDlpApi.prepare() }
+        container.outputRoute.start()
     }
 
     /**

@@ -67,6 +67,11 @@ class SettingsStore(context: Context) {
         const val EQ_ENABLED = "eq_enabled"
         const val EQ_PRESET = "eq_preset"
         const val EQ_BANDS = "eq_bands"
+
+        /** Equalizer settings are stored per output route, not globally. */
+        fun bandsKey(route: String) = "eq_bands_$route"
+        fun presetKey(route: String) = "eq_preset_$route"
+        fun preampKey(route: String) = "eq_preamp_$route"
         const val PREAMP = "preamp"
         const val BOOSTER = "booster"
         const val REVERB = "reverb"
