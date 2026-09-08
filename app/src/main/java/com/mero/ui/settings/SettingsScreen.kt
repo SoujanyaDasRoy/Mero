@@ -379,10 +379,10 @@ fun SettingsScreen(
                     "Updates",
                     "Delivered through Obtainium",
                 ) {
-                    Text("1.6.0", fontSize = 13.sp, color = scheme.onSurfaceVariant)
+                    Text("1.7.0", fontSize = 13.sp, color = scheme.onSurfaceVariant)
                 }
                 Text(
-                    "Mero 1.6.0 · GPL-3.0 · updates via Obtainium",
+                    "Mero 1.7.0 · GPL-3.0 · updates via Obtainium",
                     Modifier.padding(20.dp),
                     fontSize = 12.sp,
                     lineHeight = 18.sp,
