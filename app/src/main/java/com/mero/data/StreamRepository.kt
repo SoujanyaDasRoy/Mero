@@ -9,8 +9,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
@@ -54,6 +61,15 @@ class StreamRepository(private val api: PlayerApi) {
      */
     private val cache = ConcurrentHashMap<String, Cached>()
 
+    /** Extractions currently running, so concurrent callers share one. */
+    private val inFlight = ConcurrentHashMap<String, Deferred<ResolvedStream>>()
+
+    /** One extraction at a time. See [inFlight] for why. */
+    private val extractionSlot = Semaphore(1)
+
+    /** Outlives any single caller, so one giving up doesn't cancel the rest. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /**
      * Never cache or persist the result — the URL expires in roughly six hours.
      * Callers resolve fresh at playback-open time. See CLAUDE.md constraint 2
@@ -71,26 +87,65 @@ class StreamRepository(private val api: PlayerApi) {
             return it
         }
 
-        val formats = withTimeout(EXTRACT_TIMEOUT_MS) { api.formatsFor(videoId) }
-        val chosen = selectAudioFormat(formats, quality, codec)
-            ?: error("No playable audio format for $videoId")
-        val stream = ResolvedStream(
-            url = chosen.url,
-            headers = chosen.headers,
-            bitrateKbps = chosen.bitrate / 1000,
-            codec = chosen.codecLabel(),
-        ).also { cache[key] = Cached(it, System.currentTimeMillis()) }
-
+        val stream = inFlight(key, videoId, quality, codec).await()
         if (forUi) _lastResolved.value = stream
         return stream
     }
 
     /**
-     * Warms a track's URL in memory asynchronously so playback starts in <= 10ms on tap.
+     * One extraction per key, however many callers ask for it.
+     *
+     * Without this, N concurrent requests for the same track each miss the
+     * cache (which is only written on completion) and each spawn their own
+     * yt-dlp subprocess. Observed on device: the same videoId extracted three
+     * times concurrently, 39s / 41s / 43s, where one alone takes about eight.
+     *
+     * The async runs in the repository's own scope, not the caller's, so a
+     * caller giving up does not cancel the extraction everyone else is
+     * awaiting.
+     */
+    private fun inFlight(
+        key: String,
+        videoId: String,
+        quality: Quality,
+        codec: CodecPreference,
+    ): Deferred<ResolvedStream> = inFlight.computeIfAbsent(key) {
+        scope.async {
+            try {
+                // yt-dlp is a Python subprocess, not a socket. Running several
+                // at once does not overlap latency, it multiplies it: the
+                // speculative prefetches turned a ~8s extraction into ~42s and
+                // starved the track the user had actually tapped.
+                extractionSlot.withPermit {
+                    cached(key) ?: run {
+                        val formats = withTimeout(EXTRACT_TIMEOUT_MS) { api.formatsFor(videoId) }
+                        val chosen = selectAudioFormat(formats, quality, codec)
+                            ?: error("No playable audio format for $videoId")
+                        ResolvedStream(
+                            url = chosen.url,
+                            headers = chosen.headers,
+                            bitrateKbps = chosen.bitrate / 1000,
+                            codec = chosen.codecLabel(),
+                        ).also { cache[key] = Cached(it, System.currentTimeMillis()) }
+                    }
+                }
+            } finally {
+                inFlight.remove(key)
+            }
+        }
+    }
+
+    /**
+     * Warms a track's URL so a later tap plays from memory.
+     *
+     * Speculative, and treated as such: if an extraction is already running it
+     * gives up rather than queueing. A guess about what might be played next
+     * must never delay the track someone actually pressed.
      */
     suspend fun prefetch(videoId: String, quality: Quality = Quality.HIGH) {
         val key = "$videoId:${quality.name}:${codecPreference.name}"
         if (cached(key) != null) return
+        if (extractionSlot.availablePermits == 0) return
         runCatching {
             resolve(videoId, quality, codec = codecPreference, forUi = false)
         }.onFailure { Log.w(TAG, "prefetch of $videoId skipped: ${it.message}") }
@@ -145,56 +200,20 @@ fun isUrlExpired(
     return nowSec >= (expireSec - thresholdSec)
 }
 
-/**
- * Backed by innertube's anonymous [YouTube.player] — fast (~200ms) direct API call.
+/*
+ * There was an InnerTubePlayerApi here, used as a "fast path" ahead of yt-dlp
+ * via a FallbackPlayerApi wrapper. Both are deleted.
+ *
+ * The anonymous /player endpoint answered HTTP 400 for every videoId tried —
+ * a 100% failure rate, not an occasional miss — so the wrapper's only effect
+ * was a guaranteed-wasted round trip before every single extraction. YouTube
+ * requires a PO token there now, which is exactly the thing yt-dlp maintains
+ * and the vendored innertube does not.
+ *
+ * If upstream ever ships PO token support, this is worth trying again — behind
+ * a check that it actually returns playable formats, not merely that the call
+ * did not throw.
  */
-object InnerTubePlayerApi : PlayerApi {
-    private val defaultHeaders = mapOf(
-        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer" to "https://music.youtube.com/",
-    )
-
-    override suspend fun formatsFor(videoId: String): List<AudioFormat> {
-        val response = YouTube.player(videoId).getOrThrow()
-        val streamingData = response.streamingData
-            ?: error("No streamingData for $videoId (playability: ${response.playabilityStatus.status})")
-        val formats = streamingData.adaptiveFormats.mapNotNull { format ->
-            val url = format.url ?: return@mapNotNull null
-            val isAudioOnly = format.mimeType.startsWith("audio/")
-            if (!isAudioOnly) return@mapNotNull null
-            AudioFormat(
-                itag = format.itag,
-                url = url,
-                mimeType = format.mimeType,
-                bitrate = format.bitrate,
-                headers = defaultHeaders,
-            )
-        }
-        if (formats.isEmpty()) {
-            error("No audio formats returned by InnerTube for $videoId")
-        }
-        return formats
-    }
-}
-
-/**
- * Combines two [PlayerApi] implementations: tries primary first for instant loading,
- * falling back to secondary if primary fails or returns no playable formats.
- */
-class FallbackPlayerApi(
-    private val primary: PlayerApi,
-    private val fallback: PlayerApi,
-) : PlayerApi {
-    override suspend fun formatsFor(videoId: String): List<AudioFormat> {
-        return runCatching {
-            val formats = primary.formatsFor(videoId)
-            if (formats.isNotEmpty()) formats else error("Primary player API returned empty formats")
-        }.getOrElse { primaryError ->
-            Log.w(TAG, "Primary player API failed for $videoId (${primaryError.message}); using fallback")
-            fallback.formatsFor(videoId)
-        }
-    }
-}
 
 /**
  * Escape hatch: resolves stream formats via an embedded yt-dlp instead of
@@ -230,23 +249,39 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
         runCatching { YoutubeDL.init(appContext) }
             .onFailure { Log.e(TAG, "yt-dlp init failed", it) }
 
-        // Once a day, not once a launch. The update rewrites the same directory
-        // getInfo reads from, so doing it on every start meant the first play
-        // after opening the app could race a half-written binary and hang.
         val prefs = appContext.getSharedPreferences("ytdlp", Context.MODE_PRIVATE)
         val last = prefs.getLong(KEY_LAST_UPDATE, 0L)
-        if (last == 0L) {
-            // On first launch after install, mark as updated so we immediately
-            // use the working bundled binary without blocking first play on a
-            // 15MB background download from GitHub.
-            prefs.edit().putLong(KEY_LAST_UPDATE, System.currentTimeMillis()).apply()
-            return@withContext
-        }
         if (System.currentTimeMillis() - last < UPDATE_INTERVAL_MS) return@withContext
-        runCatching { YoutubeDL.updateYoutubeDL(appContext) }
-            .onSuccess { prefs.edit().putLong(KEY_LAST_UPDATE, System.currentTimeMillis()).apply() }
-            .onFailure { Log.w(TAG, "yt-dlp update skipped: ${it.message}") }
+
+        // Not housekeeping — the difference between playing and not.
+        //
+        // A stale yt-dlp does not fail loudly. It extracts fine and returns
+        // URLs that look normal, but YouTube serves those a hard cap of about
+        // one megabyte: verified against a live URL, `Range: bytes=0-1000000`
+        // returns 206 and every range ending past that returns 403, at any
+        // start offset. So a track begins and then dies, or 403s outright.
+        // Only the current yt-dlp negotiates a client that gets uncapped URLs.
+        //
+        // This once wrote the timestamp on first launch *without* updating, to
+        // keep a 15MB download off the first play. That optimisation traded a
+        // working app for a fast one: a fresh install ran the stale bundled
+        // binary for at least a day.
+        //
+        // Held under [binaryLock], so an extraction can never read a
+        // half-written binary — and a play that arrives mid-update waits for
+        // it rather than extracting with the one being replaced.
+        binaryLock.withLock {
+            runCatching { YoutubeDL.updateYoutubeDL(appContext) }
+                .onSuccess {
+                    Log.i(TAG, "yt-dlp updated")
+                    prefs.edit().putLong(KEY_LAST_UPDATE, System.currentTimeMillis()).apply()
+                }
+                .onFailure { Log.w(TAG, "yt-dlp update failed, using bundled binary: ${it.message}") }
+        }
     }
+
+    /** Serialises binary replacement against the extractions that read it. */
+    private val binaryLock = Mutex()
 
     private companion object {
         const val KEY_LAST_UPDATE = "last_update_ms"
@@ -263,6 +298,7 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
         // yt-dlp writes advisories (e.g. "your version is older than 90 days")
         // to stderr, and the wrapper turns any stderr into an exception.
         request.addOption("--no-warnings")
+        request.addOption("--quiet")
         // Skip HLS, DASH and translated subs manifests to avoid extra HTTP round-trips
         // to YouTube servers during stream extraction.
         request.addOption("--extractor-args", "youtube:skip=hls,dash,translated_subs")
@@ -279,7 +315,7 @@ class YtDlpPlayerApi(private val appContext: Context) : PlayerApi {
         // and a plain blocking call ignores coroutine cancellation entirely —
         // which would make resolve()'s timeout decorative. Interrupting the
         // thread makes Process.waitFor throw, so the timeout is real.
-        val info = runInterruptible { YoutubeDL.getInfo(request) }
+        val info = binaryLock.withLock { runInterruptible { YoutubeDL.getInfo(request) } }
         Log.i(TAG, "extracted $videoId in ${System.currentTimeMillis() - started}ms")
         val fallbackHeaders = info.httpHeaders.orEmpty()
         val audio = info.formats.orEmpty().mapNotNull { format ->

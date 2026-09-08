@@ -18,9 +18,7 @@ import com.mero.playback.StreamResolver
 import com.mero.data.HomeRepository
 import com.mero.data.ArtistRepository
 import com.mero.data.CodecPreference
-import com.mero.data.FallbackPlayerApi
 import com.mero.data.ImportRepository
-import com.mero.data.InnerTubePlayerApi
 import com.mero.data.InnerTubeSearchApi
 import com.mero.data.LibraryRepository
 import com.mero.data.RadioRepository
@@ -76,7 +74,7 @@ class AppContainer(context: Context) {
     val ytDlpApi: YtDlpPlayerApi by lazy { YtDlpPlayerApi(context.applicationContext) }
 
     val streamRepository: StreamRepository by lazy {
-        StreamRepository(FallbackPlayerApi(InnerTubePlayerApi, ytDlpApi))
+        StreamRepository(ytDlpApi)
     }
 
     /**
@@ -145,20 +143,10 @@ class MeroApplication : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         initInnerTube()
-        // Warm yt-dlp off the playback path and pre-resolve startup tracks so first play takes <= 5ms
-        CoroutineScope(Dispatchers.IO).launch {
-            container.ytDlpApi.prepare()
-            runCatching {
-                val startupSeeds = container.homeRepository.seeds
-                if (startupSeeds.isNotEmpty()) {
-                    val searchResult = YouTube.search(startupSeeds.first(), YouTube.SearchFilter.FILTER_SONG).getOrNull()
-                    val songs = searchResult?.items?.filterIsInstance<SongItem>()?.take(4).orEmpty()
-                    songs.forEach { song ->
-                        launch { container.streamRepository.prefetch(song.id) }
-                    }
-                }
-            }
-        }
+        // Warm yt-dlp off the playback path, and nothing else. Pre-resolving a
+        // handful of guessed tracks here used to run several extractions at
+        // once and made the first real play slower, not faster.
+        CoroutineScope(Dispatchers.IO).launch { container.ytDlpApi.prepare() }
     }
 
     /**

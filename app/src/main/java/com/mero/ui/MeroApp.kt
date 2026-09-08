@@ -568,17 +568,11 @@ private fun MeroContent(
         }
     }
 
-    // Pre-resolve top home screen tracks in parallel when home sections render
-    LaunchedEffect(homeSections) {
-        val topHomeSongs = homeSections.flatMap { it.songs }.take(8)
-        if (topHomeSongs.isNotEmpty()) {
-            withContext(Dispatchers.IO) {
-                topHomeSongs.forEach { song ->
-                    launch { container.streamRepository.prefetch(song.id) }
-                }
-            }
-        }
-    }
+    // No speculative pre-resolution of the home shelves here, deliberately.
+    // Extraction is a yt-dlp subprocess, so guessing at eight tracks costs
+    // eight of them to maybe save one wait — and on device it starved the
+    // track actually tapped, taking extraction from ~8s to ~42s. The next
+    // track in the queue is the one prefetch that reliably pays off.
 
     // Resolve the next track's URL while the current one plays, so skipping is instant
     val nextId = queue.firstOrNull()?.id
@@ -794,18 +788,6 @@ private fun MeroContent(
                                 isSearching = false
                             },
                         )
-                    }
-
-                    // Pre-resolve top search result songs in parallel so tapping any result loads in <= 10ms
-                    LaunchedEffect(results) {
-                        val topResultSongs = results.mapNotNull { it.song }.take(8)
-                        if (topResultSongs.isNotEmpty()) {
-                            withContext(Dispatchers.IO) {
-                                topResultSongs.forEach { song ->
-                                    launch { container.streamRepository.prefetch(song.id) }
-                                }
-                            }
-                        }
                     }
 
                     fun loadMoreResults() {
