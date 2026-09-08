@@ -22,7 +22,10 @@ class AudioEffects {
     /** The stage installed in the player's audio pipeline. */
     val processor = EqualizerAudioProcessor()
 
-    /** Reads the post-equalizer signal, for the spectrum on the EQ screen. */
+    /** Widens headphone listening out of the middle of the head. */
+    val crossfeedProcessor = CrossfeedAudioProcessor()
+
+    /** Reads the finished signal, for the spectrum on the EQ screen. */
     val spectrum = SpectrumAnalyser()
 
     var enabled: Boolean = true
@@ -34,6 +37,10 @@ class AudioEffects {
     var preamp: Float = 0.5f
         private set
     var normalization: Boolean = false
+        private set
+
+    /** 0f..1f. Off by default: it is a taste, not a correction. */
+    var crossfeed: Float = 0f
         private set
 
     init {
@@ -63,6 +70,11 @@ class AudioEffects {
     fun setNormalization(value: Boolean) {
         normalization = value
         push()
+    }
+
+    fun setCrossfeed(value: Float) {
+        crossfeed = value.coerceIn(0f, 1f)
+        crossfeedProcessor.setStrength(crossfeed)
     }
 
     private fun preampDb(): Float = (preamp * 24f) - 12f

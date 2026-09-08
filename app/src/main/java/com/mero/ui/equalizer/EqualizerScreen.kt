@@ -62,6 +62,10 @@ fun EqualizerScreen(
     responseDb: FloatArray,
     hapticIntensity: Float,
     onHapticIntensityChange: (Float) -> Unit,
+    crossfeed: Float,
+    onCrossfeedChange: (Float) -> Unit,
+    speed: Float,
+    onSpeedChange: (Float) -> Unit,
     preamp: Float,
     onPreampChange: (Float) -> Unit,
     toggles: Map<String, Boolean>,
@@ -178,11 +182,48 @@ fun EqualizerScreen(
                 toggles["norm"] == true,
             ) { onToggle("norm", it) }
             LabelledSlider(
+                "Crossfeed",
+                if (crossfeed == 0f) "Off" else "${(crossfeed * 100).roundToInt()}%",
+                crossfeed,
+                onCrossfeedChange,
+            )
+            Text(
+                "Bleeds a little of each channel into the other, dulled and " +
+                    "delayed the way your head would do it. Pulls hard-panned " +
+                    "mixes out of the middle of your skull on headphones.",
+                Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                color = scheme.onSurfaceVariant,
+            )
+            LabelledSlider(
                 "Beat haptics",
                 if (hapticIntensity == 0f) "Off" else "${(hapticIntensity * 100).roundToInt()}%",
                 hapticIntensity,
                 onHapticIntensityChange,
             )
+            Text(
+                "Playback speed",
+                Modifier.padding(start = 16.dp, top = 12.dp, bottom = 6.dp),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = scheme.onSurfaceVariant,
+            )
+            Row(
+                Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(0.75f, 1f, 1.25f, 1.5f, 2f).forEach { option ->
+                    MeroChip(
+                        if (option == 1f) "Normal" else "${option}×",
+                        option == speed,
+                        onClick = { onSpeedChange(option) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
             EqSwitch(
                 "Skip silence",
                 "Trims silent passages — ExoPlayer handles this natively",

@@ -346,6 +346,12 @@ private fun MeroContent(
         mutableStateOf(container.settings.float("haptics", 0f))
             .also { container.beatHaptics.setIntensity(it.value) }
     }
+    var crossfeed by remember {
+        mutableStateOf(container.settings.float("crossfeed", 0f))
+            .also { audioEffects.setCrossfeed(it.value) }
+    }
+    // ExoPlayer resamples natively, so this is a setting rather than a stage.
+    var playbackSpeed by remember { mutableStateOf(container.settings.float("speed", 1f)) }
     var eqEnabled by remember { mutableStateOf(true) }
     var preset by remember { mutableStateOf("Flat") }
     var bands by remember { mutableStateOf(EqPresets.presets.getValue("Flat")) }
@@ -393,6 +399,10 @@ private fun MeroContent(
                 scope.launch { library.setQueue(queue) }
             }
         }
+    }
+
+    LaunchedEffect(connection.controller) {
+        connection.controller?.setPlaybackSpeed(playbackSpeed)
     }
 
     // Mirrors the real MediaController rather than owning playback state itself —
@@ -1019,6 +1029,18 @@ private fun MeroContent(
                     EqualizerScreen(
                         spectrumLevels = levels,
                         responseDb = responseDb,
+                        crossfeed = crossfeed,
+                        onCrossfeedChange = {
+                            crossfeed = it
+                            audioEffects.setCrossfeed(it)
+                            container.settings.putFloat("crossfeed", it)
+                        },
+                        speed = playbackSpeed,
+                        onSpeedChange = {
+                            playbackSpeed = it
+                            connection.controller?.setPlaybackSpeed(it)
+                            container.settings.putFloat("speed", it)
+                        },
                         hapticIntensity = hapticIntensity,
                         onHapticIntensityChange = {
                             hapticIntensity = it
