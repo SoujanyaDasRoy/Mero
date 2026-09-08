@@ -120,7 +120,7 @@ fun EqualizerScreen(
                 ) {
                     Text("+12 dB", fontSize = 11.sp, color = scheme.onSurfaceVariant)
                     Text(
-                        "10-band · DynamicsProcessing",
+                        "10-band · in-app DSP",
                         fontSize = 11.sp,
                         color = scheme.onSurfaceVariant,
                     )
@@ -153,7 +153,7 @@ fun EqualizerScreen(
 
             EqSwitch(
                 "Loudness normalization",
-                "Evens out volume between tracks using LoudnessEnhancer",
+                "A fixed lift for quiet tracks. Per-track matching is not built yet.",
                 toggles["norm"] == true,
             ) { onToggle("norm", it) }
             EqSwitch(

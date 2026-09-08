@@ -7,7 +7,6 @@ import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.common.C
 import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
@@ -51,22 +50,11 @@ class MeroPlaybackService : MediaSessionService() {
                 /* handleAudioFocus = */ true,
             )
             .setRenderersFactory(
-                // 32-bit float through the effects chain instead of 16-bit.
-                // With the equalizer active the signal is scaled and summed;
-                // doing that in 16-bit quantises at every stage.
-                DefaultRenderersFactory(this).setEnableAudioFloatOutput(true),
+                // Mero's own audio stages live in here — see MeroRenderersFactory.
+                MeroRenderersFactory(this, container.audioEffects.processor),
             )
             .setHandleAudioBecomingNoisy(true)
             .build()
-
-        // The equalizer processes this session only — not system audio.
-        val effects = container.audioEffects
-        effects.attach(player.audioSessionId)
-        player.addListener(object : Player.Listener {
-            override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                effects.attach(audioSessionId)
-            }
-        })
 
         mediaSession = MediaSession.Builder(this, SkipIgnoresRepeatOne(player))
             // Without this the notification is not tappable: Media3 only makes
@@ -91,7 +79,6 @@ class MeroPlaybackService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession
 
     override fun onDestroy() {
-        (application as MeroApplication).container.audioEffects.release()
         mediaSession?.run {
             player.release()
             release()
