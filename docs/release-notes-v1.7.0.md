@@ -1,8 +1,6 @@
-**Mero 1.7.0 — songs load in about a second, and the equalizer is a real one.**
+**Mero 1.7.0 — the equalizer is a real one now.**
 
-Install over any earlier version. Your library, playlists and downloads are kept.
-
-This is everything since **v1.5.0**, which is the last build most of you actually have.
+Install over 1.6.0. Your library, playlists and downloads are kept.
 
 ---
 
@@ -12,71 +10,59 @@ Take **`app-arm64-v8a-debug.apk`** unless you know you need another. Requires An
 
 ---
 
-## Music loads properly now, and about ten times faster
+## The equalizer, rebuilt from nothing
 
-If tracks had stopped playing, or died a minute in, that's fixed — and the cause is worth explaining.
+1.6.0 told you the audio glitch was fixed by not loading effects unless you asked for one. That was true, and it was also an admission: the effects themselves were the problem. All of them were Android's `audiofx` — you set a value, the phone does the work, and the phone kept refusing. The reverb wouldn't even start. Simply having anything switched on pushed playback onto a smaller audio buffer, which is what the crackling was. And every phone behaved differently, so nobody's settings meant the same thing as anyone else's.
 
-Mero extracts audio using a bundled copy of yt-dlp. It was set up to mark itself "already updated" on first launch, to keep a download out of the way of your first song. The effect was that it **never updated at all**. An out-of-date extractor doesn't fail loudly: YouTube hands it links that look fine and then refuses to serve more than about a megabyte of them, so a song plays for a minute and stops. That's the same "pauses after about a minute" some of you reported months ago.
+**None of that is Android's job any more.** Mero now processes the audio itself, inside the player. Same result on every phone, no crackling, and nothing to switch off to make the music sound right.
 
-On top of that, getting a song ready used to run a small Python program every time. Mero now asks YouTube directly and only falls back to the slow path if that doesn't work.
+### Drag the curve
 
-| | before | now |
-|---|---|---|
-| tapping a song | ~10 s | **~1 s** |
-| skipping to the next | 2–3 s | **~0.3 s** |
-| opening the app and pressing play | ~10 s | **~2 s** |
+Ten vertical sliders are a picture of the control panel, not of the sound. They can't show what they add up to — two neighbouring bands at +6 dB make more than +6 dB between them — and they leave a band nowhere to go but up and down.
 
-Tested across 50 tracks spanning Hindi, English, Punjabi, Tamil, electronic and classical — every one took the fast path. Long mixes work too: 3-hour and even 10-hour sets play through to the end.
+The curve is the control now. Each band is a handle: **drag up and down for how loud, left and right for where.** The line shows what you're actually doing.
 
-## Seeking was completely broken
+- **The spectrum of what's playing sits behind it**, so you can aim a boost at something you can hear instead of guessing.
+- **Bands are properly adjustable** — not just how much, but which frequency and how wide. The boxiness in a recording is at 340 Hz, not at 250 or 500.
+- **Boosting no longer clips.** It works out the loudest point your curve can produce and leaves exactly that much room, so a heavy bass boost doesn't turn into distortion.
 
-Dragging the progress bar didn't work at all. Two separate faults stacked on each other. You can now scrub to any point, including 59 minutes into an hour-long mix.
+### Separate settings for headphones and speaker
 
-## A real equalizer
+Switched automatically when you plug in, unplug, or connect Bluetooth. A curve that rescues the phone speaker sounds bloated on headphones, and there's no reason you should have to remember which one you're on.
 
-The old one was built on an Android feature that hands the actual work to the phone, and the phone kept refusing: the reverb was rejected outright, and simply having effects switched on pushed playback onto a smaller audio buffer — which is what the crackling was.
+### Crossfeed — new
 
-All of it now runs inside Mero, so it behaves the same on every phone.
+On headphones, hard-panned recordings — most things from the sixties, where a whole instrument sits in one ear — feel like they're happening inside your head rather than in front of you. This bleeds a little of each channel into the other, dulled and delayed the way your head would do it. Try it on old records.
 
-- **Drag the curve.** No more ten sliders that can't show what they add up to. Each band is a handle: drag it up and down for how loud, left and right for where. The line shows what you're actually doing to the sound.
-- **The spectrum of what's playing sits behind it**, so you can aim a boost at something you can hear rather than guessing.
-- **Bands are adjustable now** — not just how much, but which frequency and how wide.
-- **Separate settings for headphones and speaker**, switched automatically when you plug in or unplug. A curve that rescues the phone speaker sounds bloated on headphones.
-- **Crossfeed** — new. On headphones, hard-panned recordings (most things from the sixties, where a whole instrument sits in one ear) feel like they're happening inside your head. This bleeds a little of each channel into the other, dulled and delayed the way your head would do it. Worth trying on old records.
-- **Loudness matching that actually works.** It used to be a fixed nudge. It now measures each track the way broadcasters do, so a quiet recording doesn't disappear after a loud one.
-- **Playback speed** — 0.75× to 2×.
-- **Beat haptics are back**, and this time they work. They never did before: they needed microphone permission, which Mero doesn't ask for and shouldn't. Mero now reads its own audio instead.
+### Loudness matching that actually works
 
-Removed: **sound booster**, **reverb** and **spatial audio**. None of them ever worked — the reverb couldn't even start, and the others were unsupported on most phones. **Crossfade** went too; it showed "6 s" and changed nothing.
+It used to be a fixed lift for quiet tracks, which can't do the job: a compressed pop master and a quiet orchestral recording can peak identically and still be twenty decibels apart in how loud they *feel*. Mero now measures each track the way broadcasters do, and matches it. A quiet recording no longer disappears after a loud one.
 
-## Search
+### Beat haptics are back, and this time they work
 
-- **Results appear from the first letter**, updating as you type.
-- **An empty search box shows genre tiles** with real cover art instead of grey word-chips.
-- **Playlists in results used to do nothing when tapped.** They open and play now — and there are far more of them, because Mero was only looking at YouTube's curated list and ignoring everything people had made.
-- Artist pages list their **playlists**, at the top rather than buried under hundreds of albums.
-- **Tapping a result closes the keyboard.** It used to stay up.
+They were pulled in 1.6.0 because they needed microphone permission, which a music player has no business asking for. Mero reads its own audio now, so there's nothing to ask for.
 
-## Buttons that do what they say
+### Playback speed
 
-- **Skip works while "repeat one" is on.** It used to replay the same song, in the app and from the notification.
-- **Shuffle no longer dead-ends** at the end of a shuffled queue.
-- **Tapping the Mero notification opens Mero.** It genuinely did nothing before.
+0.75× to 2×, for podcasts and long mixes.
+
+### Removed
+
+**Sound booster**, **reverb** and **spatial audio**. None ever worked — the reverb couldn't start at all, and the other two were unsupported on most phones while still showing you a switch. Removing a control that does nothing is worth more than leaving it there looking capable.
+
+---
+
+## Three small fixes
+
 - **Back from the equalizer returns to the song**, not to the home screen.
-- **Tapping an artist's name** in the player searches for them.
-
-## Look and feel
-
-- **A new typeface** throughout — Manrope, instead of Android's default.
-- **The clock and status icons are visible again.** In light mode they were being drawn dark on a black band.
-- **Now Playing works in light mode.** The top of the screen took its colour from the album art at full strength, so a dark cover blacked out the header.
-- **Your settings survive a restart.** Light mode, pure black, accent colour and Material You were forgotten every time you closed the app.
+- **Tapping a search result closes the keyboard.** It used to stay up, covering half the result you'd just picked.
+- The equalizer screen is **new** — laid out around the curve instead of a wall of sliders.
 
 ---
 
 ## About sound quality generally
 
-YouTube sends Opus or AAC and nothing else — there is no lossless stream to ask for, and the 256 kbps tier needs a signed-in Premium account, which is the one thing Mero won't do. So the source ceiling is fixed. What was available was to stop degrading it afterwards, and to give you real tools for shaping it. That's what this release is.
+YouTube sends Opus or AAC and nothing else. There's no lossless stream to ask for, and the 256 kbps tier needs a signed-in Premium account, which is the one thing Mero won't do. So the source ceiling is fixed. What was available was to stop degrading it afterwards and to give you real tools for shaping it. That's this release.
 
 ---
 
