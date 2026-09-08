@@ -1,6 +1,7 @@
 package com.mero.playback
 
 import androidx.media3.common.AudioAttributes
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.common.C
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -64,7 +65,7 @@ class MeroPlaybackService : MediaSessionService() {
             }
         })
 
-        mediaSession = MediaSession.Builder(this, player).build()
+        mediaSession = MediaSession.Builder(this, SkipIgnoresRepeatOne(player)).build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession
@@ -77,5 +78,54 @@ class MeroPlaybackService : MediaSessionService() {
         }
         mediaSession = null
         super.onDestroy()
+    }
+}
+
+/**
+ * Makes an explicit skip mean "the next track" even under repeat-one.
+ *
+ * `Timeline.getNextWindowIndex` returns the *current* index when the repeat
+ * mode is ONE, so `seekToNext` replays the track instead of advancing. That is
+ * the behaviour auto-advance wants — it is what makes repeat-one repeat — but
+ * it is not what a person pressing next means, and it left the next button
+ * dead whenever repeat-one was on, in the app and in the notification alike.
+ *
+ * Wrapping the player rather than fixing the button: the notification, lock
+ * screen, headset and car controls all call the player directly and never see
+ * the app's own handlers.
+ *
+ * Repeat-one is restored immediately, so it still governs the thing it should:
+ * what happens when the track ends on its own.
+ */
+private class SkipIgnoresRepeatOne(player: Player) : ForwardingPlayer(player) {
+
+    private inline fun ignoringRepeatOne(block: () -> Unit) {
+        val original = repeatMode
+        if (original == Player.REPEAT_MODE_ONE) repeatMode = Player.REPEAT_MODE_ALL
+        try {
+            block()
+        } finally {
+            if (original == Player.REPEAT_MODE_ONE) repeatMode = original
+        }
+    }
+
+    override fun seekToNext() = ignoringRepeatOne { super.seekToNext() }
+
+    override fun seekToNextMediaItem() = ignoringRepeatOne { super.seekToNextMediaItem() }
+
+    override fun seekToPrevious() = ignoringRepeatOne { super.seekToPrevious() }
+
+    override fun seekToPreviousMediaItem() = ignoringRepeatOne { super.seekToPreviousMediaItem() }
+
+    // hasNext/hasPrevious are what enable the notification buttons, and they
+    // consult the same repeat-aware calculation.
+    override fun hasNextMediaItem(): Boolean {
+        if (repeatMode == Player.REPEAT_MODE_ONE) return currentMediaItemIndex < mediaItemCount - 1
+        return super.hasNextMediaItem()
+    }
+
+    override fun hasPreviousMediaItem(): Boolean {
+        if (repeatMode == Player.REPEAT_MODE_ONE) return currentMediaItemIndex > 0
+        return super.hasPreviousMediaItem()
     }
 }

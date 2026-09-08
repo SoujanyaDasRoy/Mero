@@ -38,6 +38,7 @@ fun ArtistScreen(
     error: String?,
     onBack: () -> Unit,
     onAlbumClick: (ArtistAlbum) -> Unit,
+    onPlaylistClick: (ArtistAlbum) -> Unit,
     onSongClick: (Song) -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -78,6 +79,42 @@ fun ArtistScreen(
                         Column {
                             Text("${data.albums.size} albums", fontSize = 14.sp)
                             Text("Full discography", fontSize = 13.sp, color = scheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                if (data.playlists.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Playlists",
+                            Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp),
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                    items(data.playlists, key = { "pl-" + it.browseId }) { playlist ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onPlaylistClick(playlist) }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Artwork(playlist.thumbnailUrl, size = 56, radius = 8)
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    playlist.title,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Text("Playlist", fontSize = 13.sp, color = scheme.onSurfaceVariant)
+                            }
+                            Text(
+                                "Play",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = scheme.primary,
+                            )
                         }
                     }
                 }

@@ -62,7 +62,6 @@ import com.mero.MeroApplication
 import com.mero.data.EqPresets
 import com.mero.data.CodecPreference
 import com.mero.data.HomeSection
-import com.mero.data.titleCase
 import com.mero.domain.RepeatMode
 import com.mero.domain.SearchItem
 import com.mero.domain.SearchResultType
@@ -266,11 +265,6 @@ private fun MeroContent(
     var query by remember { mutableStateOf("") }
     var searchTab by remember { mutableStateOf("Songs") }
     var libraryTab by remember { mutableStateOf("Liked") }
-    // A stable handful of the home seeds, Title Cased the same way the shelf
-    // headings are, so an empty search box offers somewhere to start.
-    val browseTopics = remember {
-        container.homeRepository.seeds.shuffled().take(14).map { it.titleCase() }
-    }
     var homeSections by remember { mutableStateOf(emptyList<HomeSection>()) }
     var homeLoading by remember { mutableStateOf(true) }
     var homeLoadingMore by remember { mutableStateOf(false) }
@@ -324,7 +318,12 @@ private fun MeroContent(
     fun refillInfinitePlayback() {
         val controller = connection.controller ?: return
         if (toggles["infinite"] != true || controller.mediaItemCount == 0) return
-        if (controller.currentMediaItemIndex != controller.mediaItemCount - 1) return
+        // hasNextMediaItem, not an index comparison: with shuffle on, the last
+        // track of the shuffled order is usually somewhere in the middle of the
+        // timeline, so comparing indices meant the queue never looked finished
+        // and the refill never ran. Pressing next then did nothing at all, with
+        // no next track and no explanation.
+        if (controller.hasNextMediaItem()) return
         val seed = controller.currentMediaItem?.mediaId ?: return
         if (seed in radioRequests) return
         radioRequests = radioRequests + seed
@@ -773,7 +772,10 @@ private fun MeroContent(
                             searchError = null
                             return@LaunchedEffect
                         }
-                        delay(250) // 250ms active typing debounce
+                        // Short enough to feel live from the first letter,
+                        // long enough that holding a key down does not fire a
+                        // request per character.
+                        delay(120)
                         isSearching = true
                         container.searchRepository.searchItemsPage(
                             trimmed,
@@ -829,7 +831,6 @@ private fun MeroContent(
                     }
 
                     SearchScreen(
-                        browseTopics = browseTopics,
                         query = query,
                         onQueryChange = { query = it },
                         onSearch = {
@@ -853,7 +854,21 @@ private fun MeroContent(
                                     container.artistRepository.albumSongs(item.browseId ?: item.id)
                                         .onSuccess { songs -> if (songs.isNotEmpty()) playFrom(songs.first(), songs, "Album") }
                                 }
-                                SearchResultType.Playlist -> Unit
+                                SearchResultType.Playlist -> {
+                                    toast("Opening ${item.title}")
+                                    scope.launch {
+                                        container.artistRepository
+                                            .playlistSongs(item.browseId ?: item.id)
+                                            .onSuccess { songs ->
+                                                if (songs.isEmpty()) {
+                                                    toast("That playlist has no playable tracks")
+                                                } else {
+                                                    playFrom(songs.first(), songs, item.title)
+                                                }
+                                            }
+                                            .onFailure { toast("Could not open that playlist") }
+                                    }
+                                }
                             }
                         },
                         onSongMore = { menuSong = it },
@@ -889,6 +904,16 @@ private fun MeroContent(
                         loading = artistLoading,
                         error = artistError,
                         onBack = { navController.popBackStack() },
+                        onPlaylistClick = { playlist ->
+                            toast("Opening ${playlist.title}")
+                            scope.launch {
+                                container.artistRepository.playlistSongs(playlist.browseId)
+                                    .onSuccess { songs ->
+                                        if (songs.isNotEmpty()) playFrom(songs.first(), songs, playlist.title)
+                                    }
+                                    .onFailure { toast("Could not open that playlist") }
+                            }
+                        },
                         onAlbumClick = { album ->
                             scope.launch {
                                 container.artistRepository.albumSongs(album.browseId)

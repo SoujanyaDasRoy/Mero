@@ -48,6 +48,8 @@ data class ArtistPageData(
     val name: String,
     val thumbnailUrl: String?,
     val albums: List<ArtistAlbum>,
+    /** The artist's own playlists — "Essentials", "This Is …", radio mixes. */
+    val playlists: List<ArtistAlbum>,
     val songs: List<Song>,
 )
 

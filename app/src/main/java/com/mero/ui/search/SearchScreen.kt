@@ -5,8 +5,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,7 +52,6 @@ private val SEARCH_TABS = listOf("Songs", "Albums", "Artists", "Playlists")
 
 @Composable
 fun SearchScreen(
-    browseTopics: List<String>,
     query: String,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
@@ -135,13 +132,10 @@ fun SearchScreen(
             }
         }
 
-        if (query.isBlank()) {
-            SearchIdle(
-                browseTopics = browseTopics,
-                onTopicClick = { topic -> onQueryChange(topic) },
-                contentPadding = contentPadding,
-            )
-        } else {
+        // Nothing typed, nothing shown. The genre chips that used to live here
+        // were guesses at what someone might want; the search field is a better
+        // guess and it is already focused.
+        if (query.isNotBlank()) {
             Row(
                 Modifier
                     .horizontalScroll(rememberScrollState())
@@ -210,38 +204,3 @@ fun SearchScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SearchIdle(
-    browseTopics: List<String>,
-    onTopicClick: (String) -> Unit,
-    contentPadding: PaddingValues,
-) {
-    val scheme = MaterialTheme.colorScheme
-    LazyColumn(contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 80.dp)) {
-        if (browseTopics.isNotEmpty()) {
-            item {
-                Text(
-                    "Browse Music & Genres",
-                    Modifier.padding(start = 16.dp, top = 16.dp, bottom = 12.dp),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = scheme.onSurface,
-                )
-                FlowRow(
-                    Modifier.padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    browseTopics.forEach { topic ->
-                        MeroChip(
-                            label = topic,
-                            selected = false,
-                            onClick = { onTopicClick(topic) },
-                        )
-                    }
-                }
-            }
-        }
-    }
-}

@@ -56,6 +56,9 @@ class SearchRepository(
     ): Result<SearchResultPage> {
         if (query.isBlank()) return Result.success(SearchResultPage(emptyList(), null))
         return runCatching {
+            if (type == SearchResultType.Playlist && continuation.isNullOrBlank()) {
+                return@runCatching firstPlaylistPage(query.trim())
+            }
             val page = if (continuation.isNullOrBlank()) {
                 YouTube.search(query.trim(), type.filter()).getOrThrow()
             } else {
@@ -67,6 +70,35 @@ class SearchRepository(
                 continuation = page.continuation,
             )
         }
+    }
+
+    /**
+     * Playlists come from two different wells and one of them is nearly dry.
+     *
+     * `FILTER_FEATURED_PLAYLIST` returns only what YouTube Music itself
+     * curates — an artist's official "Presenting …" and little else, often a
+     * single row. `FILTER_COMMUNITY_PLAYLIST` returns everything people have
+     * made, which is where the depth is.
+     *
+     * Both are fetched for the first page so the official ones lead, then
+     * paging continues down the community list, which is the one that actually
+     * keeps going.
+     */
+    private suspend fun firstPlaylistPage(query: String): SearchResultPage {
+        val featured = runCatching {
+            YouTube.search(query, YouTube.SearchFilter.FILTER_FEATURED_PLAYLIST).getOrThrow()
+        }.getOrNull()
+        val community = runCatching {
+            YouTube.search(query, YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST).getOrThrow()
+        }.getOrNull()
+
+        val merged = LinkedHashMap<String, SearchItem>()
+        featured?.items?.mapNotNull { it.toSearchItem() }?.forEach { merged.putIfAbsent(it.id, it) }
+        community?.items?.mapNotNull { it.toSearchItem() }?.forEach { merged.putIfAbsent(it.id, it) }
+        return SearchResultPage(
+            items = merged.values.toList(),
+            continuation = community?.continuation ?: featured?.continuation,
+        )
     }
 
     suspend fun searchItems(query: String, type: SearchResultType): Result<List<SearchItem>> {
