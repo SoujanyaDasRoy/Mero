@@ -71,6 +71,7 @@ import com.mero.data.HomeSection
 import com.mero.data.MERO_SOURCE_URL
 import com.mero.data.SettingsStore
 import com.mero.data.UpdateState
+import com.mero.playback.OutputRoute
 import com.mero.data.titleCase
 import com.mero.domain.RepeatMode
 import com.mero.domain.SearchItem
@@ -444,6 +445,14 @@ private fun MeroContent(
     // rescues the phone speaker sounds bloated on headphones, so each route
     // keeps its own and they swap over when the output does.
     val outputRoute by container.outputRoute.route.collectAsStateWithLifecycle()
+    var routeOverride by remember {
+        mutableStateOf(
+            container.settings.string(SettingsStore.ROUTE_OVERRIDE, "")
+                .takeIf { it.isNotBlank() }
+                ?.let { name -> runCatching { OutputRoute.valueOf(name) }.getOrNull() },
+        )
+    }
+    LaunchedEffect(routeOverride) { container.outputRoute.setOverride(routeOverride) }
     var preset by remember { mutableStateOf("Flat") }
     var bands by remember { mutableStateOf(com.mero.playback.defaultBands()) }
     var selectedBand by remember { mutableIntStateOf(5) }
@@ -1159,6 +1168,15 @@ private fun MeroContent(
                         spectrumLevels = levels,
                         responseDb = responseDb,
                         outputRoute = outputRoute,
+                        detectedRoute = container.outputRoute.detected,
+                        routeOverride = routeOverride,
+                        onRouteOverrideChange = { picked ->
+                            routeOverride = picked
+                            container.settings.putString(
+                                SettingsStore.ROUTE_OVERRIDE,
+                                picked?.name.orEmpty(),
+                            )
+                        },
                         crossfeed = crossfeed,
                         onCrossfeedChange = {
                             crossfeed = it

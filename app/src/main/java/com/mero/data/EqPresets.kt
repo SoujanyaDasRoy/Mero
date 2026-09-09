@@ -11,6 +11,9 @@ object EqPresets {
     val presets: Map<String, List<Int>> = linkedMapOf(
         "Flat" to List(10) { 0 },
         "Bass Boost" to listOf(9, 8, 6, 3, 0, 0, 0, 1, 2, 2),
+        // The opposite, and the one a car usually wants: doors and boots
+        // resonate, so the low end arrives with help nobody asked for.
+        "Less Bass" to listOf(-8, -7, -5, -2, 0, 0, 0, 0, 0, 0),
         "Vocal" to listOf(-3, -2, 0, 2, 5, 6, 4, 2, 0, -1),
         "Rock" to listOf(5, 4, 2, -1, -2, 0, 3, 5, 5, 4),
         "Electronic" to listOf(7, 6, 2, 0, -2, 1, 2, 4, 6, 6),

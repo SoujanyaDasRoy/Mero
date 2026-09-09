@@ -66,6 +66,9 @@ fun EqualizerScreen(
     hapticIntensity: Float,
     onHapticIntensityChange: (Float) -> Unit,
     outputRoute: com.mero.playback.OutputRoute,
+    detectedRoute: com.mero.playback.OutputRoute,
+    routeOverride: com.mero.playback.OutputRoute?,
+    onRouteOverrideChange: (com.mero.playback.OutputRoute?) -> Unit,
     crossfeed: Float,
     onCrossfeedChange: (Float) -> Unit,
     speed: Float,
@@ -111,6 +114,56 @@ fun EqualizerScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = contentPadding.calculateBottomPadding()),
         ) {
+            // Which curve is being edited, and which one is in use.
+            //
+            // Settings are kept per output, and this screen was given the
+            // route but never showed it — so a curve dialled in on earbuds was
+            // silently the curve the car got too, with nothing on screen
+            // saying so. A car stereo is a Bluetooth device like any other as
+            // far as Android is concerned, so it can only be told apart by
+            // being told.
+            Text(
+                "PROFILE",
+                Modifier.padding(start = 16.dp, bottom = 8.dp),
+                fontSize = 11.sp,
+                letterSpacing = 0.6.sp,
+                fontWeight = FontWeight.Medium,
+                color = scheme.primary,
+            )
+            Row(
+                Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(start = 16.dp, end = 16.dp, bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MeroChip(
+                    label = "Auto",
+                    selected = routeOverride == null,
+                    onClick = { onRouteOverrideChange(null) },
+                )
+                com.mero.playback.OutputRoute.entries.forEach { option ->
+                    MeroChip(
+                        label = option.label,
+                        selected = routeOverride == option,
+                        onClick = { onRouteOverrideChange(option) },
+                    )
+                }
+            }
+            Text(
+                if (routeOverride == null) {
+                    "Following the output — currently " + detectedRoute.label.lowercase() +
+                        ". Editing the " + outputRoute.label.lowercase() + " curve."
+                } else {
+                    "Pinned to " + outputRoute.label.lowercase() +
+                        ". Cars connect the same way earbuds do, so Mero cannot " +
+                        "tell them apart on its own."
+                },
+                Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                color = scheme.onSurfaceVariant,
+            )
+
             Row(
                 Modifier
                     .horizontalScroll(rememberScrollState())

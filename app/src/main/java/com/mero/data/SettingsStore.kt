@@ -93,6 +93,9 @@ class SettingsStore(context: Context) {
         const val EQ_PRESET = "eq_preset"
         const val EQ_BANDS = "eq_bands"
 
+        /** Empty when the profile follows whatever is plugged in. */
+        const val ROUTE_OVERRIDE = "eq_route_override"
+
         /** Equalizer settings are stored per output route, not globally. */
         fun bandsKey(route: String) = "eq_bands_$route"
         fun presetKey(route: String) = "eq_preset_$route"

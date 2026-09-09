@@ -23,6 +23,19 @@ import kotlinx.coroutines.flow.asStateFlow
 enum class OutputRoute(val label: String) {
     Headphones("Headphones"),
     Speaker("Speaker"),
+
+    /**
+     * A car stereo, which is neither of the other two.
+     *
+     * Headphone curves compensate for drivers a centimetre across and are
+     * usually generous with bass; a car has a door full of speaker and often a
+     * subwoofer, so the same curve there is what makes the mirror buzz. Cars
+     * connect over Bluetooth A2DP and Android reports that identically to a
+     * pair of earbuds — telling them apart needs the Bluetooth device class,
+     * which needs a runtime permission this app has no other use for. So this
+     * one is chosen, not detected.
+     */
+    Car("Car"),
     ;
 
     /** Where this route's settings live. */
@@ -39,8 +52,21 @@ enum class OutputRoute(val label: String) {
 class OutputRouteWatcher(context: Context) {
 
     private val audioManager = context.getSystemService(AudioManager::class.java)
+
+    /** Set when someone has picked a profile rather than letting it follow the output. */
+    @Volatile
+    private var override: OutputRoute? = null
+
     private val _route = MutableStateFlow(currentRoute())
     val route: StateFlow<OutputRoute> = _route.asStateFlow()
+
+    /** What is actually plugged in, regardless of any override. */
+    val detected: OutputRoute get() = detectedRoute()
+
+    fun setOverride(route: OutputRoute?) {
+        override = route
+        _route.value = currentRoute()
+    }
 
     private val callback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
@@ -61,7 +87,9 @@ class OutputRouteWatcher(context: Context) {
         audioManager?.unregisterAudioDeviceCallback(callback)
     }
 
-    private fun currentRoute(): OutputRoute {
+    private fun currentRoute(): OutputRoute = override ?: detectedRoute()
+
+    private fun detectedRoute(): OutputRoute {
         val devices = audioManager?.getDevices(AudioManager.GET_DEVICES_OUTPUTS) ?: return OutputRoute.Speaker
         val wearing = devices.any { it.type in HEADPHONE_TYPES }
         return if (wearing) OutputRoute.Headphones else OutputRoute.Speaker
