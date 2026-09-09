@@ -53,6 +53,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -128,6 +129,7 @@ fun SettingsScreen(
     onCheckUpdates: () -> Unit,
     onDownloadUpdate: () -> Unit,
     onInstallUpdate: () -> Unit,
+    onDiscardDownload: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -196,6 +198,7 @@ fun SettingsScreen(
                         state = updateState,
                         onDownload = onDownloadUpdate,
                         onInstall = onInstallUpdate,
+                        onDiscard = onDiscardDownload,
                     )
                 }
             }
@@ -598,6 +601,7 @@ private fun UpdateCard(
     state: UpdateState,
     onDownload: () -> Unit,
     onInstall: () -> Unit,
+    onDiscard: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     val release = when (state) {
@@ -658,20 +662,31 @@ private fun UpdateCard(
             )
         } else {
             val ready = state as? UpdateState.Downloaded
-            Button(
-                onClick = if (ready != null) onInstall else onDownload,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    if (ready != null) "Install" else "Download · " + megabytes(release.sizeBytes),
-                    fontWeight = FontWeight.Medium,
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = if (ready != null) onInstall else onDownload,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        if (ready != null) "Install" else "Download · " + megabytes(release.sizeBytes),
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+                if (ready != null) {
+                    // A download that will not install is worse than no
+                    // download: without this the card offers the same broken
+                    // file forever.
+                    OutlinedButton(onClick = onDiscard) { Text("Discard") }
+                }
             }
             Text(
-                if (ready != null) {
-                    "Also saved as Downloads/" + ready.fileName
-                } else {
-                    "Installs over this version. Nothing is lost."
+                when {
+                    ready != null && ready.resumed ->
+                        "Downloaded already, but not installed — the last attempt " +
+                            "did not finish. Install it again, or discard it and " +
+                            "start over."
+                    ready != null -> "Also saved as Downloads/" + ready.fileName
+                    else -> "Installs over this version. Nothing is lost."
                 },
                 Modifier.padding(top = 10.dp),
                 fontSize = 12.sp,

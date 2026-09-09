@@ -22,6 +22,9 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Notes
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -180,7 +183,7 @@ fun PlaylistsTab(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Artwork(playlist.artworkUrl, 48, icon = Icons.Rounded.QueueMusic)
+                Artwork(playlist.displayArtwork, 48, icon = Icons.Rounded.QueueMusic)
                 Column(Modifier.weight(1f)) {
                     Text(
                         playlist.name,
@@ -260,6 +263,8 @@ private fun SmartPlaylistDialog(
 @Composable
 fun PlaylistDetailScreen(
     name: String,
+    description: String?,
+    coverUri: String?,
     songs: List<Song>,
     nowPlayingId: String?,
     onBack: () -> Unit,
@@ -268,12 +273,16 @@ fun PlaylistDetailScreen(
     onShuffle: () -> Unit,
     onRemove: (Song) -> Unit,
     onRename: (String) -> Unit,
+    onDescriptionChange: (String) -> Unit,
+    onPickCover: () -> Unit,
+    onClearCover: () -> Unit,
     onDelete: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     val scheme = MaterialTheme.colorScheme
     var menuOpen by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
+    var describing by remember { mutableStateOf(false) }
     var confirmingDelete by remember { mutableStateOf(false) }
 
     if (renaming) {
@@ -283,6 +292,16 @@ fun PlaylistDetailScreen(
             confirmLabel = "Rename",
             onDismiss = { renaming = false },
             onConfirm = { renaming = false; onRename(it) },
+        )
+    }
+    if (describing) {
+        NamePlaylistDialog(
+            title = "Description",
+            initial = description.orEmpty(),
+            confirmLabel = "Save",
+            onDismiss = { describing = false },
+            onConfirm = { describing = false; onDescriptionChange(it) },
+            allowEmpty = true,
         )
     }
     if (confirmingDelete) {
@@ -327,6 +346,23 @@ fun PlaylistDetailScreen(
                         onClick = { menuOpen = false; renaming = true },
                     )
                     DropdownMenuItem(
+                        text = { Text(if (description.isNullOrBlank()) "Add a description" else "Edit description") },
+                        leadingIcon = { Icon(Icons.Rounded.Notes, null) },
+                        onClick = { menuOpen = false; describing = true },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Change cover") },
+                        leadingIcon = { Icon(Icons.Rounded.Image, null) },
+                        onClick = { menuOpen = false; onPickCover() },
+                    )
+                    if (coverUri != null) {
+                        DropdownMenuItem(
+                            text = { Text("Use the first track's cover") },
+                            leadingIcon = { Icon(Icons.Rounded.Refresh, null) },
+                            onClick = { menuOpen = false; onClearCover() },
+                        )
+                    }
+                    DropdownMenuItem(
                         text = { Text("Delete playlist") },
                         leadingIcon = { Icon(Icons.Rounded.Delete, null) },
                         onClick = { menuOpen = false; confirmingDelete = true },
@@ -338,6 +374,51 @@ fun PlaylistDetailScreen(
         LazyColumn(
             contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
         ) {
+            item {
+                // The cover the user chose, or the first track's. Tapping it
+                // is the obvious way to change it, so it is also the way.
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Artwork(
+                        coverUri ?: songs.firstOrNull()?.thumbnailUrl,
+                        size = 168,
+                        radius = 20,
+                        icon = Icons.Rounded.QueueMusic,
+                        modifier = Modifier.clickable(onClick = onPickCover),
+                    )
+                    Text(
+                        name,
+                        Modifier.padding(start = 24.dp, end = 24.dp, top = 14.dp),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        songs.size.toString() + if (songs.size == 1) " song" else " songs",
+                        Modifier.padding(top = 2.dp),
+                        fontSize = 12.sp,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    if (!description.isNullOrBlank()) {
+                        Text(
+                            description,
+                            Modifier
+                                .padding(start = 28.dp, end = 28.dp, top = 8.dp)
+                                .clickable { describing = true },
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            color = scheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
             item {
                 Row(
                     Modifier
@@ -508,7 +589,7 @@ fun AddToPlaylistSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    Artwork(playlist.artworkUrl, 44, icon = Icons.Rounded.QueueMusic)
+                    Artwork(playlist.displayArtwork, 44, icon = Icons.Rounded.QueueMusic)
                     Column(Modifier.weight(1f)) {
                         Text(playlist.name, fontSize = 16.sp, maxLines = 1)
                         Text(
@@ -531,6 +612,8 @@ private fun NamePlaylistDialog(
     confirmLabel: String,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
+    /** A description may be cleared; a name may not. */
+    allowEmpty: Boolean = false,
 ) {
     var text by remember { mutableStateOf(initial) }
     AlertDialog(
@@ -540,14 +623,15 @@ private fun NamePlaylistDialog(
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
-                singleLine = true,
-                label = { Text("Name") },
+                singleLine = !allowEmpty,
+                minLines = if (allowEmpty) 2 else 1,
+                label = { Text(if (allowEmpty) "Description" else "Name") },
             )
         },
         confirmButton = {
             TextButton(
                 onClick = { onConfirm(text) },
-                enabled = text.isNotBlank(),
+                enabled = allowEmpty || text.isNotBlank(),
             ) { Text(confirmLabel) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

@@ -165,14 +165,22 @@ fun SearchScreen(
                 contentPadding = contentPadding,
             )
         } else {
+            // Four fixed tabs, so they share the width evenly rather than
+            // scrolling: a row that ends mid-word invites a swipe, and there
+            // was never anything past the fourth one to swipe to.
             Row(
                 Modifier
-                    .horizontalScroll(rememberScrollState())
+                    .fillMaxWidth()
                     .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 SEARCH_TABS.forEach { tab ->
-                    MeroChip(tab, selected = tab == selectedTab, onClick = { onTabChange(tab) })
+                    MeroChip(
+                        label = tab,
+                        selected = tab == selectedTab,
+                        onClick = { onTabChange(tab) },
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
 

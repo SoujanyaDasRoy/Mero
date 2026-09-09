@@ -293,6 +293,25 @@ private fun MeroContent(
         mutableStateOf(downloadPrefs.getStringSet("folders", emptySet()).orEmpty())
     }
     var folderError by remember { mutableStateOf<String?>(null) }
+
+    /** Which playlist the image being picked is for. */
+    var coverTarget by remember { mutableStateOf<String?>(null) }
+    val coverPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { picked ->
+        val playlistId = coverTarget ?: return@rememberLauncherForActivityResult
+        coverTarget = null
+        if (picked == null) return@rememberLauncherForActivityResult
+        // Persisted, or the URI stops resolving the next time the app starts
+        // and the playlist quietly loses its cover.
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                picked,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        scope.launch { container.libraryRepository.setPlaylistCover(playlistId, picked.toString()) }
+    }
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
@@ -374,6 +393,12 @@ private fun MeroContent(
             snackbars.currentSnackbarData?.dismiss()
             snackbars.showSnackbar(message, duration = SnackbarDuration.Short)
         }
+    }
+
+    // The one update moment worth interrupting for: one that actually landed.
+    // Consumed, so it is said once and not on every recomposition.
+    LaunchedEffect(Unit) {
+        container.updateRepository.consumeJustInstalled()?.let { say("Updated to Mero $it") }
     }
     // MediaItem only carries ids and display metadata, so the domain objects
     // the UI needs are looked up by the id the player reports back.
@@ -1414,6 +1439,8 @@ private fun MeroContent(
 
                     PlaylistDetailScreen(
                         name = meta?.name ?: "Playlist",
+                        description = meta?.description,
+                        coverUri = meta?.coverUri,
                         songs = songs,
                         nowPlayingId = current?.id,
                         onBack = { navController.popBackStack() },
@@ -1436,6 +1463,13 @@ private fun MeroContent(
                         onRename = { name ->
                             scope.launch { library.renamePlaylist(route.playlistId, name) }
                         },
+                        onDescriptionChange = { text ->
+                            scope.launch { library.setPlaylistDescription(route.playlistId, text) }
+                        },
+                        onPickCover = { coverTarget = route.playlistId; coverPicker.launch("image/*") },
+                        onClearCover = {
+                            scope.launch { library.setPlaylistCover(route.playlistId, null) }
+                        },
                         onDelete = {
                             scope.launch { library.deletePlaylist(route.playlistId) }
                             navController.popBackStack()
@@ -1455,6 +1489,10 @@ private fun MeroContent(
 
                     PlaylistDetailScreen(
                         name = summary?.name ?: "Smart playlist",
+                        // A smart playlist is defined by its rule, so there is
+                        // nothing here for a person to name or illustrate.
+                        description = null,
+                        coverUri = null,
                         songs = songs,
                         nowPlayingId = current?.id,
                         onBack = { navController.popBackStack() },
@@ -1466,6 +1504,9 @@ private fun MeroContent(
                         },
                         onRemove = {},
                         onRename = {},
+                        onDescriptionChange = {},
+                        onPickCover = {},
+                        onClearCover = {},
                         onDelete = {
                             scope.launch { library.deleteSmartPlaylist(route.playlistId) }
                             navController.popBackStack()
@@ -1629,6 +1670,7 @@ private fun MeroContent(
                         onInstallUpdate = {
                             (updateState as? UpdateState.Downloaded)?.let { updates.install(it.uri) }
                         },
+                        onDiscardDownload = { updates.discardDownload() },
                     )
                 }
             }

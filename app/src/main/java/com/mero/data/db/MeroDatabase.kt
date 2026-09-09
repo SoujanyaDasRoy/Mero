@@ -49,6 +49,14 @@ data class PlaylistEntity(
     @PrimaryKey val id: String,
     val name: String,
     val createdAt: Long,
+    /**
+     * A picture the user chose, as a persisted content:// URI. Null means the
+     * cover is borrowed from the first track, which is what every playlist
+     * started out doing.
+     */
+    val coverUri: String? = null,
+    /** Their own note about what this playlist is for. */
+    val description: String? = null,
 )
 
 @Entity(tableName = "playlist_songs", primaryKeys = ["playlistId", "songId"])
@@ -75,7 +83,12 @@ data class PlaylistSummary(
     val createdAt: Long,
     val trackCount: Int,
     val artworkUrl: String?,
-)
+    val coverUri: String? = null,
+    val description: String? = null,
+) {
+    /** The chosen picture if there is one, otherwise the first track's cover. */
+    val displayArtwork: String? get() = coverUri ?: artworkUrl
+}
 
 data class SmartPlaylistSummary(
     val id: String,
@@ -150,6 +163,12 @@ interface MeroDao {
     @Query("UPDATE playlists SET name = :name WHERE id = :id")
     suspend fun renamePlaylist(id: String, name: String)
 
+    @Query("UPDATE playlists SET coverUri = :uri WHERE id = :id")
+    suspend fun setPlaylistCover(id: String, uri: String?)
+
+    @Query("UPDATE playlists SET description = :text WHERE id = :id")
+    suspend fun setPlaylistDescription(id: String, text: String?)
+
     @Query("DELETE FROM playlists WHERE id = :id")
     suspend fun deletePlaylistRow(id: String)
 
@@ -169,6 +188,7 @@ interface MeroDao {
     @Query(
         """
         SELECT p.id AS id, p.name AS name, p.createdAt AS createdAt,
+               p.coverUri AS coverUri, p.description AS description,
                (SELECT COUNT(*) FROM playlist_songs ps WHERE ps.playlistId = p.id) AS trackCount,
                (SELECT s.thumbnailUrl FROM playlist_songs ps
                   INNER JOIN songs s ON s.id = ps.songId
@@ -296,11 +316,24 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         PlaylistSongEntity::class,
         SmartPlaylistEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class MeroDatabase : RoomDatabase() {
     abstract fun dao(): MeroDao
+}
+
+/**
+ * Playlists gain a cover and a description.
+ *
+ * Both nullable with no default: an existing playlist has neither, and null is
+ * what "borrow the first track's cover" already means everywhere it is read.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE playlists ADD COLUMN coverUri TEXT")
+        db.execSQL("ALTER TABLE playlists ADD COLUMN description TEXT")
+    }
 }
 
 val MIGRATION_3_4 = object : Migration(3, 4) {

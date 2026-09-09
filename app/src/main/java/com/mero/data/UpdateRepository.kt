@@ -1,6 +1,10 @@
 package com.mero.data
 
 import android.app.DownloadManager
+import android.app.PendingIntent
+import android.app.NotificationManager
+import android.app.NotificationChannel
+import android.app.Notification
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -33,7 +37,10 @@ import java.net.URL
  * token for a public repository, and its 60 requests an hour per address is
  * far more than one check per launch.
  */
-class UpdateRepository(private val context: Context) {
+class UpdateRepository(
+    private val context: Context,
+    private val settings: SettingsStore,
+) {
 
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
@@ -42,6 +49,84 @@ class UpdateRepository(private val context: Context) {
     val installedVersion: String = runCatching {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName
     }.getOrNull().orEmpty().ifBlank { "0" }
+
+    /**
+     * Set when the version now running is one this app downloaded, so the UI
+     * can say so once. Read and cleared by whoever shows it.
+     */
+    var justInstalled: String? = null
+        private set
+
+    fun consumeJustInstalled(): String? = justInstalled.also { justInstalled = null }
+
+    init {
+        settleLastDownload()
+    }
+
+    /**
+     * Works out what happened to the last APK this app downloaded.
+     *
+     * A download used to be forgotten the moment the process died: the file sat
+     * in Downloads, the card went back to offering a fresh download of the same
+     * bytes, and nothing anywhere said whether the install had worked. The
+     * answer is knowable without asking anyone — compare what was downloaded
+     * with what is now running.
+     *
+     * Installed: delete the file and say so. Still pending: offer the file we
+     * already have rather than fetching it twice. Gone from disk: forget it.
+     */
+    private fun settleLastDownload() {
+        val version = settings.string(SettingsStore.UPDATE_FILE_VERSION, "")
+        if (version.isBlank()) return
+        val id = settings.long(SettingsStore.UPDATE_DOWNLOAD_ID, -1L)
+        val name = settings.string(SettingsStore.UPDATE_FILE_NAME, "")
+
+        if (!isNewer(version, installedVersion)) {
+            // It is running. Nothing left to install, and no reason to keep a
+            // hundred megabytes in Downloads.
+            justInstalled = version
+            removeDownload(id)
+            forgetDownload()
+            return
+        }
+
+        val uri = runCatching {
+            context.getSystemService(DownloadManager::class.java)?.getUriForDownloadedFile(id)
+        }.getOrNull()
+        if (uri == null || !canRead(uri)) {
+            forgetDownload()
+            return
+        }
+        _state.value = UpdateState.Downloaded(
+            release = Release(version, "", "", settings.long(SettingsStore.UPDATE_FILE_SIZE, 0L)),
+            uri = uri,
+            fileName = name,
+            resumed = true,
+        )
+    }
+
+    private fun canRead(uri: Uri): Boolean = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { true } ?: false
+    }.getOrDefault(false)
+
+    private fun removeDownload(id: Long) {
+        if (id <= 0) return
+        runCatching { context.getSystemService(DownloadManager::class.java)?.remove(id) }
+    }
+
+    private fun forgetDownload() {
+        settings.putString(SettingsStore.UPDATE_FILE_VERSION, "")
+        settings.putString(SettingsStore.UPDATE_FILE_NAME, "")
+        settings.putLong(SettingsStore.UPDATE_DOWNLOAD_ID, -1L)
+        settings.putLong(SettingsStore.UPDATE_FILE_SIZE, 0L)
+    }
+
+    /** Throws away a half-finished or unusable download so it can be fetched again. */
+    fun discardDownload() {
+        removeDownload(settings.long(SettingsStore.UPDATE_DOWNLOAD_ID, -1L))
+        forgetDownload()
+        _state.value = UpdateState.Idle
+    }
 
     /**
      * @param manual true when a person tapped "Check for updates". A silent
@@ -53,10 +138,22 @@ class UpdateRepository(private val context: Context) {
         val result = withContext(Dispatchers.IO) { runCatchingCancellable { fetchLatest() } }
         _state.value = result.fold(
             onSuccess = { release ->
+                if (release != null && isNewer(release.versionName, installedVersion)) {
+                    announce(release)
+                }
                 when {
                     release == null ->
                         if (manual) UpdateState.Failed("No releases published yet") else UpdateState.Idle
-                    isNewer(release.versionName, installedVersion) -> UpdateState.Available(release)
+                    isNewer(release.versionName, installedVersion) -> {
+                        // Already on disk from a previous run? Offer that
+                        // rather than fetching the same hundred megabytes.
+                        val held = _state.value as? UpdateState.Downloaded
+                        if (held != null && held.release.versionName == release.versionName) {
+                            held.copy(release = release)
+                        } else {
+                            UpdateState.Available(release)
+                        }
+                    }
                     manual -> UpdateState.UpToDate
                     else -> UpdateState.Idle
                 }
@@ -93,6 +190,12 @@ class UpdateRepository(private val context: Context) {
             _state.value = UpdateState.Failed(it.message ?: "Couldn't start the download")
             return
         }
+        // Written before the download finishes, so a process death mid-way
+        // still leaves something to clean up rather than an orphan file.
+        settings.putString(SettingsStore.UPDATE_FILE_VERSION, release.versionName)
+        settings.putString(SettingsStore.UPDATE_FILE_NAME, fileName)
+        settings.putLong(SettingsStore.UPDATE_DOWNLOAD_ID, id)
+        settings.putLong(SettingsStore.UPDATE_FILE_SIZE, release.sizeBytes)
 
         while (true) {
             val progress = withContext(Dispatchers.IO) { poll(manager, id) }
@@ -107,6 +210,9 @@ class UpdateRepository(private val context: Context) {
                     return
                 }
                 is Progress.Failed -> {
+                    // A failed download leaves a partial file that will never
+                    // install; forget it so the next attempt starts clean.
+                    discardDownload()
                     _state.value = UpdateState.Failed(progress.reason)
                     return
                 }
@@ -140,6 +246,50 @@ class UpdateRepository(private val context: Context) {
 
     fun dismiss() {
         _state.value = UpdateState.Idle
+    }
+
+    /**
+     * Tells someone once, outside the app.
+     *
+     * The banner on Home only works for someone who opens Mero, and the people
+     * most in need of an update are the ones who have not opened it in a
+     * month. Said once per version: a notification that returns every launch
+     * is one people learn to swipe away without reading.
+     */
+    private fun announce(release: Release) {
+        if (settings.string(SettingsStore.UPDATE_NOTIFIED_VERSION, "") == release.versionName) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        runCatching {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    UPDATE_CHANNEL,
+                    "Updates",
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply { description = "Tells you when a new version of Mero is out" },
+            )
+            val open = PendingIntent.getActivity(
+                context,
+                0,
+                context.packageManager.getLaunchIntentForPackage(context.packageName)
+                    ?.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            val notification = Notification.Builder(context, UPDATE_CHANNEL)
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setContentTitle("Mero " + release.versionName + " is out")
+                .setContentText("Open Mero to download and install it")
+                .setAutoCancel(true)
+                .setContentIntent(open)
+                .build()
+            manager.notify(UPDATE_NOTIFICATION_ID, notification)
+            settings.putString(SettingsStore.UPDATE_NOTIFIED_VERSION, release.versionName)
+        }
     }
 
     private fun fetchLatest(): Release? {
@@ -202,6 +352,8 @@ class UpdateRepository(private val context: Context) {
             "https://api.github.com/repos/SoujanyaDasRoy/Mero/releases/latest"
         const val APK_MIME = "application/vnd.android.package-archive"
         const val POLL_MS = 400L
+        const val UPDATE_CHANNEL = "mero-updates"
+        const val UPDATE_NOTIFICATION_ID = 4201
     }
 }
 
@@ -226,6 +378,11 @@ sealed interface UpdateState {
         val uri: Uri,
         /** Where it landed, so the card can say so if installing goes wrong. */
         val fileName: String,
+        /**
+         * True when this file was found on disk at startup rather than fetched
+         * just now — which means an install was started and did not finish.
+         */
+        val resumed: Boolean = false,
     ) : UpdateState
     data class Failed(val message: String) : UpdateState
 }

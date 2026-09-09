@@ -107,10 +107,12 @@ fun SectionTitle(text: String, subtitle: String? = null) {
 }
 
 /**
- * The design's chip: 32dp, 8dp corners, outlined when unselected and filled with
- * the primary container when selected. Not [androidx.compose.material3.FilterChip],
- * which is 32dp but uses M3's own 8dp-corner-plus-leading-icon layout — the design
- * has no leading icon and a tighter horizontal pad.
+ * Mero's chip: fully rounded, outlined when unselected and filled with the
+ * primary container when selected. Not [androidx.compose.material3.FilterChip],
+ * which reserves room for a leading icon this design does not have.
+ *
+ * The corner radius is half the height, so the ends are semicircles however
+ * tall it is — a pill rather than a rounded rectangle.
  */
 @Composable
 fun MeroChip(
@@ -120,18 +122,19 @@ fun MeroChip(
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val pill = RoundedCornerShape(percent = 50)
     Box(
         modifier = modifier
-            .height(34.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .height(36.dp)
+            .clip(pill)
             .background(if (selected) scheme.primaryContainer else Color.Transparent)
             .border(
                 width = 1.dp,
                 color = if (selected) Color.Transparent else scheme.outlineVariant,
-                shape = RoundedCornerShape(12.dp),
+                shape = pill,
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -139,6 +142,8 @@ fun MeroChip(
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             color = if (selected) scheme.onPrimaryContainer else scheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

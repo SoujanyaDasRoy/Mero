@@ -32,6 +32,7 @@ import com.mero.data.LyricsRepository
 import com.mero.data.db.MIGRATION_1_2
 import com.mero.data.db.MIGRATION_2_3
 import com.mero.data.db.MIGRATION_3_4
+import com.mero.data.db.MIGRATION_4_5
 import com.mero.data.db.MeroDatabase
 import com.mero.playback.SleepTimer
 import com.mero.playback.AudioEffects
@@ -58,7 +59,7 @@ class AppContainer(context: Context) {
             context.applicationContext,
             MeroDatabase::class.java,
             "mero.db",
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
     }
 
     val searchRepository: SearchRepository by lazy { SearchRepository(InnerTubeSearchApi) }
@@ -69,7 +70,9 @@ class AppContainer(context: Context) {
     val artistRepository: ArtistRepository by lazy { ArtistRepository() }
     val importRepository: ImportRepository by lazy { ImportRepository(searchRepository) }
     val radioRepository: RadioRepository by lazy { RadioRepository() }
-    val updateRepository: UpdateRepository by lazy { UpdateRepository(context.applicationContext) }
+    val updateRepository: UpdateRepository by lazy {
+        UpdateRepository(context.applicationContext, settings)
+    }
 
     /** Shared between the equalizer screen and the playback service. */
     val audioEffects: AudioEffects by lazy { AudioEffects() }

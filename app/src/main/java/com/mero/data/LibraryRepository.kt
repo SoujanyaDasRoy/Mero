@@ -134,6 +134,13 @@ class LibraryRepository(private val dao: MeroDao) {
 
     suspend fun renamePlaylist(id: String, name: String) = dao.renamePlaylist(id, name.trim())
 
+    /** A picture the user picked, or null to go back to the first track's cover. */
+    suspend fun setPlaylistCover(id: String, uri: String?) =
+        dao.setPlaylistCover(id, uri?.takeIf { it.isNotBlank() })
+
+    suspend fun setPlaylistDescription(id: String, text: String?) =
+        dao.setPlaylistDescription(id, text?.trim()?.takeIf { it.isNotBlank() })
+
     suspend fun deletePlaylist(id: String) = dao.deletePlaylist(id)
 
     /** Appends to the end. Re-adding an existing track is a no-op by primary key. */

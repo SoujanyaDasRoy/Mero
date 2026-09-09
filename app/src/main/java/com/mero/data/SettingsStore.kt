@@ -93,6 +93,18 @@ class SettingsStore(context: Context) {
         const val EQ_PRESET = "eq_preset"
         const val EQ_BANDS = "eq_bands"
 
+        /**
+         * The APK this app last downloaded, so a restart knows whether it was
+         * installed, is still waiting, or has gone from disk.
+         */
+        const val UPDATE_FILE_VERSION = "update_file_version"
+        const val UPDATE_FILE_NAME = "update_file_name"
+        const val UPDATE_FILE_SIZE = "update_file_size"
+        const val UPDATE_DOWNLOAD_ID = "update_download_id"
+
+        /** The version we have already told someone about, so we say it once. */
+        const val UPDATE_NOTIFIED_VERSION = "update_notified_version"
+
         /** Empty when the profile follows whatever is plugged in. */
         const val ROUTE_OVERRIDE = "eq_route_override"
 
