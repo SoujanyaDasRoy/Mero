@@ -70,6 +70,7 @@ import com.mero.data.CodecPreference
 import com.mero.data.HomeSection
 import com.mero.data.MERO_SOURCE_URL
 import com.mero.data.SettingsStore
+import com.mero.data.runCatchingCancellable
 import com.mero.data.UpdateState
 import com.mero.playback.OutputRoute
 import com.mero.data.titleCase
@@ -106,6 +107,7 @@ import com.mero.ui.theme.MeroTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
@@ -377,6 +379,7 @@ private fun MeroContent(
     /** Set when a full screen was opened from the expanded player. */
     var cameFromPlayer by remember { mutableStateOf(false) }
     var homeSections by remember { mutableStateOf(emptyList<HomeSection>()) }
+    var personalSections by remember { mutableStateOf(emptyList<HomeSection>()) }
     // Every seed gets a tile straight away; the artwork arrives as the matching
     // home shelf loads. Driving the grid off loaded shelves alone left it
     // showing whatever few had come back so far.
@@ -659,6 +662,36 @@ private fun MeroContent(
         }
     }
 
+    /**
+     * The shelves built from this phone's own listening.
+     *
+     * Kept separate from the genre feed and refreshed on its own, so the feed
+     * does not wait on a round trip for them and they can be rebuilt as songs
+     * are played without reloading everything underneath.
+     */
+    fun loadPersonal() {
+        if (recentlyPlayed.isEmpty() && mostPlayed.isEmpty()) return
+        scope.launch {
+            val mine = runCatchingCancellable {
+                container.homeRepository.personalSections(
+                    recentlyPlayed = recentlyPlayed,
+                    mostPlayed = mostPlayed,
+                    radio = container.radioRepository,
+                )
+            }.getOrDefault(emptyList())
+            if (mine.isEmpty()) return@launch
+            val titles = mine.map { it.title }.toSet()
+            personalSections = mine
+            homeSections = homeSections.filterNot { it.title in titles }
+        }
+    }
+
+    // Rebuilds as songs are played, so the feed follows listening instead of
+    // being whatever it was at launch.
+    LaunchedEffect(recentlyPlayed.firstOrNull()?.id, mostPlayed.firstOrNull()?.id) {
+        loadPersonal()
+    }
+
     fun loadMoreHome() {
         if (homeLoading || homeLoadingMore || seedQueue.isEmpty()) return
         homeLoadingMore = true
@@ -930,7 +963,7 @@ private fun MeroContent(
             ) {
                 composable<Home> {
                     HomeScreen(
-                        sections = homeSections,
+                        sections = personalSections + homeSections,
                         loading = homeLoading,
                         error = homeError,
                         onRetry = { loadHome() },

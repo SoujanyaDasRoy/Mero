@@ -264,7 +264,7 @@ private fun QuickPicks(songs: List<Song>, onSongClick: (Song) -> Unit) {
 private fun FeatureShelf(section: HomeSection, onSongClick: (Song, List<Song>) -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Column(Modifier.padding(top = 8.dp)) {
-        ShelfTitle(section.title, subtitle = "Fresh every time you open Mero")
+        ShelfTitle(section.title, subtitle = section.subtitle ?: "Fresh every time you open Mero")
         Row(
             Modifier
                 .horizontalScroll(rememberScrollState())
@@ -322,7 +322,7 @@ private fun FeatureShelf(section: HomeSection, onSongClick: (Song, List<Song>) -
 private fun Shelf(section: HomeSection, onSongClick: (Song, List<Song>) -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Column {
-        ShelfTitle(section.title)
+        ShelfTitle(section.title, subtitle = section.subtitle)
         Row(
             Modifier
                 .horizontalScroll(rememberScrollState())
