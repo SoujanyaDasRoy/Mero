@@ -10,6 +10,19 @@ object EqPresets {
 
     val presets: Map<String, List<Int>> = linkedMapOf(
         "Flat" to List(10) { 0 },
+        // Both ends, and nothing taken out of the middle.
+        //
+        // The usual way to make music sound "exciting" is a V: lift the bass,
+        // lift the treble, and drop the midrange to exaggerate the difference.
+        // It works for about a track and a half, and then every voice and
+        // guitar sounds like it is being played in the next room — because the
+        // midrange is where they live, and it has been turned down.
+        //
+        // This lifts the two octaves at each extreme that almost every driver
+        // rolls off — the sub-bass you feel and the air above 8 kHz — and
+        // leaves 250 Hz to 2 kHz at exactly unity. No band is negative, so
+        // there is no scoop anywhere in the curve, only shoulders.
+        "Extended" to listOf(4, 2, 0, 0, 0, 0, 0, 1, 2, 4),
         "Bass Boost" to listOf(9, 8, 6, 3, 0, 0, 0, 1, 2, 2),
         // The opposite, and the one a car usually wants: doors and boots
         // resonate, so the low end arrives with help nobody asked for.
