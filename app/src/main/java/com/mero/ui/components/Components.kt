@@ -69,18 +69,17 @@ fun Artwork(
             // Cropped, not fitted: YouTube thumbnails are 16:9 and every one
             // of them was being letterboxed inside a square with grey bars.
             //
-            // matchParentSize, not size(size.dp) and not fillMaxSize. The
-            // player stretches this box with fillMaxWidth().aspectRatio(1f),
-            // and a fixed size would leave the image small inside a larger
-            // frame — while fillMaxSize resolves to zero against the unbounded
-            // height those modifiers pass down, so nothing is drawn at all.
-            // matchParentSize takes the box's measured size without taking
-            // part in measuring it.
+            // fillMaxSize, against a box whose own modifier chain always ends
+            // in size(size.dp), so the constraints reaching the image are
+            // bounded whatever the caller passed in. matchParentSize looks
+            // equivalent and is not: it takes the size the box worked out from
+            // its *other* children, and this box has none, so on some screens
+            // the image was measured at zero and simply never appeared.
             AsyncImage(
                 model = model,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.matchParentSize(),
+                modifier = Modifier.fillMaxSize(),
             )
         } else {
             Icon(

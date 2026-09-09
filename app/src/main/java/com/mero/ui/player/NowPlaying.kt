@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
@@ -49,10 +50,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -141,6 +144,27 @@ data class PlayerActions(
     val onMore: () -> Unit = {},
 )
 
+/**
+ * Swipe the whole player down to close it.
+ *
+ * Every full-screen player on the phone closes this way, so the collapse arrow
+ * in the corner is the fallback rather than the instruction. Vertical only, and
+ * only downward: sideways belongs to the seek bar, and up means nothing here.
+ */
+private fun Modifier.swipeDownToCollapse(onCollapse: () -> Unit): Modifier = composed {
+    var travelled by remember { mutableFloatStateOf(0f) }
+    pointerInput(Unit) {
+        detectVerticalDragGestures(
+            onDragStart = { travelled = 0f },
+            onDragEnd = { if (travelled > COLLAPSE_THRESHOLD_PX) onCollapse() },
+            onDragCancel = { travelled = 0f },
+        ) { _, dragAmount -> travelled += dragAmount }
+    }
+}
+
+/** Far enough that it cannot be a stray thumb on the way to a button. */
+private const val COLLAPSE_THRESHOLD_PX = 140f
+
 @Composable
 fun NowPlayingScreen(
     variant: PlayerVariant,
@@ -149,10 +173,15 @@ fun NowPlayingScreen(
     actions: PlayerActions,
     modifier: Modifier = Modifier,
 ) = when (variant) {
-    PlayerVariant.Standard -> StandardPlayer(ui, position, actions, modifier)
-    PlayerVariant.FullBleed -> FullBleedPlayer(ui, position, actions, modifier)
+    PlayerVariant.Standard ->
+        StandardPlayer(ui, position, actions, modifier.swipeDownToCollapse(actions.onCollapse))
+    PlayerVariant.FullBleed ->
+        FullBleedPlayer(ui, position, actions, modifier.swipeDownToCollapse(actions.onCollapse))
+    // Not the queue-forward one: its list scrolls vertically, and a swipe
+    // meant for the list would close the player instead.
     PlayerVariant.QueueForward -> QueueForwardPlayer(ui, position, actions, modifier)
-    PlayerVariant.Compact -> CompactPlayer(ui, position, actions, modifier)
+    PlayerVariant.Compact ->
+        CompactPlayer(ui, position, actions, modifier.swipeDownToCollapse(actions.onCollapse))
 }
 
 /* ------------------------------- A · Standard ------------------------------ */

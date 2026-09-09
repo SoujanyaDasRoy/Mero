@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.layout.aspectRatio
@@ -23,6 +25,7 @@ import coil3.compose.AsyncImage
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -57,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mero.domain.SearchItem
 import com.mero.domain.Song
+import com.mero.ui.components.Artwork
 import com.mero.ui.components.MeroChip
 import com.mero.ui.components.SongRow
 
@@ -66,6 +70,9 @@ private val SEARCH_TABS = listOf("Songs", "Albums", "Artists", "Playlists")
 fun SearchScreen(
     genres: List<GenreCardData>,
     onGenreClick: (String) -> Unit,
+    suggestedArtists: List<SearchItem>,
+    recentlyPlayed: List<Song>,
+    onSongClick: (Song) -> Unit,
     query: String,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
@@ -148,7 +155,15 @@ fun SearchScreen(
         }
 
         if (query.isBlank()) {
-            GenreGrid(genres, onGenreClick, contentPadding)
+            IdleSuggestions(
+                artists = suggestedArtists,
+                recentlyPlayed = recentlyPlayed,
+                genres = genres,
+                onArtistClick = onResultClick,
+                onSongClick = onSongClick,
+                onGenreClick = onGenreClick,
+                contentPadding = contentPadding,
+            )
         } else {
             Row(
                 Modifier
@@ -332,4 +347,132 @@ private fun genreTint(title: String): Color {
     )
     val index = ((title.hashCode() % palette.size) + palette.size) % palette.size
     return palette[index]
+}
+
+/**
+ * What the search screen shows before anything has been typed.
+ *
+ * It was a grid of coloured rectangles with a word in each. That is a fine way
+ * to browse genres and a poor way to start, because none of it is about the
+ * person looking at it: everything they have played is already on the device
+ * and none of it was here. Faces and covers first, words after.
+ *
+ * One grid, with the rows as full-width items inside it — not a LazyColumn
+ * wrapped around a grid, which measures the grid against an infinite height
+ * and crashes.
+ */
+@Composable
+private fun IdleSuggestions(
+    artists: List<SearchItem>,
+    recentlyPlayed: List<Song>,
+    genres: List<GenreCardData>,
+    onArtistClick: (SearchItem) -> Unit,
+    onSongClick: (Song) -> Unit,
+    onGenreClick: (String) -> Unit,
+    contentPadding: PaddingValues,
+) {
+    val scheme = MaterialTheme.colorScheme
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            bottom = contentPadding.calculateBottomPadding() + 80.dp,
+        ),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (artists.isNotEmpty()) {
+            item(key = "artists-heading", span = { GridItemSpan(maxLineSpan) }) {
+                IdleHeading("Artists you play")
+            }
+            item(key = "artists", span = { GridItemSpan(maxLineSpan) }) {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    artists.forEach { artist ->
+                        Column(
+                            Modifier
+                                .width(96.dp)
+                                .clickable { onArtistClick(artist) },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            // Circular, the way every music app draws a person
+                            // rather than a record.
+                            Artwork(artist.thumbnailUrl, size = 96, radius = 48)
+                            Text(
+                                artist.title,
+                                Modifier.padding(top = 8.dp),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (recentlyPlayed.isNotEmpty()) {
+            item(key = "recent-heading", span = { GridItemSpan(maxLineSpan) }) {
+                IdleHeading("Pick up where you left off")
+            }
+            item(key = "recent", span = { GridItemSpan(maxLineSpan) }) {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    recentlyPlayed.take(10).forEach { song ->
+                        Column(
+                            Modifier
+                                .width(124.dp)
+                                .clickable { onSongClick(song) },
+                        ) {
+                            Artwork(song.thumbnailUrl, size = 124, radius = 14)
+                            Text(
+                                song.title,
+                                Modifier.padding(top = 8.dp),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                song.artist,
+                                fontSize = 11.sp,
+                                color = scheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item(key = "browse-heading", span = { GridItemSpan(maxLineSpan) }) {
+            IdleHeading("Browse")
+        }
+        items(genres, key = { it.title }) { genre ->
+            GenreCard(
+                title = genre.title,
+                artworkUrl = genre.artworkUrl,
+                tint = genreTint(genre.title),
+                onClick = { onGenreClick(genre.title) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun IdleHeading(text: String) {
+    Text(
+        text,
+        Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 10.dp),
+        fontSize = 18.sp,
+        fontWeight = FontWeight.Bold,
+    )
 }

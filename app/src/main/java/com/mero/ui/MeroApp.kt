@@ -83,6 +83,7 @@ import com.mero.playback.PlayerConnection
 import com.mero.playback.mediaItemFor
 import com.mero.ui.equalizer.EqualizerScreen
 import com.mero.ui.artist.ArtistScreen
+import com.mero.ui.collection.CollectionScreen
 import com.mero.ui.home.HomeScreen
 import com.mero.ui.library.LibraryScreen
 import com.mero.ui.player.LyricsSheet
@@ -122,6 +123,20 @@ import kotlinx.serialization.Serializable
 @Serializable data class PlaylistRoute(val playlistId: String)
 @Serializable data class SmartPlaylistRoute(val playlistId: String)
 @Serializable data class ArtistRoute(val artistId: String)
+
+/**
+ * An album or a remote playlist, opened rather than played.
+ *
+ * [kind] decides which endpoint fetches the tracks; the title and artwork come
+ * along so the header can be drawn before the tracks arrive.
+ */
+@Serializable data class CollectionRoute(
+    val browseId: String,
+    val title: String,
+    val subtitle: String,
+    val artworkUrl: String? = null,
+    val kind: String = "album",
+)
 
 @Composable
 fun MeroApp() {
@@ -375,11 +390,24 @@ private fun MeroContent(
 
     var query by remember { mutableStateOf("") }
     var searchTab by remember { mutableStateOf("Songs") }
+
+    /**
+     * When the search box was last touched.
+     *
+     * A query is worth keeping while you flick between tabs — you were part way
+     * through something. It is not worth keeping an hour later, after a whole
+     * album has played: coming back to Search and finding what you typed before
+     * lunch still sitting there, with its results, is just something to clear
+     * before you can start.
+     */
+    var lastSearchAt by remember { mutableLongStateOf(0L) }
     var libraryTab by remember { mutableStateOf("Liked") }
     /** Set when a full screen was opened from the expanded player. */
     var cameFromPlayer by remember { mutableStateOf(false) }
     var homeSections by remember { mutableStateOf(emptyList<HomeSection>()) }
     var personalSections by remember { mutableStateOf(emptyList<HomeSection>()) }
+    /** Faces for the idle search screen, resolved from the artists you play. */
+    var suggestedArtists by remember { mutableStateOf(emptyList<SearchItem>()) }
     // Every seed gets a tile straight away; the artwork arrives as the matching
     // home shelf loads. Driving the grid off loaded shelves alone left it
     // showing whatever few had come back so far.
@@ -686,6 +714,25 @@ private fun MeroContent(
         }
     }
 
+    // The same play history that drives the home feed also names the artists
+    // worth showing a picture of. Resolved once per change rather than every
+    // time Search is opened.
+    LaunchedEffect(mostPlayed.firstOrNull()?.id, recentlyPlayed.firstOrNull()?.id) {
+        val names = com.mero.data.topArtists(
+            mostPlayed.ifEmpty { recentlyPlayed },
+            limit = 8,
+        )
+        if (names.isEmpty()) return@LaunchedEffect
+        val cards = names.mapNotNull { name ->
+            runCatchingCancellable {
+                container.searchRepository.searchItems(name, SearchResultType.Artist)
+                    .getOrNull()
+                    ?.firstOrNull { it.thumbnailUrl != null }
+            }.getOrNull()
+        }
+        if (cards.isNotEmpty()) suggestedArtists = cards
+    }
+
     // Rebuilds as songs are played, so the feed follows listening instead of
     // being whatever it was at launch.
     LaunchedEffect(recentlyPlayed.firstOrNull()?.id, mostPlayed.firstOrNull()?.id) {
@@ -980,6 +1027,13 @@ private fun MeroContent(
                 }
 
                 composable<SearchRoute> {
+                    // Checked on arrival rather than on a timer, so nothing is
+                    // ever cleared out from under someone who is looking at it.
+                    LaunchedEffect(Unit) {
+                        val idle = System.currentTimeMillis() - lastSearchAt
+                        if (query.isNotBlank() && idle > SEARCH_FORGET_MS) query = ""
+                    }
+
                     var results by remember { mutableStateOf<List<SearchItem>>(emptyList()) }
                     var continuationToken by remember { mutableStateOf<String?>(null) }
                     var isSearching by remember { mutableStateOf(false) }
@@ -1056,9 +1110,15 @@ private fun MeroContent(
 
                     SearchScreen(
                         genres = genreCards,
+                        suggestedArtists = suggestedArtists,
+                        recentlyPlayed = recentlyPlayed,
+                        onSongClick = { song -> playFrom(song, recentlyPlayed, "Search") },
                         onGenreClick = { genre -> query = genre },
                         query = query,
-                        onQueryChange = { query = it },
+                        onQueryChange = {
+                            query = it
+                            lastSearchAt = System.currentTimeMillis()
+                        },
                         onSearch = {
                             // Focus clear / instant active search
                         },
@@ -1079,25 +1139,28 @@ private fun MeroContent(
                                     navController.navigate(ArtistRoute(item.browseId ?: item.id)) {
                                         launchSingleTop = true
                                     }
-                                SearchResultType.Album -> scope.launch {
-                                    container.artistRepository.albumSongs(item.browseId ?: item.id)
-                                        .onSuccess { songs -> if (songs.isNotEmpty()) playFrom(songs.first(), songs, "Album") }
-                                }
-                                SearchResultType.Playlist -> {
-                                    toast("Opening ${item.title}")
-                                    scope.launch {
-                                        container.artistRepository
-                                            .playlistSongs(item.browseId ?: item.id)
-                                            .onSuccess { songs ->
-                                                if (songs.isEmpty()) {
-                                                    toast("That playlist has no playable tracks")
-                                                } else {
-                                                    playFrom(songs.first(), songs, item.title)
-                                                }
-                                            }
-                                            .onFailure { toast("Could not open that playlist") }
-                                    }
-                                }
+                                // Opened, not played. Half the reason to tap an
+                                // album is that you want a particular track on
+                                // it, and starting at one takes that away.
+                                SearchResultType.Album -> navController.navigate(
+                                    CollectionRoute(
+                                        browseId = item.browseId ?: item.id,
+                                        title = item.title,
+                                        subtitle = item.subtitle,
+                                        artworkUrl = item.thumbnailUrl,
+                                        kind = "album",
+                                    ),
+                                ) { launchSingleTop = true }
+
+                                SearchResultType.Playlist -> navController.navigate(
+                                    CollectionRoute(
+                                        browseId = item.browseId ?: item.id,
+                                        title = item.title,
+                                        subtitle = item.subtitle,
+                                        artworkUrl = item.thumbnailUrl,
+                                        kind = "playlist",
+                                    ),
+                                ) { launchSingleTop = true }
                             }
                         },
                         onSongMore = { menuSong = it },
@@ -1113,6 +1176,62 @@ private fun MeroContent(
                             color = androidx.compose.ui.graphics.Color.White,
                         )
                     }
+                }
+
+                composable<CollectionRoute> { entry ->
+                    val route = entry.toRoute<CollectionRoute>()
+                    var tracks by remember(route.browseId) { mutableStateOf(emptyList<Song>()) }
+                    var tracksLoading by remember(route.browseId) { mutableStateOf(true) }
+                    var tracksError by remember(route.browseId) { mutableStateOf<String?>(null) }
+
+                    suspend fun fetch() {
+                        tracksLoading = true
+                        val repo = container.artistRepository
+                        val result = if (route.kind == "playlist") {
+                            repo.playlistSongs(route.browseId)
+                        } else {
+                            repo.albumSongs(route.browseId)
+                        }
+                        result.fold(
+                            onSuccess = {
+                                tracks = it
+                                tracksError = null
+                                songsById = songsById + it.associateBy { song -> song.id }
+                            },
+                            onFailure = { tracksError = it.message ?: it.toString() },
+                        )
+                        tracksLoading = false
+                    }
+                    LaunchedEffect(route.browseId) { fetch() }
+
+                    CollectionScreen(
+                        title = route.title,
+                        subtitle = listOfNotNull(
+                            route.subtitle.takeIf { it.isNotBlank() },
+                            tracks.size.takeIf { it > 0 }?.let { "$it songs" },
+                        ).joinToString(" · "),
+                        // The tracks carry the album's own art, so prefer it:
+                        // a cover URL squeezed through a navigation argument
+                        // has to survive being encoded into a route path, and
+                        // an empty square is the visible cost when it does not.
+                        artworkUrl = tracks.firstOrNull()?.thumbnailUrl ?: route.artworkUrl,
+                        songs = tracks,
+                        loading = tracksLoading,
+                        error = tracksError,
+                        nowPlayingId = current?.id,
+                        onPlayFrom = { song -> playFrom(song, tracks, route.title) },
+                        onPlayAll = {
+                            tracks.firstOrNull()?.let { playFrom(it, tracks, route.title) }
+                        },
+                        onShuffle = {
+                            val shuffled = tracks.shuffled()
+                            shuffled.firstOrNull()?.let { playFrom(it, shuffled, route.title) }
+                        },
+                        onSongMore = { menuSong = it },
+                        onRetry = { scope.launch { fetch() } },
+                        onBack = { navController.popBackStack() },
+                        contentPadding = contentPadding,
+                    )
                 }
 
                 composable<ArtistRoute> { entry ->
@@ -1133,21 +1252,31 @@ private fun MeroContent(
                         loading = artistLoading,
                         error = artistError,
                         onBack = { navController.popBackStack() },
+                        // Same rule as search: opened, not played.
                         onPlaylistClick = { playlist ->
-                            toast("Opening ${playlist.title}")
-                            scope.launch {
-                                container.artistRepository.playlistSongs(playlist.browseId)
-                                    .onSuccess { songs ->
-                                        if (songs.isNotEmpty()) playFrom(songs.first(), songs, playlist.title)
-                                    }
-                                    .onFailure { toast("Could not open that playlist") }
-                            }
+                            navController.navigate(
+                                CollectionRoute(
+                                    browseId = playlist.browseId,
+                                    title = playlist.title,
+                                    subtitle = artistData?.name.orEmpty(),
+                                    artworkUrl = playlist.thumbnailUrl,
+                                    kind = "playlist",
+                                ),
+                            ) { launchSingleTop = true }
                         },
                         onAlbumClick = { album ->
-                            scope.launch {
-                                container.artistRepository.albumSongs(album.browseId)
-                                    .onSuccess { songs -> if (songs.isNotEmpty()) playFrom(songs.first(), songs, "Album") }
-                            }
+                            navController.navigate(
+                                CollectionRoute(
+                                    browseId = album.browseId,
+                                    title = album.title,
+                                    subtitle = listOfNotNull(
+                                        artistData?.name?.takeIf { it.isNotBlank() },
+                                        album.year?.toString(),
+                                    ).joinToString(" · "),
+                                    artworkUrl = album.thumbnailUrl,
+                                    kind = "album",
+                                ),
+                            ) { launchSingleTop = true }
                         },
                         onSongClick = { song -> playFrom(song, artistData?.songs.orEmpty(), "Artist") },
                         contentPadding = contentPadding,
@@ -1875,6 +2004,14 @@ private fun upcomingFrom(
 
 /** Newline. Separates persisted recent searches, which never contain one. */
 private const val NL = "\n"
+
+/**
+ * How long a search query outlives the last keystroke.
+ *
+ * Long enough to survive playing a couple of songs and coming back; short
+ * enough that it is gone by the time you have forgotten typing it.
+ */
+private const val SEARCH_FORGET_MS = 15L * 60 * 1000
 
 /** One hour of no interaction. */
 private const val INACTIVITY_PAUSE_MS = 60L * 60 * 1000

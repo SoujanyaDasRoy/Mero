@@ -3,6 +3,7 @@ package com.mero.ui.player
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -80,6 +82,28 @@ fun MiniPlayer(
             .height(64.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(scheme.surfaceContainerHigh)
+            // Swipe up to open it, sideways to change track. A bar this size
+            // is mostly thumb-sized targets with gaps between them; the whole
+            // strip responding to a flick is a bigger target than any of them.
+            .pointerInput(Unit) {
+                var dx = 0f
+                var dy = 0f
+                detectDragGestures(
+                    onDragStart = { dx = 0f; dy = 0f },
+                    onDragEnd = {
+                        when {
+                            -dy > SWIPE_THRESHOLD_PX && kotlin.math.abs(dy) > kotlin.math.abs(dx) ->
+                                onExpand()
+                            dx < -SWIPE_THRESHOLD_PX -> onNext()
+                            dx > SWIPE_THRESHOLD_PX -> onPrevious()
+                        }
+                    },
+                ) { change, dragAmount ->
+                    change.consume()
+                    dx += dragAmount.x
+                    dy += dragAmount.y
+                }
+            }
             .clickable(onClick = onExpand),
     ) {
         Row(
@@ -444,3 +468,11 @@ fun LyricsSheet(
         }
     }
 }
+
+/**
+ * How far a flick has to travel before it counts.
+ *
+ * Generous, because this is a 64dp strip: a short drag is usually someone
+ * missing a button rather than asking for the next track.
+ */
+private const val SWIPE_THRESHOLD_PX = 90f
