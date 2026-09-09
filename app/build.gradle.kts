@@ -27,8 +27,8 @@ android {
         applicationId = "com.mero"
         minSdk = 28
         targetSdk = 36
-        versionCode = 13
-        versionName = "1.9.0"
+        versionCode = 14
+        versionName = "1.10.0"
     }
 
     // yt-dlp ships a Python runtime and ffmpeg per architecture, so a universal

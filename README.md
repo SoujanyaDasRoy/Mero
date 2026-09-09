@@ -53,17 +53,25 @@ gets the genre feed instead.
 
 - Results from the first letter, updating as you type
 - Songs, albums, artists and playlists, each scrolling on effectively forever
-- Before you type: the artists you play as photographs, the songs you were last
-  listening to, and genre tiles below them
+- Before you type: **artists with their photographs** — the ones you play, or
+  the ones behind the genres if you are new — plus what you were last listening
+  to, and genre tiles below
 - Albums and playlists **open** as a track list — cover, running order, Play and
   Shuffle — rather than starting from track one
+- A query is forgotten after fifteen minutes, so you never come back to
+  yesterday's search sitting in the box
 
 ### Library
 
-- Liked songs, recently played and most played
-- Your own playlists, plus **smart playlists** that fill themselves from rules —
-  play count, artist, recency
-- **Import** a playlist from a YouTube Music or Spotify link
+- Liked songs, recently played and most played, with a line at the top saying
+  what the library actually holds
+- Your own playlists, each with **a cover and a description you choose**
+- **Smart playlists** that fill themselves from rules — play count, artist,
+  recency
+- **Import** a playlist from a YouTube Music link. Spotify imports work the same
+  way but need your own Spotify client id and secret, entered in Settings —
+  Mero ships none, because a shared key in an APK handed round a group is a key
+  that leaks
 
 ### Offline
 
@@ -103,9 +111,16 @@ Synced and plain lyrics, fetched on demand from LRCLIB.
 ### Updates
 
 Mero is not on the Play Store, so it checks GitHub itself when it opens. When
-there is a new version, Home shows a banner: **Download**, then **Install**.
-Android asks once for permission to install apps. The file is also kept in your
-Downloads folder in case you would rather tap it there.
+there is a new version, Home shows a banner and a notification arrives once:
+**Download**, then **Install**. Android asks once for permission to install
+apps.
+
+The download is remembered across restarts. Mero compares what it downloaded
+with what is running and acts accordingly — deleting the file and confirming
+the update once it is installed, offering the file it already has if an install
+was interrupted, and forgetting it if it has gone from disk. A download that
+will not install can be discarded. The file is also kept in your Downloads
+folder in case you would rather tap it there.
 
 ---
 
