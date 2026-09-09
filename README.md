@@ -6,63 +6,101 @@
 
 **A free, ad-free music player for Android.**
 
-Streams from YouTube Music · imports from Spotify · offline downloads · user & smart playlists · lyrics · real DSP · no account, ever.
+No account. No ads. No subscription.
 
 </div>
 
 ---
 
-## What it does
+Mero plays music from YouTube Music, imports playlists from Spotify, downloads
+for offline listening, and ships a real DSP suite. It is built for a small group
+of friends rather than for an app store, and it never asks anyone to sign in.
 
-Mero plays music from YouTube Music without ads, without an account, and without
-paying for anything. It is built for a small group of friends, not for an app
-store.
+**[Download the latest release →](../../releases/latest)**
 
-### Features
+---
 
-**Playback**
-- Instant stream resolution via embedded `yt-dlp` using YouTube's direct `/player` API
-- Resilient byte-range streaming with dynamic URL range parameter handling
-- Extended 5-minute buffer duration with 500 ms fast startup for continuous playback
-- Background playback via `MediaSessionService` with lock-screen controls and notification media controls
-- Bluetooth, wired headset, and Android Auto controls
-- Pauses when headphones are unplugged, ducks audio for incoming calls
-- Auto-advance through the queue, plus shuffle and repeat
-- Displays exact stream format and bitrate (e.g. `Opus · 160 kbps`)
+## Features
 
-**Search & Discovery**
-- **Active search as you write** with live, debounced search results across YouTube Music
-- **Infinite scrolling** search results — seamlessly load page after page of songs, artists, albums, and playlists
-- Clean search interface free of history clutter, dedicated entirely to displaying music
-- Interactive "Browse Music & Genres" topics grid when the search bar is idle
-- Home feed reshuffles from 44 genres and moods on every refresh, with fast 2-seed startup rendering
+### Playback
 
-**Library & Playlists**
-- Liked songs, recently played, and most played track lists
-- Full queue management with drag-to-reorder
-- User-created custom playlists
-- **Smart Playlists** — auto-generating playlists driven by custom rules, play counts, and artist filters
-- **Playlist Import** — import playlists directly from YouTube Music or Spotify links
+- Streams from YouTube Music — tap a song and it starts in about a second
+- Plays in the background, with lock-screen and notification controls
+- Works with headset buttons, Bluetooth and Android Auto — including waking the
+  app and resuming where you left off when Mero isn't already running
+- Queue with drag-to-reorder, shuffle, repeat, and "play next"
+- Keeps going with similar tracks when the queue runs out, or pauses after an
+  hour of no interaction — your choice
+- Playback speed from 0.75× to 2×
+- Shows what the stream actually resolved to, e.g. `Opus · 160 kbps`
 
-**Offline Downloads**
-- On-disk track downloading with isolated download cache
-- Export downloaded audio files to custom folders via Android's Storage Access Framework (SAF)
-- Offline playback requiring zero network connectivity
+### A home screen that learns
 
-**Lyrics**
-- Synced and plain lyrics fetched lazily on demand
+Mero has no account and never will, so recommendations come from the only record
+there is: what you have played on this phone.
 
-**Sound & DSP**
-- 10-band equalizer built on `DynamicsProcessing`, with built-in presets
-- Preamp with automatic headroom compensation to prevent clipping
-- Loudness normalization
-- Spatial audio modes where supported by the device
+- **Jump back in** — the last few songs you played
+- **On repeat** — what you keep coming back to
+- **More like <song>** — YouTube's own per-track similarity, no identity needed
+- **A shelf per artist you play most**
 
-**Look & Feel**
-- Material 3 throughout, with four accent palettes
-- Material You dynamic color support (Android 12+)
-- Pure-black AMOLED dark mode
-- Three selectable Now Playing sheet layouts
+It rebuilds as you listen. Nothing leaves the device, and a fresh install simply
+gets the genre feed instead.
+
+### Search
+
+- Results from the first letter, updating as you type
+- Songs, albums, artists and playlists, each scrolling on effectively forever
+- Genre tiles with real cover art when the search box is empty
+
+### Library
+
+- Liked songs, recently played and most played
+- Your own playlists, plus **smart playlists** that fill themselves from rules —
+  play count, artist, recency
+- **Import** a playlist from a YouTube Music or Spotify link
+
+### Offline
+
+- Download any track for offline playback
+- Optionally copy downloads to a folder of your choosing
+- Wi-Fi-only downloading, on by default
+
+### Sound
+
+All processing happens inside Mero rather than being handed to the device, so it
+behaves identically on every phone.
+
+- **Ten-band parametric equalizer you drag** — each band moves in frequency and
+  width, not just volume, with the spectrum of what's playing drawn behind it
+- **Separate profiles** for headphones, speaker and car, switched automatically
+  or pinned by hand
+- **Presets** including Extended (both ends lifted, midrange untouched) and Less
+  Bass, alongside the usual genre curves
+- **Crossfeed** for headphones — stops hard-panned recordings happening inside
+  your head
+- **Loudness matching** measured the way broadcasters do it, so a quiet
+  recording doesn't vanish after a loud one
+- **Preamp with automatic headroom**, so boosting never clips
+- **Beat haptics**, driven by Mero's own audio rather than the microphone
+
+### Lyrics
+
+Synced and plain lyrics, fetched on demand from LRCLIB.
+
+### Look and feel
+
+- Material 3, with twelve accent colours and Material You on Android 12+
+- System / Light / Dark, plus pure black for AMOLED panels
+- Four Now Playing layouts — Classic, Immersive, Up Next and One-handed
+- Manrope throughout
+
+### Updates
+
+Mero is not on the Play Store, so it checks GitHub itself when it opens. When
+there is a new version, Home shows a banner: **Download**, then **Install**.
+Android asks once for permission to install apps. The file is also kept in your
+Downloads folder in case you would rather tap it there.
 
 ---
 
@@ -70,23 +108,23 @@ store.
 
 Grab the APK from the [latest release](../../releases/latest).
 
-**Which file?**
-
 | File | For |
 |---|---|
-| `app-arm64-v8a-*.apk` | **Every modern Android phone — take this one** |
-| `app-armeabi-v7a-*.apk` | Older 32-bit devices |
-| `app-x86_64-*.apk` | Emulators |
+| `mero-<version>-arm64-v8a-debug.apk` | **Every modern Android phone — take this one** |
+| `mero-<version>-armeabi-v7a-debug.apk` | Older 32-bit devices |
+| `mero-<version>-x86_64-debug.apk` | Emulators |
+| `mero-<version>-x86-debug.apk` | Old 32-bit emulators |
 
 Then on your phone:
 
-1. Open the downloaded APK
-2. Android will ask permission to install from that app — allow it
-3. Install, open, and search for something
+1. Open the downloaded APK.
+2. Allow Android to install apps from wherever you opened it.
+3. Play something.
 
 **Requires Android 9 (API 28) or newer.**
 
-> The first track you play unpacks and updates its extraction runtime once on first use. After that, stream resolution happens quickly, and tracks played in the same session start instantly.
+> Every release is signed with the same key. Installing over a previous version
+> keeps your library, playlists and downloads.
 
 ---
 
@@ -98,12 +136,11 @@ cd Mero
 ./gradlew :app:assembleDebug
 ```
 
-Needs JDK 17 or 21 and the Android SDK. Gradle fetches a JDK 17 toolchain
-automatically for the vendored `innertube` module.
+Needs the Android SDK and **JDK 17 or 21** — not 25, which the Android Gradle
+Plugin does not yet accept.
 
-Output lands in `app/build/outputs/apk/debug/`, split per architecture.
-
-Run unit tests with:
+APKs land in `app/build/outputs/apk/debug/`, split per architecture and named
+after the version inside them.
 
 ```bash
 ./gradlew :app:testDebugUnitTest
@@ -113,46 +150,75 @@ Run unit tests with:
 
 ## How it works
 
-Mero is composed of two Gradle modules: `innertube/`, vendored unmodified from
-[z-huang/InnerTune](https://github.com/z-huang/InnerTune), and `app/`, which contains
-all application logic, UI, and playback services.
+Two Gradle modules: `innertube/`, vendored unmodified from
+[z-huang/InnerTune](https://github.com/z-huang/InnerTune), and `app/`, which holds
+everything else.
 
-- **Search and metadata** come from YouTube's InnerTube API anonymously.
-- **Stream URLs** are resolved by an embedded [yt-dlp](https://github.com/yt-dlp/yt-dlp) binary,
-  configured with `youtube:skip=hls,dash,translated_subs,webpage` for direct `/player` API resolution.
-- **Resilient Range Streaming** uses Media3's `ResolvingDataSource` to dynamically append `&range=...` parameters to signed `googlevideo.com` CDN URLs, preventing HTTP 403 Forbidden errors when buffering across byte boundaries.
-- **Dual-Cache Architecture** separates temporary streaming cache (`cacheDir`) from persistent offline downloads (`filesDir`).
-- **Stream URLs are never stored.** They expire in roughly six hours, so Mero stores only the `videoId` and resolves a fresh CDN URL at playback-open time.
-- **No Google sign-in, ever.** Signing in would risk account rate-limiting or suspension. Spotify integration is strictly metadata-based; imported Spotify tracks are resolved directly to YouTube streams.
+**Search and metadata** come from YouTube's InnerTube API, anonymously.
 
-Full rationale and architectural decisions are documented in [`docs/architecture.md`](docs/architecture.md).
+**Stream URLs** are resolved by asking YouTube directly, with an embedded
+[yt-dlp](https://github.com/yt-dlp/yt-dlp) as the fallback when that fails. The
+direct path is roughly ten times faster; the fallback is what keeps playback
+working when YouTube changes something.
+
+**Stream URLs are never stored.** They expire in about six hours, so Mero keeps
+only the `videoId` and resolves a fresh URL each time a track opens.
+
+**Two caches**, deliberately separate: temporary streaming in `cacheDir`, and
+downloads you asked for in `filesDir`, so clearing one never touches the other.
+
+**Audio processing runs inside ExoPlayer's own pipeline** — biquad filters,
+crossfeed, loudness measurement and limiting, all Mero's own code. The Android
+`audiofx` effects it used to rely on were rejected outright by some devices and
+degraded playback on others.
+
+**No Google sign-in, ever.** Signing in would move the failure mode from "an IP
+got rate-limited" to "a friend lost their Google account". Spotify is metadata
+only — its own audio is DRM-protected and Mero does not touch it; imported
+tracks are matched to YouTube.
+
+Full rationale, including the alternatives rejected and why, is in
+[`docs/architecture.md`](docs/architecture.md).
 
 ---
 
 ## Known limitations
 
-- **Maximum quality is Opus ~160 kbps.** That's YouTube's ceiling without a Premium account. Opus at 160 kbps delivers quality comparable to 320 kbps MP3 due to superior compression efficiency.
-- **Dolby Atmos is not supported.** It requires hardware OEM licensing and Atmos-encoded source streams; YouTube serves stereo audio. Mero provides software spatial audio DSP instead.
-- **Extraction updates.** YouTube periodically modifies its backend endpoints. The embedded `yt-dlp` runtime self-updates daily to maintain stream extraction capability.
-- **Background process management on certain OEMs.** Aggressive battery optimization on brands like Xiaomi, Oppo, Vivo, and OnePlus may terminate background services. Exempt Mero from battery optimization if background playback stops when the screen is turned off.
+- **Quality tops out at Opus ~160 kbps.** That is YouTube's ceiling without a
+  signed-in Premium account, which is the one thing Mero will not do. There is
+  no lossless stream to ask for.
+- **No Dolby Atmos.** It needs OEM licensing and Atmos-encoded sources; YouTube
+  serves stereo.
+- **Extraction breaks periodically.** YouTube changes its backend; the bundled
+  yt-dlp updates itself to keep up, and occasionally a new release is needed.
+- **Some OEMs kill background playback.** Xiaomi, Oppo, Vivo, Realme and OnePlus
+  are aggressive about it regardless of foreground-service status. Settings →
+  Background playback settings goes straight to the exemption screen.
+- **A car cannot be told apart from earbuds automatically.** Both connect over
+  Bluetooth A2DP, and distinguishing them needs a permission Mero has no other
+  use for. Pin the Car profile in the equalizer instead.
 
 ---
 
 ## Legal
 
-Mero streams audio through YouTube's internal API. It is non-commercial, serves no ads, and is distributed privately. It does not circumvent DRM, nor does it access protected audio from Spotify.
-
----
+Mero streams audio through YouTube's internal API. It is non-commercial, carries
+no advertising, and is distributed privately. It does not circumvent DRM and does
+not access protected audio from Spotify.
 
 ## Security
 
-The `AIzaSy…` strings in `innertube/` are YouTube's public client keys, not secret credentials — see [`SECURITY.md`](SECURITY.md) for details.
+The `AIzaSy…` strings in `innertube/` are YouTube's public client keys, not
+secret credentials — see [`SECURITY.md`](SECURITY.md).
 
 ## Credits
 
-- [z-huang/InnerTune](https://github.com/z-huang/InnerTune) — `innertube` module
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [youtubedl-android](https://github.com/yausername/youtubedl-android) — stream extraction
+- [z-huang/InnerTune](https://github.com/z-huang/InnerTune) — the `innertube` module
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [youtubedl-android](https://github.com/yausername/youtubedl-android) — fallback stream extraction
+- [LRCLIB](https://lrclib.net) — lyrics
 - [Calvin-LL/Reorderable](https://github.com/Calvin-LL/Reorderable) — queue drag-and-drop
+- [JTransforms](https://github.com/wendykierp/JTransforms) — FFT for the spectrum display
+- [Manrope](https://github.com/sharanda/manrope) — typeface, SIL OFL
 
 ## License
 
