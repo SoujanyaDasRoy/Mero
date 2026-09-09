@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -22,18 +23,23 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.mero.data.MAX_ARTWORK_PX
+import com.mero.data.atArtworkSize
 import com.mero.domain.Song
+import kotlin.math.roundToInt
 
 /** Artwork with the design's rounded-square placeholder when there is no URL. */
 @Composable
@@ -45,6 +51,13 @@ fun Artwork(
     icon: ImageVector = Icons.Rounded.MusicNote,
 ) {
     val shape = RoundedCornerShape(radius.dp)
+    // Ask the CDN for the pixels this will actually be drawn at. Every URL
+    // arrives from the repositories at 220px, which is right for a list row
+    // and a quarter of what the full-screen player needs.
+    val density = LocalDensity.current
+    val model = remember(url, size, density.density) {
+        url?.atArtworkSize((size * density.density).roundToInt().coerceAtMost(MAX_ARTWORK_PX))
+    }
     Box(
         modifier = modifier
             .size(size.dp)
@@ -52,14 +65,22 @@ fun Artwork(
             .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         contentAlignment = Alignment.Center,
     ) {
-        if (url != null) {
+        if (model != null) {
             // Cropped, not fitted: YouTube thumbnails are 16:9 and every one
             // of them was being letterboxed inside a square with grey bars.
+            //
+            // matchParentSize, not size(size.dp) and not fillMaxSize. The
+            // player stretches this box with fillMaxWidth().aspectRatio(1f),
+            // and a fixed size would leave the image small inside a larger
+            // frame — while fillMaxSize resolves to zero against the unbounded
+            // height those modifiers pass down, so nothing is drawn at all.
+            // matchParentSize takes the box's measured size without taking
+            // part in measuring it.
             AsyncImage(
-                model = url,
+                model = model,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(size.dp),
+                modifier = Modifier.matchParentSize(),
             )
         } else {
             Icon(

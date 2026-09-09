@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.mero.data.atArtworkSize
 import com.mero.domain.Song
 
 private const val SCHEME = "mero"
@@ -20,7 +21,9 @@ fun mediaItemFor(song: Song): MediaItem =
             MediaMetadata.Builder()
                 .setTitle(song.title)
                 .setArtist(song.artist)
-                .setArtworkUri(song.thumbnailUrl?.toUri())
+                // The notification and lock screen draw this far larger than a
+                // list row does; 220px there is visibly soft.
+                .setArtworkUri(song.thumbnailUrl?.atArtworkSize(600)?.toUri())
                 .build(),
         )
         .build()

@@ -4,10 +4,11 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -84,6 +84,7 @@ import com.mero.ui.theme.MeroAccent
  * how settings screens are actually used: someone arrives looking for one
  * thing and needs to find it, not to read the page.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     accent: MeroAccent,
@@ -245,11 +246,10 @@ fun SettingsScreen(
                         "Now Playing layout",
                         "Three directions from the design — try each",
                     )
-                    Row(
-                        Modifier
-                            .horizontalScroll(rememberScrollState())
-                            .padding(start = 54.dp, end = 16.dp, bottom = 14.dp),
+                    FlowRow(
+                        Modifier.padding(start = 54.dp, end = 16.dp, bottom = 14.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         PlayerVariant.entries.forEach { option ->
                             MeroChip(
@@ -479,15 +479,17 @@ private fun SettingsGroup(title: String, content: @Composable () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CodecChips(
     options: List<CodecPreference>,
     selected: CodecPreference,
     onSelect: (CodecPreference) -> Unit,
 ) {
-    Row(
+    FlowRow(
         Modifier.padding(start = 54.dp, end = 16.dp, bottom = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         options.forEach { option ->
             MeroChip(option.label, option == selected, onClick = { onSelect(option) })
@@ -495,6 +497,7 @@ private fun CodecChips(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AccentSwatches(
     accent: MeroAccent,
@@ -502,9 +505,13 @@ private fun AccentSwatches(
     dimmed: Boolean,
 ) {
     val scheme = MaterialTheme.colorScheme
-    Row(
+    // Wraps rather than scrolls. A colour that is off the edge of the screen
+    // is a colour nobody knows they can pick, and there is no affordance
+    // telling them to swipe a row that looks like it has ended.
+    FlowRow(
         Modifier.padding(start = 54.dp, end = 16.dp, bottom = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         MeroAccent.entries.forEach { option ->
             val selected = option == accent
