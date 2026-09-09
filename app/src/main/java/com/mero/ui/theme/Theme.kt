@@ -53,7 +53,7 @@ enum class MeroAccent(val label: String, val swatch: Color) {
 @Immutable
 data class MeroExtras(val playerTint: Color)
 
-val LocalMeroExtras = staticCompositionLocalOf { MeroExtras(playerTint = Color(0xFF2A2233)) }
+val LocalMeroExtras = staticCompositionLocalOf { MeroExtras(playerTint = Color(0xFF2C2718)) }
 
 private val NeutralDark = darkColorScheme(
     background = Color(0xFF141218),
@@ -352,7 +352,8 @@ private val Type = Typography().let { base ->
 
 @Composable
 fun MeroTheme(
-    accent: MeroAccent = MeroAccent.Violet,
+    // Mero's own yellow, so the app matches its icon out of the box.
+    accent: MeroAccent = MeroAccent.Amber,
     dynamicColor: Boolean = false,
     amoled: Boolean = false,
     darkMode: Boolean = true,

@@ -266,22 +266,7 @@ private fun StandardPlayer(
                 textAlign = TextAlign.Center,
             )
         }
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Four equal destinations, labelled the same way. Two of these
-            // used to be icon-and-label and two were bare icons, so half the
-            // row looked like a control and half like decoration, and the
-            // unlabelled pair were the two nobody could name.
-            PlayerTool(Icons.Rounded.Lyrics, "Lyrics", actions.onLyrics, Modifier.weight(1f))
-            PlayerTool(Icons.Rounded.GraphicEq, "Equalizer", actions.onEqualizer, Modifier.weight(1f))
-            PlayerTool(Icons.Rounded.Bedtime, "Sleep", actions.onSleepTimer, Modifier.weight(1f))
-            PlayerTool(Icons.Rounded.QueueMusic, "Queue", actions.onQueue, Modifier.weight(1f))
-        }
+        PlayerToolsRow(actions)
         Spacer(Modifier.height(8.dp))
     }
 }
@@ -340,7 +325,11 @@ private fun FullBleedPlayer(
             }
         }
 
-        Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 12.dp)) {
+        Column(
+            Modifier
+                .weight(1f)
+                .padding(start = 24.dp, end = 24.dp, bottom = 4.dp),
+        ) {
             Text(
                 ui.source.uppercase(),
                 fontSize = 11.sp,
@@ -379,20 +368,10 @@ private fun FullBleedPlayer(
                 RepeatButton(ui.repeat, actions.onRepeat, 48)
             }
 
-            Spacer(Modifier.height(16.dp))
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FilledPill(Icons.Rounded.Lyrics, "Lyrics", actions.onLyrics, Modifier.weight(1f))
-                FilledPill(
-                    Icons.Rounded.QueueMusic,
-                    "Queue",
-                    actions.onQueue,
-                    Modifier.weight(1f),
-                )
-            }
+            Spacer(Modifier.height(10.dp))
+            PlayerToolsRow(actions, horizontalPadding = 0)
         }
+        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -499,6 +478,25 @@ private fun QueueForwardPlayer(
                 Text("Up next", Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 ShuffleButton(ui.shuffle, actions.onShuffle, 36, icon = 20)
                 RepeatButton(ui.repeat, actions.onRepeat, 36, icon = 20)
+                // The equalizer and the sleep timer used to exist in the
+                // Classic layout only, so choosing a different one quietly
+                // took two features away.
+                IconButton(onClick = actions.onEqualizer, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Rounded.GraphicEq,
+                        "Equalizer",
+                        Modifier.size(20.dp),
+                        tint = scheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = actions.onSleepTimer, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Rounded.Bedtime,
+                        "Sleep timer",
+                        Modifier.size(20.dp),
+                        tint = scheme.onSurfaceVariant,
+                    )
+                }
                 IconButton(onClick = actions.onQueue, modifier = Modifier.size(36.dp)) {
                     Icon(
                         Icons.Rounded.QueueMusic,
@@ -838,32 +836,6 @@ private fun TextIconButton(icon: ImageVector, label: String, onClick: () -> Unit
     }
 }
 
-@Composable
-private fun FilledPill(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val scheme = MaterialTheme.colorScheme
-    Row(
-        modifier
-            .height(40.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(scheme.secondaryContainer)
-            .clickable(onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-    ) {
-        Icon(icon, null, Modifier.size(20.dp), tint = scheme.onSecondaryContainer)
-        Text(
-            label,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = scheme.onSecondaryContainer,
-        )
-    }
-}
 
 /** Translucent scrim button for controls sitting on top of full-bleed artwork. */
 @Composable
@@ -1003,15 +975,34 @@ private fun CompactPlayer(
                 RepeatButton(ui.repeat, actions.onRepeat, 52)
             }
 
-            Spacer(Modifier.height(14.dp))
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FilledPill(Icons.Rounded.Lyrics, "Lyrics", actions.onLyrics, Modifier.weight(1f))
-                FilledPill(Icons.Rounded.QueueMusic, "Queue", actions.onQueue, Modifier.weight(1f))
-            }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(10.dp))
         }
+        PlayerToolsRow(actions, horizontalPadding = 12)
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+
+/**
+ * Lyrics, Equalizer, Sleep and Queue — the four places the player can take you.
+ *
+ * Shared by every layout, because it was not: Classic had all four, Immersive
+ * and One-handed offered two as pills, and Up Next hid the queue behind an
+ * unlabelled icon. Choosing a layout is a choice about where the artwork goes;
+ * it should not also decide whether the equalizer and the sleep timer exist.
+ */
+@Composable
+private fun PlayerToolsRow(actions: PlayerActions, horizontalPadding: Int = 20) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = horizontalPadding.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PlayerTool(Icons.Rounded.Lyrics, "Lyrics", actions.onLyrics, Modifier.weight(1f))
+        PlayerTool(Icons.Rounded.GraphicEq, "Equalizer", actions.onEqualizer, Modifier.weight(1f))
+        PlayerTool(Icons.Rounded.Bedtime, "Sleep", actions.onSleepTimer, Modifier.weight(1f))
+        PlayerTool(Icons.Rounded.QueueMusic, "Queue", actions.onQueue, Modifier.weight(1f))
     }
 }

@@ -36,7 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import com.mero.data.MAX_ARTWORK_PX
+import com.mero.data.artworkStepFor
 import com.mero.data.atArtworkSize
 import com.mero.domain.Song
 import kotlin.math.roundToInt
@@ -51,12 +51,12 @@ fun Artwork(
     icon: ImageVector = Icons.Rounded.MusicNote,
 ) {
     val shape = RoundedCornerShape(radius.dp)
-    // Ask the CDN for the pixels this will actually be drawn at. Every URL
-    // arrives from the repositories at 220px, which is right for a list row
-    // and a quarter of what the full-screen player needs.
+    // Ask the CDN for roughly the pixels this will be drawn at, rounded up to
+    // one of a few sizes so that screens showing the same cover at similar
+    // sizes share a URL and therefore a cache entry.
     val density = LocalDensity.current
     val model = remember(url, size, density.density) {
-        url?.atArtworkSize((size * density.density).roundToInt().coerceAtMost(MAX_ARTWORK_PX))
+        url?.atArtworkSize(artworkStepFor((size * density.density).roundToInt()))
     }
     Box(
         modifier = modifier

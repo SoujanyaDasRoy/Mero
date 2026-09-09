@@ -45,4 +45,21 @@ private fun ytThumbnailName(px: Int): String = when {
  * Past this, a bigger request costs bandwidth and decode time and buys nothing
  * a phone panel can show.
  */
-const val MAX_ARTWORK_PX = 1200
+const val MAX_ARTWORK_PX = 1080
+
+/**
+ * The handful of sizes Mero will actually ask for.
+ *
+ * Sizing each request to the exact view was a mistake worth naming: a 48dp row,
+ * a 146dp shelf card and a 196dp feature card produced three different URLs for
+ * the same cover, so nothing any screen downloaded was reusable by the next
+ * one, and the app fetched the same artwork three times over. Rounding up to a
+ * short ladder puts most of the app on one or two URLs per cover, which the
+ * memory and disk caches can then actually serve.
+ *
+ * The steps are roughly doubling, so the worst case is an image at twice the
+ * pixels it needs — invisible on screen and cheaper than a second download.
+ */
+private val ARTWORK_STEPS = intArrayOf(192, 384, 640, MAX_ARTWORK_PX)
+
+fun artworkStepFor(px: Int): Int = ARTWORK_STEPS.firstOrNull { it >= px } ?: MAX_ARTWORK_PX

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.Settings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -75,12 +76,18 @@ class UpdateRepository(private val context: Context) {
         }
         _state.value = UpdateState.Downloading(release, 0f)
 
+        // Into the phone's own Downloads folder, not Mero's private one.
+        // Installing straight from the card is the intended path, but if
+        // anything goes wrong there — a permission declined, an OEM installer
+        // being difficult — the file has to be somewhere a person can find it
+        // in Files and tap. Android/data/com.mero/files is not that place.
+        val fileName = "mero-" + release.versionName + ".apk"
         val request = DownloadManager.Request(Uri.parse(release.apkUrl))
             .setTitle("Mero " + release.versionName)
             .setDescription("Downloading update")
             .setMimeType(APK_MIME)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
-            .setDestinationInExternalFilesDir(context, null, "mero-" + release.versionName + ".apk")
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
 
         val id = runCatching { manager.enqueue(request) }.getOrElse {
             _state.value = UpdateState.Failed(it.message ?: "Couldn't start the download")
@@ -96,7 +103,7 @@ class UpdateRepository(private val context: Context) {
                 }
                 is Progress.Running -> _state.value = UpdateState.Downloading(release, progress.fraction)
                 is Progress.Done -> {
-                    _state.value = UpdateState.Downloaded(release, progress.uri)
+                    _state.value = UpdateState.Downloaded(release, progress.uri, fileName)
                     return
                 }
                 is Progress.Failed -> {
@@ -214,7 +221,12 @@ sealed interface UpdateState {
     data object UpToDate : UpdateState
     data class Available(val release: Release) : UpdateState
     data class Downloading(val release: Release, val fraction: Float) : UpdateState
-    data class Downloaded(val release: Release, val uri: Uri) : UpdateState
+    data class Downloaded(
+        val release: Release,
+        val uri: Uri,
+        /** Where it landed, so the card can say so if installing goes wrong. */
+        val fileName: String,
+    ) : UpdateState
     data class Failed(val message: String) : UpdateState
 }
 

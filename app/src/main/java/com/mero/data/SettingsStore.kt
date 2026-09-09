@@ -79,6 +79,15 @@ class SettingsStore(context: Context) {
     companion object {
         const val ACCENT = "accent"
         const val THEME_MODE = "theme_mode"
+
+        /**
+         * What to call the person using the app, for the home greeting.
+         * Never leaves the device — Mero has no account to send it to.
+         */
+        const val DISPLAY_NAME = "display_name"
+
+        /** Set once the first-run name prompt has been shown, asked or skipped. */
+        const val ASKED_NAME = "asked_name"
         const val PLAYER_VARIANT = "player_variant"
         const val EQ_ENABLED = "eq_enabled"
         const val EQ_PRESET = "eq_preset"

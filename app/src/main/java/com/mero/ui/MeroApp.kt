@@ -87,6 +87,7 @@ import com.mero.ui.player.PlayerVariant
 import com.mero.ui.player.PositionSec
 import com.mero.ui.player.QueueSheet
 import com.mero.ui.player.SleepTimerSheet
+import com.mero.ui.components.NameDialog
 import com.mero.ui.components.SongMenuSheet
 import com.mero.ui.playlist.AddToPlaylistSheet
 import com.mero.ui.playlist.ImportScreen
@@ -122,12 +123,14 @@ fun MeroApp() {
     val settings = remember(LocalContext.current) { SettingsStore(appContext) }
     var accent by remember {
         mutableStateOf(
-            runCatching { MeroAccent.valueOf(settings.string(SettingsStore.ACCENT, MeroAccent.Violet.name)) }
-                .getOrDefault(MeroAccent.Violet),
+            runCatching { MeroAccent.valueOf(settings.string(SettingsStore.ACCENT, MeroAccent.Amber.name)) }
+                .getOrDefault(MeroAccent.Amber),
         )
     }
     var toggles by remember { mutableStateOf(settings.toggles(TOGGLE_DEFAULTS)) }
     var themeMode by remember { mutableStateOf(readThemeMode(settings)) }
+    var displayName by remember { mutableStateOf(settings.string(SettingsStore.DISPLAY_NAME, "")) }
+    var askingName by remember { mutableStateOf(false) }
 
     // Resolved once, here, because three places need the answer: the theme
     // itself, the status-bar icons inside it, and the Pure black switch, which
@@ -163,8 +166,33 @@ fun MeroApp() {
                 MeroSplash(onFinished = { splashDone = true })
                 return@Box
             }
+            // Asked once, after the splash rather than over it, and only if it
+            // has never been asked before — skipping counts as an answer.
+            LaunchedEffect(splashDone) {
+                if (splashDone && !settings.boolean(SettingsStore.ASKED_NAME, false)) {
+                    askingName = true
+                }
+            }
+            if (askingName) {
+                NameDialog(
+                    initial = displayName,
+                    onDismiss = {
+                        askingName = false
+                        settings.putBoolean(SettingsStore.ASKED_NAME, true)
+                    },
+                    onSave = { name ->
+                        askingName = false
+                        displayName = name
+                        settings.putString(SettingsStore.DISPLAY_NAME, name)
+                        settings.putBoolean(SettingsStore.ASKED_NAME, true)
+                    },
+                )
+            }
+
             MeroContent(
                 accent = accent,
+                displayName = displayName,
+                onEditName = { askingName = true },
                 onAccentChange = { accent = it; settings.putString(SettingsStore.ACCENT, it.name) },
                 themeMode = themeMode,
                 onThemeModeChange = {
@@ -198,6 +226,8 @@ fun MeroApp() {
 @Composable
 private fun MeroContent(
     accent: MeroAccent,
+    displayName: String,
+    onEditName: () -> Unit,
     onAccentChange: (MeroAccent) -> Unit,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
@@ -866,6 +896,7 @@ private fun MeroContent(
                         onLoadMore = { loadMoreHome() },
                         loadingMore = homeLoadingMore,
                         onSongClick = { song, context -> playFrom(song, context, "Home") },
+                        displayName = displayName,
                         recentlyPlayed = recentlyPlayed,
                         updateAvailableVersion = (updateState as? UpdateState.Available)
                             ?.release?.versionName,
@@ -1298,6 +1329,8 @@ private fun MeroContent(
                         themeMode = themeMode,
                         onThemeModeChange = onThemeModeChange,
                         darkInEffect = darkInEffect,
+                        displayName = displayName,
+                        onEditName = onEditName,
                         downloadFolderLabel = downloadFolderLabel(downloadFolderUri),
                         downloadFolderError = folderError,
                         toggles = toggles,

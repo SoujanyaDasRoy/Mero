@@ -37,8 +37,10 @@ import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.FormatPaint
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Hd
+import androidx.compose.material.icons.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.MotionPhotosPause
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.SdCard
 import androidx.compose.material.icons.rounded.Smartphone
 import androidx.compose.material.icons.rounded.Storage
@@ -97,6 +99,8 @@ fun SettingsScreen(
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
     darkInEffect: Boolean,
+    displayName: String,
+    onEditName: () -> Unit,
     downloadFolderLabel: String?,
     downloadFolderError: String?,
     toggles: Map<String, Boolean>,
@@ -193,6 +197,23 @@ fun SettingsScreen(
                         onDownload = onDownloadUpdate,
                         onInstall = onInstallUpdate,
                     )
+                }
+            }
+
+            item {
+                SettingsGroup("You") {
+                    PreferenceRow(
+                        Icons.Rounded.Person,
+                        "Your name",
+                        if (displayName.isBlank()) {
+                            "Mero says hello on the home screen — tell it what to call you"
+                        } else {
+                            displayName + " · stays on this phone"
+                        },
+                        onClick = onEditName,
+                    ) {
+                        Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
+                    }
                 }
             }
 
@@ -444,6 +465,15 @@ fun SettingsScreen(
                         }
                     }
                     PreferenceRow(
+                        Icons.Rounded.HelpOutline,
+                        "How updating works",
+                        "Mero is not on the Play Store, so it checks GitHub itself " +
+                            "when it opens. When there is a new version this screen " +
+                            "offers it: Download, then Install. Android asks once for " +
+                            "permission to install apps, and the file is also kept in " +
+                            "your Downloads folder in case you would rather tap it there.",
+                    )
+                    PreferenceRow(
                         Icons.Rounded.Code,
                         "Source code",
                         "github.com/SoujanyaDasRoy/Mero · GPL-3.0",
@@ -631,16 +661,31 @@ private fun UpdateCard(
                 color = scheme.onPrimaryContainer.copy(alpha = 0.85f),
             )
         } else {
-            val ready = state is UpdateState.Downloaded
+            val ready = state as? UpdateState.Downloaded
             Button(
-                onClick = if (ready) onInstall else onDownload,
+                onClick = if (ready != null) onInstall else onDownload,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    if (ready) "Install" else "Download · " + megabytes(release.sizeBytes),
+                    if (ready != null) "Install" else "Download · " + megabytes(release.sizeBytes),
                     fontWeight = FontWeight.Medium,
                 )
             }
+            Text(
+                if (ready != null) {
+                    "Android will ask you to allow Mero to install apps, then to " +
+                        "confirm. Your music, playlists and downloads are kept. " +
+                        "If anything goes wrong, the file is already saved as " +
+                        "Downloads/" + ready.fileName + " — open it from Files and tap it."
+                } else {
+                    "Downloads the update and opens Android's installer. " +
+                        "Nothing is lost: it installs over the version you have."
+                },
+                Modifier.padding(top = 10.dp),
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                color = scheme.onPrimaryContainer.copy(alpha = 0.85f),
+            )
         }
     }
 }

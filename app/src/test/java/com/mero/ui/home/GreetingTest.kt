@@ -23,3 +23,24 @@ class GreetingTest {
         assertEquals("Still up?", greetingFor(0))
     }
 }
+
+class NamedGreetingTest {
+
+    @Test
+    fun `a name is appended to the greeting`() {
+        assertEquals("Good morning, Soujanya", greetingFor(9, "Soujanya"))
+        // The night one is a question, so the name belongs inside it.
+        assertEquals("Still up, Soujanya?", greetingFor(2, "Soujanya"))
+    }
+
+    @Test
+    fun `no name leaves the greeting alone`() {
+        assertEquals("Good evening", greetingFor(19, ""))
+        assertEquals("Good evening", greetingFor(19, "   "))
+    }
+
+    @Test
+    fun `surrounding whitespace is not shown`() {
+        assertEquals("Good afternoon, Ana", greetingFor(13, "  Ana  "))
+    }
+}

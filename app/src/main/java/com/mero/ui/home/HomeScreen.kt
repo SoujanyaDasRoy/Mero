@@ -72,6 +72,7 @@ fun HomeScreen(
     onLoadMore: () -> Unit,
     loadingMore: Boolean,
     onSongClick: (Song, List<Song>) -> Unit,
+    displayName: String,
     recentlyPlayed: List<Song>,
     updateAvailableVersion: String?,
     onUpdateClick: () -> Unit,
@@ -115,7 +116,7 @@ fun HomeScreen(
                     .padding(start = 12.dp),
             ) {
                 Text(
-                    greeting(),
+                    greeting(displayName),
                     fontSize = 19.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -424,4 +425,22 @@ internal fun greetingFor(hour: Int): String = when (hour) {
     else -> "Still up?"
 }
 
-private fun greeting(): String = greetingFor(Calendar.getInstance().get(Calendar.HOUR_OF_DAY))
+/**
+ * The greeting with a name on it, when there is one.
+ *
+ * The late-night one is a question, so the name goes inside it — "Still up,
+ * Ana?" rather than "Still up?, Ana". A greeting nobody has given a name to
+ * stays exactly as it was.
+ */
+internal fun greetingFor(hour: Int, name: String): String {
+    val greeting = greetingFor(hour)
+    val trimmed = name.trim()
+    return when {
+        trimmed.isEmpty() -> greeting
+        greeting.endsWith("?") -> greeting.dropLast(1) + ", " + trimmed + "?"
+        else -> "$greeting, $trimmed"
+    }
+}
+
+private fun greeting(name: String): String =
+    greetingFor(Calendar.getInstance().get(Calendar.HOUR_OF_DAY), name)
