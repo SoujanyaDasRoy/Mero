@@ -359,7 +359,7 @@ private fun MeroContent(
             .also { audioEffects.setCrossfeed(it.value) }
     }
     // ExoPlayer resamples natively, so this is a setting rather than a stage.
-    var playbackSpeed by remember { mutableStateOf(container.settings.float("speed", 1f)) }
+    var playbackSpeed by remember { mutableStateOf(container.settings.float(SettingsStore.PLAYBACK_SPEED, 1f)) }
     var eqEnabled by remember { mutableStateOf(true) }
     // The equalizer belongs to the output it was dialled in for. A curve that
     // rescues the phone speaker sounds bloated on headphones, so each route
@@ -1075,7 +1075,7 @@ private fun MeroContent(
                         onSpeedChange = {
                             playbackSpeed = it
                             connection.controller?.setPlaybackSpeed(it)
-                            container.settings.putFloat("speed", it)
+                            container.settings.putFloat(SettingsStore.PLAYBACK_SPEED, it)
                         },
                         hapticIntensity = hapticIntensity,
                         onHapticIntensityChange = {

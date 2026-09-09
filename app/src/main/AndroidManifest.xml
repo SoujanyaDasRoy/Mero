@@ -37,8 +37,25 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
+                <!-- Buttons on a headset or in a car reach a *running* session
+                     through the service. This filter is what lets them reach a
+                     session that is not running yet. -->
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
+
+        <!-- Media3 does not declare this for you, and without it a play button
+             pressed while Mero is not running is delivered to nobody: Android
+             broadcasts ACTION_MEDIA_BUTTON, finds no receiver, and the press
+             does nothing at all. It is also what puts Mero in the system's
+             resumable-media row. -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

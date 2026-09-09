@@ -44,6 +44,18 @@ class SettingsStore(context: Context) {
         prefs.edit().putString(key, value.joinToString(",")).apply()
     }
 
+    fun int(key: String, default: Int): Int = prefs.getInt(key, default)
+
+    fun putInt(key: String, value: Int) {
+        prefs.edit().putInt(key, value).apply()
+    }
+
+    fun long(key: String, default: Long): Long = prefs.getLong(key, default)
+
+    fun putLong(key: String, value: Long) {
+        prefs.edit().putLong(key, value).apply()
+    }
+
     fun float(key: String, default: Float): Float = prefs.getFloat(key, default)
 
     fun putFloat(key: String, value: Float) {
@@ -76,6 +88,13 @@ class SettingsStore(context: Context) {
         const val BOOSTER = "booster"
         const val REVERB = "reverb"
         const val SPATIAL_MODE = "spatial_mode"
+        /**
+         * Where playback had got to, so a headset button pressed hours later
+         * carries on rather than starting the queue again.
+         */
+        const val PLAYBACK_SPEED = "speed"
+        const val RESUME_INDEX = "resume_index"
+        const val RESUME_POSITION_MS = "resume_position_ms"
         const val STREAM_CODEC = "stream_codec"
         const val DOWNLOAD_CODEC = "download_codec"
     }
