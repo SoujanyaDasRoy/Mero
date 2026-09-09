@@ -392,7 +392,7 @@ private fun IdleSuggestions(
     ) {
         if (artists.isNotEmpty()) {
             item(key = "artists-heading", span = { GridItemSpan(maxLineSpan) }) {
-                IdleHeading("Artists you play")
+                IdleHeading(if (recentlyPlayed.isEmpty()) "Artists" else "Artists you play")
             }
             item(key = "artists", span = { GridItemSpan(maxLineSpan) }) {
                 Row(

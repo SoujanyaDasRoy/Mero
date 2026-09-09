@@ -743,18 +743,26 @@ private fun MeroContent(
     // worth showing a picture of. Resolved once per change rather than every
     // time Search is opened.
     LaunchedEffect(mostPlayed.firstOrNull()?.id, recentlyPlayed.firstOrNull()?.id) {
-        val names = com.mero.data.topArtists(
-            mostPlayed.ifEmpty { recentlyPlayed },
-            limit = 8,
-        )
-        if (names.isEmpty()) return@LaunchedEffect
-        val cards = names.mapNotNull { name ->
+        val history = mostPlayed.ifEmpty { recentlyPlayed }
+        // Who to show, and it is two different questions. With a listening
+        // history the answer is "the people you play". Without one — a fresh
+        // install, which is exactly when the search screen was nothing but
+        // coloured rectangles — asking YouTube for the artists behind a few
+        // genres gives names people recognise. Reading them off whatever
+        // shelves happened to load gives "WA-71" and "Mississippi Blues 58".
+        val queries = if (history.isNotEmpty()) {
+            com.mero.data.topArtists(history, limit = 8)
+        } else {
+            container.homeRepository.seeds.take(8)
+        }
+        if (queries.isEmpty()) return@LaunchedEffect
+        val cards = queries.mapNotNull { query ->
             runCatchingCancellable {
-                container.searchRepository.searchItems(name, SearchResultType.Artist)
+                container.searchRepository.searchItems(query, SearchResultType.Artist)
                     .getOrNull()
                     ?.firstOrNull { it.thumbnailUrl != null }
             }.getOrNull()
-        }
+        }.distinctBy { it.id }
         if (cards.isNotEmpty()) suggestedArtists = cards
     }
 
@@ -1328,6 +1336,7 @@ private fun MeroContent(
                         nowPlayingId = current?.id,
                         onSongClick = { song -> playFrom(song, librarySongs, libraryTab) },
                         onSettingsClick = { openTab(SettingsRoute) },
+                        onBrowse = { openTab(SearchRoute) },
                         contentPadding = contentPadding,
                     )
                 }
