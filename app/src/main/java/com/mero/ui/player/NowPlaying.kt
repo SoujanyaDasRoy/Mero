@@ -415,12 +415,17 @@ private fun QueueForwardPlayer(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            // Clickable, like the other layouts. This one drew the artist as
+            // plain text, so tapping a name here did nothing while the same
+            // tap searched for them everywhere else.
             Text(
                 ui.song.artist,
-                Modifier.fillMaxWidth(),
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { actions.onArtist(ui.song.artist.substringBefore(",").trim()) },
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
-                color = scheme.onSurfaceVariant,
+                color = scheme.primary,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

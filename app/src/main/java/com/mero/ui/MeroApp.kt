@@ -6,7 +6,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -448,6 +450,24 @@ private fun MeroContent(
     }
     var radioRequests by remember { mutableStateOf(emptySet<String>()) }
 
+    /**
+     * Opens one of the bottom bar's own destinations from somewhere else.
+     *
+     * A plain navigate() pushes a second copy of a tab you may already be on —
+     * tapping an artist in the player while Search is showing left two Search
+     * entries stacked, so the first back popped one identical screen onto
+     * another and looked like it had done nothing. That is the "press back
+     * twice" people were hitting. Same rules as the bottom bar: one entry per
+     * tab, and the rest of the stack unwound back to Home.
+     */
+    fun openTab(route: Any) {
+        navController.navigate(route) {
+            popUpTo(Home) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
     /** Leaves a screen the player sent us to, putting the player back as it was. */
     fun leaveEqualizer() {
         navController.popBackStack()
@@ -641,19 +661,6 @@ private fun MeroContent(
             val reported = c?.duration ?: 0L
             if (reported > 0) playerDuration.intValue = (reported / 1000).toInt()
             delay(500)
-        }
-    }
-
-    // Without this, back propagates to the NavHost while the player is open —
-    // which reads as "went to the previous song" because the browse screen
-    // underneath changes. The player is not a destination (architecture.md
-    // Part 1), so its dismissal has to be handled here.
-    BackHandler(enabled = menuSong != null || addingToPlaylist != null || overlay != null || expanded) {
-        when {
-            menuSong != null -> menuSong = null
-            addingToPlaylist != null -> addingToPlaylist = null
-            overlay != null -> overlay = null
-            else -> expanded = false
         }
     }
 
@@ -900,7 +907,7 @@ private fun MeroContent(
                         recentlyPlayed = recentlyPlayed,
                         updateAvailableVersion = (updateState as? UpdateState.Available)
                             ?.release?.versionName,
-                        onUpdateClick = { navController.navigate(SettingsRoute) },
+                        onUpdateClick = { openTab(SettingsRoute) },
                         contentPadding = contentPadding,
                     )
                 }
@@ -1001,7 +1008,10 @@ private fun MeroContent(
                                 SearchResultType.Song -> item.song?.let { song ->
                                     playFrom(song, results.mapNotNull { it.song }, "Search")
                                 }
-                                SearchResultType.Artist -> navController.navigate(ArtistRoute(item.browseId ?: item.id))
+                                SearchResultType.Artist ->
+                                    navController.navigate(ArtistRoute(item.browseId ?: item.id)) {
+                                        launchSingleTop = true
+                                    }
                                 SearchResultType.Album -> scope.launch {
                                     container.artistRepository.albumSongs(item.browseId ?: item.id)
                                         .onSuccess { songs -> if (songs.isNotEmpty()) playFrom(songs.first(), songs, "Album") }
@@ -1096,7 +1106,7 @@ private fun MeroContent(
                         onSongMore = { menuSong = it },
                         nowPlayingId = current?.id,
                         onSongClick = { song -> playFrom(song, librarySongs, libraryTab) },
-                        onSettingsClick = { navController.navigate(SettingsRoute) },
+                        onSettingsClick = { openTab(SettingsRoute) },
                         contentPadding = contentPadding,
                     )
                 }
@@ -1421,6 +1431,43 @@ private fun MeroContent(
 
         /* ---- Expanded player and its sheets. Outside the NavHost by design. ---- */
 
+        // The player is not a destination (architecture.md Part 1), so back has
+        // to close it here rather than in the NavHost.
+        //
+        // Registered by hand rather than with BackHandler, and only while
+        // something is actually open. The dispatcher consults callbacks newest
+        // first, and the NavHost registers its own after the composition it
+        // sits in has run — so a BackHandler declared anywhere in this file
+        // lost to it, whatever the source order. Back then popped the browse
+        // screen *underneath* the open player: the press looked like it did
+        // nothing, and the second press closed the player onto a screen that
+        // had already changed. That is the "back twice" behaviour, and it only
+        // showed up when the back stack had something to pop, which is why it
+        // happened on some screens and not others.
+        //
+        // Adding the callback at the moment the player opens puts it after
+        // whatever else has registered, which is the only ordering that holds.
+        val playerOwnsBack = menuSong != null || addingToPlaylist != null ||
+            overlay != null || expanded
+        val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+        DisposableEffect(playerOwnsBack, backDispatcher) {
+            if (!playerOwnsBack || backDispatcher == null) {
+                return@DisposableEffect onDispose {}
+            }
+            val callback = object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    when {
+                        menuSong != null -> menuSong = null
+                        addingToPlaylist != null -> addingToPlaylist = null
+                        overlay != null -> overlay = null
+                        else -> expanded = false
+                    }
+                }
+            }
+            backDispatcher.addCallback(callback)
+            onDispose { callback.remove() }
+        }
+
         val song = current
         if (song != null) {
             // ponytail: full-screen swap with a slide. The design's signature move is
@@ -1453,7 +1500,7 @@ private fun MeroContent(
                                 expanded = false
                                 query = name
                                 searchTab = "Songs"
-                                navController.navigate(SearchRoute)
+                                openTab(SearchRoute)
                             },
                             onPlayPause = { togglePlayback() },
                             onPrev = {
@@ -1581,15 +1628,17 @@ private fun MeroContent(
                             .onSuccess { artists ->
                                 val best = artists.firstOrNull()
                                 if (best != null) {
-                                    navController.navigate(ArtistRoute(best.browseId ?: best.id))
+                                    navController.navigate(ArtistRoute(best.browseId ?: best.id)) {
+                                        launchSingleTop = true
+                                    }
                                 } else {
                                     query = song.artist
-                                    navController.navigate(SearchRoute)
+                                    openTab(SearchRoute)
                                 }
                             }
                             .onFailure {
                                 query = song.artist
-                                navController.navigate(SearchRoute)
+                                openTab(SearchRoute)
                             }
                     }
                 },
