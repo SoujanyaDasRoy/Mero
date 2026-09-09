@@ -29,6 +29,8 @@ of friends rather than for an app store, and it never asks anyone to sign in.
 - Works with headset buttons, Bluetooth and Android Auto — including waking the
   app and resuming where you left off when Mero isn't already running
 - Queue with drag-to-reorder, shuffle, repeat, and "play next"
+- Swipe the mini player up to open it or sideways to change track; swipe the
+  full player down to close it
 - Keeps going with similar tracks when the queue runs out, or pauses after an
   hour of no interaction — your choice
 - Playback speed from 0.75× to 2×
@@ -51,7 +53,10 @@ gets the genre feed instead.
 
 - Results from the first letter, updating as you type
 - Songs, albums, artists and playlists, each scrolling on effectively forever
-- Genre tiles with real cover art when the search box is empty
+- Before you type: the artists you play as photographs, the songs you were last
+  listening to, and genre tiles below them
+- Albums and playlists **open** as a track list — cover, running order, Play and
+  Shuffle — rather than starting from track one
 
 ### Library
 
