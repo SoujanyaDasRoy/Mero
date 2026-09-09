@@ -10,6 +10,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -93,6 +94,7 @@ import com.mero.ui.playlist.PlaylistDetailScreen
 import com.mero.ui.search.SearchScreen
 import com.mero.ui.settings.SettingsScreen
 import com.mero.ui.theme.MeroAccent
+import com.mero.ui.theme.ThemeMode
 import com.mero.ui.theme.MeroTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -125,12 +127,22 @@ fun MeroApp() {
         )
     }
     var toggles by remember { mutableStateOf(settings.toggles(TOGGLE_DEFAULTS)) }
+    var themeMode by remember { mutableStateOf(readThemeMode(settings)) }
+
+    // Resolved once, here, because three places need the answer: the theme
+    // itself, the status-bar icons inside it, and the Pure black switch, which
+    // has nothing to do when the app is light however it got that way.
+    val darkMode = when (themeMode) {
+        ThemeMode.System -> isSystemInDarkTheme()
+        ThemeMode.Light -> false
+        ThemeMode.Dark -> true
+    }
 
     MeroTheme(
         accent = accent,
         dynamicColor = toggles["dynamic"] == true,
         amoled = toggles["amoled"] == true,
-        darkMode = toggles["dark"] != false,
+        darkMode = darkMode,
     ) {
         var splashDone by remember { mutableStateOf(false) }
 
@@ -154,6 +166,12 @@ fun MeroApp() {
             MeroContent(
                 accent = accent,
                 onAccentChange = { accent = it; settings.putString(SettingsStore.ACCENT, it.name) },
+                themeMode = themeMode,
+                onThemeModeChange = {
+                    themeMode = it
+                    settings.putString(SettingsStore.THEME_MODE, it.name)
+                },
+                darkInEffect = darkMode,
                 toggles = toggles,
                 onToggle = { key, value ->
                     val updated = when {
@@ -161,8 +179,6 @@ fun MeroApp() {
                             toggles + ("infinite" to true) + ("autopause" to false)
                         key == "autopause" && value && toggles["infinite"] == true ->
                             toggles + ("autopause" to false)
-                        key == "dark" && !value ->
-                            toggles + ("dark" to false) + ("amoled" to false)
                         else -> toggles + (key to value)
                     }
                     // Persist every key the rule touched, not just the tapped
@@ -183,6 +199,9 @@ fun MeroApp() {
 private fun MeroContent(
     accent: MeroAccent,
     onAccentChange: (MeroAccent) -> Unit,
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    darkInEffect: Boolean,
     toggles: Map<String, Boolean>,
     onToggle: (String, Boolean) -> Unit,
 ) {
@@ -220,6 +239,7 @@ private fun MeroContent(
     var downloadFolderUris by remember {
         mutableStateOf(downloadPrefs.getStringSet("folders", emptySet()).orEmpty())
     }
+    var folderError by remember { mutableStateOf<String?>(null) }
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
@@ -237,6 +257,14 @@ private fun MeroContent(
                 .putString("folder", downloadFolderUri)
                 .putStringSet("folders", downloadFolderUris)
                 .apply()
+            folderError = null
+        } else {
+            // Cancelling is silent, but Android also returns null when it
+            // refused the folder — the root of storage and Download itself are
+            // both blocked, and its own message ("choose another folder") does
+            // not say which folders are allowed.
+            folderError = "Android blocks the top level of storage and the " +
+                "Download folder. Pick or make a folder inside Music."
         }
     }
     val resolved by container.streamRepository.lastResolved.collectAsStateWithLifecycle()
@@ -1267,6 +1295,11 @@ private fun MeroContent(
                     SettingsScreen(
                         accent = accent,
                         onAccentChange = onAccentChange,
+                        themeMode = themeMode,
+                        onThemeModeChange = onThemeModeChange,
+                        darkInEffect = darkInEffect,
+                        downloadFolderLabel = downloadFolderLabel(downloadFolderUri),
+                        downloadFolderError = folderError,
                         toggles = toggles,
                         onToggle = onToggle,
                         onEqualizerClick = {
@@ -1302,7 +1335,7 @@ private fun MeroContent(
                                 com.mero.playback.MediaCache.clearDownloads()
                             }
                         },
-                        onChooseDownloadFolder = { folderPicker.launch(null) },
+                        onChooseDownloadFolder = { folderPicker.launch(MUSIC_FOLDER_URI) },
                         downloadFolderSelected = downloadFolderUri != null,
                         streamCodec = streamCodec,
                         onStreamCodecChange = {
@@ -1695,3 +1728,41 @@ private val TOGGLE_DEFAULTS = mapOf(
     // surprising behaviour of the two.
     "infinite" to true, "autopause" to false,
 )
+
+/**
+ * Where the folder picker opens.
+ *
+ * Android refuses to grant tree access to the top level of storage or to the
+ * Download folder, and the picker starts at the top level — so the obvious
+ * action, opening it and pressing "Use this folder", is exactly the one that
+ * fails. Starting inside Music lands somewhere that is actually allowed.
+ */
+private val MUSIC_FOLDER_URI: android.net.Uri = android.provider.DocumentsContract.buildDocumentUri(
+    "com.android.externalstorage.documents",
+    "primary:Music",
+)
+
+/** "primary:Music/Mero" -> "Music/Mero", for showing which folder was chosen. */
+internal fun downloadFolderLabel(treeUri: String?): String? = treeUri
+    ?.let { android.net.Uri.parse(it).lastPathSegment }
+    ?.substringAfter(':', "")
+    ?.takeIf { it.isNotBlank() }
+
+/**
+ * The stored theme choice, or the nearest thing to it.
+ *
+ * Before there were three options this was one boolean, so anyone upgrading
+ * has a `toggle_dark` and no `theme_mode`. Reading that boolean rather than
+ * defaulting them to System keeps the app looking the way they left it; only
+ * someone with neither — a fresh install — follows the phone.
+ */
+private fun readThemeMode(settings: SettingsStore): ThemeMode {
+    val stored = settings.string(SettingsStore.THEME_MODE, "")
+    if (stored.isNotBlank()) {
+        return runCatching { ThemeMode.valueOf(stored) }.getOrDefault(ThemeMode.System)
+    }
+    if (settings.has("toggle_dark")) {
+        return if (settings.boolean("toggle_dark", true)) ThemeMode.Dark else ThemeMode.Light
+    }
+    return ThemeMode.System
+}

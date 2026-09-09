@@ -46,7 +46,7 @@ import kotlin.math.roundToInt
 fun Artwork(
     url: String?,
     size: Int,
-    radius: Int = 6,
+    radius: Int = 10,
     modifier: Modifier = Modifier,
     icon: ImageVector = Icons.Rounded.MusicNote,
 ) {
@@ -123,13 +123,13 @@ fun MeroChip(
     val scheme = MaterialTheme.colorScheme
     Box(
         modifier = modifier
-            .height(32.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .height(34.dp)
+            .clip(RoundedCornerShape(12.dp))
             .background(if (selected) scheme.primaryContainer else Color.Transparent)
             .border(
                 width = 1.dp,
                 color = if (selected) Color.Transparent else scheme.outlineVariant,
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(12.dp),
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp),

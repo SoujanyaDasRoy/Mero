@@ -29,6 +29,9 @@ class SettingsStore(context: Context) {
 
     fun string(key: String, default: String): String = prefs.getString(key, default) ?: default
 
+    /** Whether anything was ever stored, as opposed to falling back to a default. */
+    fun has(key: String): Boolean = prefs.contains(key)
+
     fun putString(key: String, value: String) {
         prefs.edit().putString(key, value).apply()
     }
@@ -75,6 +78,7 @@ class SettingsStore(context: Context) {
 
     companion object {
         const val ACCENT = "accent"
+        const val THEME_MODE = "theme_mode"
         const val PLAYER_VARIANT = "player_variant"
         const val EQ_ENABLED = "eq_enabled"
         const val EQ_PRESET = "eq_preset"

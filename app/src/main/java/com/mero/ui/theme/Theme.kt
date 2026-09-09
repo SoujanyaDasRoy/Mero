@@ -24,6 +24,8 @@ import androidx.compose.ui.text.font.Font
 import com.mero.R
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
@@ -41,6 +43,10 @@ enum class MeroAccent(val label: String, val swatch: Color) {
     Rose("Rose", Color(0xFFFFB1C8)),
     Teal("Teal", Color(0xFF7FD8CA)),
     Lime("Lime", Color(0xFFC6E77D)),
+    Crimson("Crimson", Color(0xFFFFB3B0)),
+    Sky("Sky", Color(0xFF8CD8F0)),
+    Orchid("Orchid", Color(0xFFEDB4E8)),
+    Sand("Sand", Color(0xFFE2C39B)),
 }
 
 /** `--playerTint` has no Material 3 equivalent, so it travels separately. */
@@ -158,6 +164,42 @@ private fun schemeFor(accent: MeroAccent): ColorScheme = when (accent) {
         secondaryContainer = Color(0xFF454B39),
         onSecondaryContainer = Color(0xFFE6E0E9),
     )
+
+    MeroAccent.Crimson -> NeutralDark.copy(
+        primary = Color(0xFFFFB3B0),
+        onPrimary = Color(0xFF680014),
+        primaryContainer = Color(0xFF8C1D2A),
+        onPrimaryContainer = Color(0xFFFFDAD7),
+        secondaryContainer = Color(0xFF5A4040),
+        onSecondaryContainer = Color(0xFFE6E0E9),
+    )
+
+    MeroAccent.Sky -> NeutralDark.copy(
+        primary = Color(0xFF8CD8F0),
+        onPrimary = Color(0xFF003641),
+        primaryContainer = Color(0xFF004E5C),
+        onPrimaryContainer = Color(0xFFB4EBFF),
+        secondaryContainer = Color(0xFF37474C),
+        onSecondaryContainer = Color(0xFFE6E0E9),
+    )
+
+    MeroAccent.Orchid -> NeutralDark.copy(
+        primary = Color(0xFFEDB4E8),
+        onPrimary = Color(0xFF48204A),
+        primaryContainer = Color(0xFF623763),
+        onPrimaryContainer = Color(0xFFFFD6F8),
+        secondaryContainer = Color(0xFF4F4050),
+        onSecondaryContainer = Color(0xFFE6E0E9),
+    )
+
+    MeroAccent.Sand -> NeutralDark.copy(
+        primary = Color(0xFFE2C39B),
+        onPrimary = Color(0xFF412D12),
+        primaryContainer = Color(0xFF5A4326),
+        onPrimaryContainer = Color(0xFFFFDDBB),
+        secondaryContainer = Color(0xFF4C4436),
+        onSecondaryContainer = Color(0xFFE6E0E9),
+    )
 }
 
 private fun lightSchemeFor(accent: MeroAccent): ColorScheme = when (accent) {
@@ -201,6 +243,26 @@ private fun lightSchemeFor(accent: MeroAccent): ColorScheme = when (accent) {
         primaryContainer = Color(0xFFE2FF96), onPrimaryContainer = Color(0xFF191E00),
         secondaryContainer = Color(0xFFE7E8C5), onSecondaryContainer = Color(0xFF1D1E0F),
     )
+    MeroAccent.Crimson -> NeutralLight.copy(
+        primary = Color(0xFFA83A3E), onPrimary = Color.White,
+        primaryContainer = Color(0xFFFFDAD7), onPrimaryContainer = Color(0xFF410006),
+        secondaryContainer = Color(0xFFF9DDDC), onSecondaryContainer = Color(0xFF291716),
+    )
+    MeroAccent.Sky -> NeutralLight.copy(
+        primary = Color(0xFF00637A), onPrimary = Color.White,
+        primaryContainer = Color(0xFFB4EBFF), onPrimaryContainer = Color(0xFF001F27),
+        secondaryContainer = Color(0xFFD3E5EC), onSecondaryContainer = Color(0xFF121E22),
+    )
+    MeroAccent.Orchid -> NeutralLight.copy(
+        primary = Color(0xFF7B4E7C), onPrimary = Color.White,
+        primaryContainer = Color(0xFFFFD6F8), onPrimaryContainer = Color(0xFF310936),
+        secondaryContainer = Color(0xFFF0DEEE), onSecondaryContainer = Color(0xFF231A23),
+    )
+    MeroAccent.Sand -> NeutralLight.copy(
+        primary = Color(0xFF7A5A34), onPrimary = Color.White,
+        primaryContainer = Color(0xFFFFDDBB), onPrimaryContainer = Color(0xFF2B1700),
+        secondaryContainer = Color(0xFFF2E0CC), onSecondaryContainer = Color(0xFF241A0E),
+    )
 }
 
 private fun playerTintFor(accent: MeroAccent): Color = when (accent) {
@@ -212,6 +274,10 @@ private fun playerTintFor(accent: MeroAccent): Color = when (accent) {
     MeroAccent.Rose -> Color(0xFF2F2027)
     MeroAccent.Teal -> Color(0xFF162725)
     MeroAccent.Lime -> Color(0xFF25291A)
+    MeroAccent.Crimson -> Color(0xFF2E2020)
+    MeroAccent.Sky -> Color(0xFF1A2529)
+    MeroAccent.Orchid -> Color(0xFF2B2130)
+    MeroAccent.Sand -> Color(0xFF2A2419)
 }
 
 /** Pure black for AMOLED panels — real battery saving, not decoration. */
@@ -245,6 +311,22 @@ private val Manrope = FontFamily(
     Font(R.font.manrope, FontWeight.Medium, variationSettings = FontVariation.Settings(FontVariation.weight(550))),
     Font(R.font.manrope, FontWeight.SemiBold, variationSettings = FontVariation.Settings(FontVariation.weight(650))),
     Font(R.font.manrope, FontWeight.Bold, variationSettings = FontVariation.Settings(FontVariation.weight(750))),
+)
+
+/**
+ * Softer corners than Material's defaults throughout.
+ *
+ * M3 ships 4/8/12/16/28dp; the shapes here start where those leave off. A
+ * music library is a wall of rectangles — covers, cards, rows — and the
+ * radius is most of what separates one that looks like a spreadsheet from one
+ * that looks like a music app.
+ */
+private val Shapes = androidx.compose.material3.Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(18.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(32.dp),
 )
 
 private val Type = Typography().let { base ->
@@ -310,6 +392,20 @@ fun MeroTheme(
     CompositionLocalProvider(
         LocalMeroExtras provides MeroExtras(playerTint = playerTintFor(accent)),
     ) {
-        MaterialTheme(colorScheme = scheme, typography = Type, content = content)
+        MaterialTheme(colorScheme = scheme, typography = Type, shapes = Shapes, content = content)
     }
+}
+
+/**
+ * Light, dark, or whatever the phone is doing.
+ *
+ * This was one switch labelled "Light mode", which cannot express the option
+ * most people actually want: follow the system, so the app turns dark when
+ * everything else on the phone does at night. A boolean has no room for a
+ * third state, so it had to stop being a boolean.
+ */
+enum class ThemeMode(val label: String) {
+    System("System"),
+    Light("Light"),
+    Dark("Dark"),
 }

@@ -1,6 +1,7 @@
 package com.mero.ui.settings
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -62,6 +63,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -73,6 +77,7 @@ import com.mero.ui.components.MeroChip
 import com.mero.ui.components.PreferenceRow
 import com.mero.ui.player.PlayerVariant
 import com.mero.ui.theme.MeroAccent
+import com.mero.ui.theme.ThemeMode
 
 /**
  * Settings as a stack of cards rather than one unbroken list.
@@ -89,6 +94,11 @@ import com.mero.ui.theme.MeroAccent
 fun SettingsScreen(
     accent: MeroAccent,
     onAccentChange: (MeroAccent) -> Unit,
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    darkInEffect: Boolean,
+    downloadFolderLabel: String?,
+    downloadFolderError: String?,
     toggles: Map<String, Boolean>,
     onToggle: (String, Boolean) -> Unit,
     onEqualizerClick: () -> Unit,
@@ -200,26 +210,37 @@ fun SettingsScreen(
                     }
                     PreferenceRow(
                         Icons.Rounded.Contrast,
-                        "Light mode",
-                        "A bright, warm palette instead of dark",
-                    ) {
-                        Switch(
-                            checked = toggles["dark"] != true,
-                            onCheckedChange = { onToggle("dark", !it) },
-                        )
-                    }
+                        "Theme",
+                        when (themeMode) {
+                            ThemeMode.System -> "Following the phone — currently " +
+                                if (darkInEffect) "dark" else "light"
+                            ThemeMode.Light -> "Always light"
+                            ThemeMode.Dark -> "Always dark"
+                        },
+                    )
+                    SegmentedChoice(
+                        options = ThemeMode.entries,
+                        selected = themeMode,
+                        label = { it.label },
+                        onSelect = onThemeModeChange,
+                    )
                     PreferenceRow(
                         Icons.Rounded.DarkMode,
                         "Pure black",
-                        if (toggles["dark"] == true) {
+                        if (darkInEffect) {
                             "Real battery saving on an AMOLED panel"
                         } else {
-                            "Only applies in dark mode"
+                            "Available while the app is dark"
                         },
                     ) {
                         Switch(
-                            checked = toggles["amoled"] == true,
-                            enabled = toggles["dark"] == true,
+                            checked = toggles["amoled"] == true && darkInEffect,
+                            // Gated on what the app *is*, not on what was
+                            // chosen: under System the app can be light without
+                            // anyone having picked light, and a pure-black
+                            // switch that does nothing is worse than one that
+                            // says why.
+                            enabled = darkInEffect,
                             onCheckedChange = { onToggle("amoled", it) },
                         )
                     }
@@ -244,21 +265,12 @@ fun SettingsScreen(
                     PreferenceRow(
                         Icons.Rounded.Smartphone,
                         "Now Playing layout",
-                        "Three directions from the design — try each",
+                        playerVariant.label + " · " + playerVariant.description,
                     )
-                    FlowRow(
-                        Modifier.padding(start = 54.dp, end = 16.dp, bottom = 14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        PlayerVariant.entries.forEach { option ->
-                            MeroChip(
-                                label = option.label,
-                                selected = option == playerVariant,
-                                onClick = { onPlayerVariantChange(option) },
-                            )
-                        }
-                    }
+                    LayoutTiles(
+                        selected = playerVariant,
+                        onSelect = onPlayerVariantChange,
+                    )
                 }
             }
 
@@ -333,11 +345,12 @@ fun SettingsScreen(
                     PreferenceRow(
                         Icons.Rounded.SdCard,
                         "Download folder",
-                        if (downloadFolderSelected) {
-                            "Downloads are also copied where you chose"
-                        } else {
-                            "Choose where downloads are copied on the device"
+                        when {
+                            downloadFolderError != null -> downloadFolderError
+                            downloadFolderLabel != null -> "Copied to " + downloadFolderLabel
+                            else -> "Choose where downloads are copied on the device"
                         },
+                        iconTint = if (downloadFolderError != null) scheme.error else null,
                         onClick = onChooseDownloadFolder,
                     ) {
                         Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
@@ -471,7 +484,7 @@ private fun SettingsGroup(title: String, content: @Composable () -> Unit) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(26.dp))
                 .background(scheme.surfaceContainerLow),
         ) {
             content()
@@ -572,7 +585,7 @@ private fun UpdateCard(
         Modifier
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(26.dp))
             .background(scheme.primaryContainer)
             .padding(18.dp),
     ) {
@@ -645,3 +658,197 @@ private fun updateSummary(state: UpdateState, appVersion: String): String = when
 
 private fun megabytes(bytes: Long): String =
     if (bytes <= 0) "download" else (bytes / 1_000_000).toString() + " MB"
+
+/**
+ * A row of mutually exclusive options that looks like one control.
+ *
+ * Three separate chips read as three independent things that happen to be
+ * near each other. A segment bar reads as one setting with a position, which
+ * is what a theme choice is.
+ */
+@Composable
+private fun <T> SegmentedChoice(
+    options: List<T>,
+    selected: T,
+    label: (T) -> String,
+    onSelect: (T) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        Modifier
+            .padding(start = 54.dp, end = 16.dp, bottom = 14.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(scheme.surfaceContainerHighest)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        options.forEach { option ->
+            val isSelected = option == selected
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(if (isSelected) scheme.primary else Color.Transparent)
+                    .clickable { onSelect(option) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    label(option),
+                    fontSize = 13.sp,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (isSelected) scheme.onPrimary else scheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The Now Playing layouts, as things you can see rather than names you have to
+ * take on trust.
+ *
+ * A row of chips reading "Classic / Immersive / Up Next / One-handed" still
+ * asks someone to open the player four times to find out what they mean. Each
+ * tile draws the shape of its layout — where the cover sits, where the
+ * controls are — which is the whole of the difference between them.
+ */
+@Composable
+private fun LayoutTiles(selected: PlayerVariant, onSelect: (PlayerVariant) -> Unit) {
+    Column(
+        Modifier.padding(start = 54.dp, end = 16.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        PlayerVariant.entries.chunked(2).forEach { pair ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                pair.forEach { option ->
+                    LayoutTile(
+                        variant = option,
+                        selected = option == selected,
+                        onClick = { onSelect(option) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun LayoutTile(
+    variant: PlayerVariant,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (selected) scheme.primaryContainer else scheme.surfaceContainerHighest)
+            .clickable(onClick = onClick)
+            .padding(10.dp),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(74.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(scheme.surface),
+            contentAlignment = Alignment.Center,
+        ) {
+            LayoutSketch(variant, scheme.onSurfaceVariant, if (selected) scheme.primary else scheme.onSurfaceVariant)
+        }
+        Text(
+            variant.label,
+            Modifier.padding(top = 8.dp),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (selected) scheme.onPrimaryContainer else scheme.onSurface,
+        )
+        Text(
+            variant.description,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+            color = if (selected) {
+                scheme.onPrimaryContainer.copy(alpha = 0.8f)
+            } else {
+                scheme.onSurfaceVariant
+            },
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** A wireframe of the layout: cover block, text lines, control dots. */
+@Composable
+private fun LayoutSketch(variant: PlayerVariant, quiet: Color, accent: Color) {
+    // No horizontal padding on the canvas itself: Immersive is the layout whose
+    // whole point is that the cover touches the edges, and a uniform inset drew
+    // it identically to Classic.
+    Canvas(Modifier.fillMaxSize().padding(vertical = 9.dp)) {
+        val w = size.width
+        val h = size.height
+        val margin = w * 0.14f
+
+        fun cover(top: Float, height: Float, inset: Float) = drawRoundRect(
+            color = quiet.copy(alpha = 0.5f),
+            topLeft = Offset(inset, top),
+            size = Size(w - inset * 2, height),
+            cornerRadius = CornerRadius(if (inset == 0f) 0f else 4f, if (inset == 0f) 0f else 4f),
+        )
+
+        fun line(top: Float, widthFraction: Float) = drawRoundRect(
+            color = quiet.copy(alpha = 0.32f),
+            topLeft = Offset(margin, top),
+            size = Size((w - margin * 2) * widthFraction, 3f),
+            cornerRadius = CornerRadius(2f, 2f),
+        )
+
+        fun dots(centreY: Float) {
+            listOf(0.15f, 0.5f, 0.85f).forEachIndexed { index, fraction ->
+                drawCircle(
+                    color = if (index == 1) accent else quiet.copy(alpha = 0.5f),
+                    radius = if (index == 1) 5.5f else 3f,
+                    center = Offset(margin + (w - margin * 2) * fraction, centreY),
+                )
+            }
+        }
+
+        when (variant) {
+            PlayerVariant.Standard -> {
+                cover(0f, h * 0.46f, inset = w * 0.26f)
+                line(h * 0.58f, 0.75f)
+                line(h * 0.70f, 0.45f)
+                dots(h * 0.88f)
+            }
+
+            PlayerVariant.FullBleed -> {
+                // Edge to edge, square corners — that is the whole idea of it.
+                cover(0f, h * 0.52f, inset = 0f)
+                line(h * 0.64f, 0.8f)
+                dots(h * 0.87f)
+            }
+
+            PlayerVariant.QueueForward -> {
+                cover(0f, h * 0.26f, inset = w * 0.38f)
+                dots(h * 0.4f)
+                // The queue is the bulk of this one, so it is most of the sketch.
+                line(h * 0.58f, 1f)
+                line(h * 0.72f, 1f)
+                line(h * 0.86f, 1f)
+            }
+
+            PlayerVariant.Compact -> {
+                cover(0f, h * 0.38f, inset = w * 0.3f)
+                line(h * 0.5f, 0.6f)
+                // Everything else pushed to the very bottom, which is the point.
+                dots(h * 0.82f)
+                line(h * 0.96f, 1f)
+            }
+        }
+    }
+}

@@ -74,10 +74,19 @@ import com.mero.ui.components.Artwork
 import com.mero.ui.theme.LocalMeroExtras
 
 /** The three Now Playing directions from `Player.dc.html`. */
-enum class PlayerVariant(val label: String) {
-    Standard("A · Standard"),
-    FullBleed("B · Full-bleed"),
-    QueueForward("C · Queue-forward"),
+/**
+ * The Now Playing layouts, named for what they do.
+ *
+ * They used to be "A · Standard", "B · Full-bleed" and "C · Queue-forward" —
+ * the names a design file gives options while someone is choosing between
+ * them, not names that tell a person what they will get. The enum names are
+ * unchanged so a saved choice still means what it meant.
+ */
+enum class PlayerVariant(val label: String, val description: String) {
+    Standard("Classic", "Square cover, controls below"),
+    FullBleed("Immersive", "Cover fills the top of the screen"),
+    QueueForward("Up Next", "What is coming, under the controls"),
+    Compact("One-handed", "Everything low, within reach of a thumb"),
 }
 
 /** Everything a Now Playing variant needs. Mirrors the design component's props. */
@@ -143,6 +152,7 @@ fun NowPlayingScreen(
     PlayerVariant.Standard -> StandardPlayer(ui, position, actions, modifier)
     PlayerVariant.FullBleed -> FullBleedPlayer(ui, position, actions, modifier)
     PlayerVariant.QueueForward -> QueueForwardPlayer(ui, position, actions, modifier)
+    PlayerVariant.Compact -> CompactPlayer(ui, position, actions, modifier)
 }
 
 /* ------------------------------- A · Standard ------------------------------ */
@@ -911,3 +921,97 @@ private fun PlayerTool(
  */
 private fun backdropOver(tint: Color, surface: Color, lightTheme: Boolean): Color =
     tint.copy(alpha = if (lightTheme) 0.22f else 0.85f).compositeOver(surface)
+
+/* ------------------------------ One-handed -------------------------------- */
+
+/**
+ * The same player, pushed to the bottom of the screen.
+ *
+ * Phones have outgrown the hand holding them: on a 6.7" display the play
+ * button in every other layout sits near the middle, which is a stretch, and
+ * the collapse arrow is in the top corner, which is not reachable at all. Here
+ * the artwork takes the slack at the top and everything you touch is in the
+ * lower third, with a larger transport row because that is the part used
+ * without looking.
+ */
+@Composable
+private fun CompactPlayer(
+    ui: PlayerUi,
+    position: PositionSec,
+    actions: PlayerActions,
+    modifier: Modifier,
+) {
+    val scheme = MaterialTheme.colorScheme
+
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(scheme.surfaceContainer),
+    ) {
+        PlayerTopBar(
+            source = ui.source,
+            centred = true,
+            onCollapse = actions.onCollapse,
+            onMore = actions.onMore,
+        )
+
+        // The art gets whatever is left, and shrinks first on a short screen —
+        // it is the one element here that can lose height without costing
+        // anyone a control.
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Artwork(
+                ui.song.thumbnailUrl,
+                size = 300,
+                radius = 24,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f),
+            )
+        }
+
+        Column(Modifier.padding(horizontal = 28.dp)) {
+            TitleBlock(
+                song = ui.song,
+                liked = ui.liked,
+                onLike = actions.onLike,
+                onArtist = actions.onArtist,
+                titleSize = 22,
+                titleLineHeight = 28,
+                artistSize = 15,
+            )
+            Spacer(Modifier.height(14.dp))
+            SeekBar(ui, position, actions.onSeek, thumb = 16)
+            Spacer(Modifier.height(10.dp))
+
+            // Bigger than the other layouts': this row is the reason for the
+            // layout, and it is the part people press without looking.
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ShuffleButton(ui.shuffle, actions.onShuffle, 52)
+                SkipButton(Icons.Rounded.SkipPrevious, "Previous", actions.onPrev, 60, 38)
+                PlayButton(ui.playing, actions.onPlayPause, 76, 40, CircleShape, ui.buffering)
+                SkipButton(Icons.Rounded.SkipNext, "Next", actions.onNext, 60, 38)
+                RepeatButton(ui.repeat, actions.onRepeat, 52)
+            }
+
+            Spacer(Modifier.height(14.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilledPill(Icons.Rounded.Lyrics, "Lyrics", actions.onLyrics, Modifier.weight(1f))
+                FilledPill(Icons.Rounded.QueueMusic, "Queue", actions.onQueue, Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}

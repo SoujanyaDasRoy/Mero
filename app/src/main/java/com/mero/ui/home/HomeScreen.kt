@@ -233,12 +233,12 @@ private fun QuickPicks(songs: List<Song>, onSongClick: (Song) -> Unit) {
                         Modifier
                             .weight(1f)
                             .height(56.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .background(scheme.surfaceContainerHigh)
                             .clickable { onSongClick(song) },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Artwork(song.thumbnailUrl, size = 56, radius = 10)
+                        Artwork(song.thumbnailUrl, size = 56, radius = 14)
                         Text(
                             song.title,
                             Modifier.padding(horizontal = 10.dp),
@@ -277,7 +277,7 @@ private fun FeatureShelf(section: HomeSection, onSongClick: (Song, List<Song>) -
                         .clickable { onSongClick(song, section.songs) },
                 ) {
                     Box {
-                        Artwork(song.thumbnailUrl, size = 196, radius = 16)
+                        Artwork(song.thumbnailUrl, size = 196, radius = 20)
                         Box(
                             Modifier
                                 .align(Alignment.BottomEnd)
@@ -334,7 +334,7 @@ private fun Shelf(section: HomeSection, onSongClick: (Song, List<Song>) -> Unit)
                         .width(146.dp)
                         .clickable { onSongClick(song, section.songs) },
                 ) {
-                    Artwork(song.thumbnailUrl, size = 146, radius = 14)
+                    Artwork(song.thumbnailUrl, size = 146, radius = 18)
                     Text(
                         song.title,
                         Modifier.padding(top = 8.dp),
@@ -359,7 +359,9 @@ private fun Shelf(section: HomeSection, onSongClick: (Song, List<Song>) -> Unit)
 @Composable
 private fun ShelfTitle(title: String, subtitle: String? = null) {
     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 10.dp)) {
-        Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        // Apple Music's section headings are the loudest thing on the
+        // screen after the art. Ours were barely above body text.
+        Text(title, fontSize = 21.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp)
         if (subtitle != null) {
             Text(
                 subtitle,
@@ -378,7 +380,7 @@ private fun UpdateBanner(version: String, onClick: () -> Unit) {
         Modifier
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(scheme.primaryContainer)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
