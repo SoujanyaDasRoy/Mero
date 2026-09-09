@@ -33,6 +33,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -338,6 +341,22 @@ private fun MeroContent(
     var shuffle by remember { mutableStateOf(false) }
     var repeat by remember { mutableStateOf(RepeatMode.Off) }
     var queue by remember { mutableStateOf(emptyList<Song>()) }
+    val snackbars = remember { SnackbarHostState() }
+
+    /**
+     * Confirms an action that changes something off-screen.
+     *
+     * "Add to queue" appends to the end of a queue that is usually already
+     * twenty tracks long, so nothing on screen moves and the song is often one
+     * that appears in the list anyway. It worked; it just looked exactly like
+     * it had not.
+     */
+    fun say(message: String) {
+        scope.launch {
+            snackbars.currentSnackbarData?.dismiss()
+            snackbars.showSnackbar(message, duration = SnackbarDuration.Short)
+        }
+    }
     // MediaItem only carries ids and display metadata, so the domain objects
     // the UI needs are looked up by the id the player reports back.
     var songsById by remember { mutableStateOf(emptyMap<String, Song>()) }
@@ -557,6 +576,11 @@ private fun MeroContent(
 
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
                 queue = upcomingFrom(controller, songsById)
+                // Persist it too. Adding a track through the menu changes the
+                // player's timeline and nothing else, so without this the
+                // stored queue — the one a headset button resumes from —
+                // silently disagreed with what was actually playing.
+                scope.launch { library.setQueue(queue) }
                 refillInfinitePlayback()
             }
 
@@ -820,6 +844,7 @@ private fun MeroContent(
     ) {
 
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbars) },
             bottomBar = {
                 Column {
                     val song = current
@@ -1571,8 +1596,14 @@ private fun MeroContent(
             SongMenuSheet(
                 song = song,
                 liked = likedSongs.any { it.id == song.id },
-                onPlayNext = { connection.playNextInQueue(song) },
-                onAddToQueue = { connection.addToQueue(listOf(song)) },
+                onPlayNext = {
+                    connection.playNextInQueue(song)
+                    say(song.title + " plays next")
+                },
+                onAddToQueue = {
+                    connection.addToQueue(listOf(song))
+                    say(song.title + " added to the queue")
+                },
                 onAddToPlaylist = { menuSong = null; addingToPlaylist = song },
                 onToggleLike = { scope.launch { library.toggleLiked(song) } },
                 downloaded = downloadedSongs.any { it.id == song.id },
