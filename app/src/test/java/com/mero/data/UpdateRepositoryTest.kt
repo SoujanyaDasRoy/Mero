@@ -104,6 +104,44 @@ class ReleaseParsingTest {
         assertTrue(release.apkUrl.endsWith("app-arm64-v8a-release.apk"))
     }
 
+    /**
+     * The assets are named mero-<version>-<abi>[-debug].apk. The picker finds
+     * the ABI by substring, so the naming scheme and this are tied together:
+     * change one without the other and every phone downloads the wrong file.
+     */
+    @Test
+    fun `picks the right asset from versioned filenames`() {
+        val release = parseRelease(
+            json(
+                "mero-1.8.0-armeabi-v7a-debug.apk",
+                "mero-1.8.0-arm64-v8a-debug.apk",
+                "mero-1.8.0-x86_64-debug.apk",
+            ),
+            abis = listOf("arm64-v8a", "armeabi-v7a"),
+        )!!
+        assertTrue(release.apkUrl.endsWith("mero-1.8.0-arm64-v8a-debug.apk"))
+    }
+
+    /** x86_64 contains "x86", so the more specific ABI has to win. */
+    @Test
+    fun `an x86_64 device is not given the x86 build`() {
+        val release = parseRelease(
+            json("mero-1.8.0-x86-debug.apk", "mero-1.8.0-x86_64-debug.apk"),
+            abis = listOf("x86_64", "x86"),
+        )!!
+        assertTrue(release.apkUrl.endsWith("mero-1.8.0-x86_64-debug.apk"))
+    }
+
+    /** And the reverse: "x86" must not match the x86_64 file just by ordering. */
+    @Test
+    fun `an x86 device is not given the x86_64 build`() {
+        val release = parseRelease(
+            json("mero-1.8.0-x86_64-debug.apk", "mero-1.8.0-x86-debug.apk"),
+            abis = listOf("x86"),
+        )!!
+        assertTrue(release.apkUrl.endsWith("mero-1.8.0-x86-debug.apk"))
+    }
+
     @Test
     fun `falls back to a universal build when no split matches`() {
         val release = parseRelease(json("app-universal-release.apk"), listOf("riscv64"))!!

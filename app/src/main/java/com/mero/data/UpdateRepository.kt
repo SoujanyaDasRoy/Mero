@@ -265,7 +265,11 @@ fun parseRelease(body: String, abis: List<String>): Release? {
     val apks = release.assets.filter { it.name.endsWith(".apk", ignoreCase = true) }
     if (apks.isEmpty()) return null
 
-    val asset = abis.firstNotNullOfOrNull { abi -> apks.firstOrNull { it.name.contains(abi, true) } }
+    // Matched on a whole name segment before falling back to a loose contains:
+    // "x86" is a substring of "x86_64", so a 32-bit device could otherwise be
+    // handed the 64-bit build by nothing more than asset ordering.
+    val asset = abis.firstNotNullOfOrNull { abi -> apks.firstOrNull { it.name.hasAbiSegment(abi) } }
+        ?: abis.firstNotNullOfOrNull { abi -> apks.firstOrNull { it.name.contains(abi, true) } }
         ?: apks.firstOrNull { it.name.contains("universal", true) }
         ?: apks.first()
 
@@ -296,6 +300,19 @@ fun isNewer(candidate: String, installed: String): Boolean {
     }
     return false
 }
+
+/**
+ * True when [abi] appears in the filename as a whole part of it.
+ *
+ * Split on "-" and "." only, never "_": "x86_64" is one ABI name, and breaking
+ * it apart would make an x86_64 filename look like it contains "x86". Some ABI
+ * names contain a hyphen themselves ("arm64-v8a"), which the delimited
+ * contains-checks cover.
+ */
+private fun String.hasAbiSegment(abi: String): Boolean =
+    split('-', '.').any { it.equals(abi, ignoreCase = true) } ||
+        contains("-$abi-", ignoreCase = true) ||
+        contains("-$abi.", ignoreCase = true)
 
 private fun versionParts(version: String): List<Int> =
     version.trim().removePrefix("v")

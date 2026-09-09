@@ -467,11 +467,7 @@ fun SettingsScreen(
                     PreferenceRow(
                         Icons.Rounded.HelpOutline,
                         "How updating works",
-                        "Mero is not on the Play Store, so it checks GitHub itself " +
-                            "when it opens. When there is a new version this screen " +
-                            "offers it: Download, then Install. Android asks once for " +
-                            "permission to install apps, and the file is also kept in " +
-                            "your Downloads folder in case you would rather tap it there.",
+                        "Mero checks on its own. Tap Download, then Install.",
                     )
                     PreferenceRow(
                         Icons.Rounded.Code,
@@ -673,13 +669,9 @@ private fun UpdateCard(
             }
             Text(
                 if (ready != null) {
-                    "Android will ask you to allow Mero to install apps, then to " +
-                        "confirm. Your music, playlists and downloads are kept. " +
-                        "If anything goes wrong, the file is already saved as " +
-                        "Downloads/" + ready.fileName + " — open it from Files and tap it."
+                    "Also saved as Downloads/" + ready.fileName
                 } else {
-                    "Downloads the update and opens Android's installer. " +
-                        "Nothing is lost: it installs over the version you have."
+                    "Installs over this version. Nothing is lost."
                 },
                 Modifier.padding(top = 10.dp),
                 fontSize = 12.sp,

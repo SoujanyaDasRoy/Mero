@@ -1,3 +1,5 @@
+import com.android.build.api.variant.FilterConfiguration
+import com.android.build.api.variant.impl.VariantOutputImpl
 import java.util.Properties
 
 plugins {
@@ -25,8 +27,8 @@ android {
         applicationId = "com.mero"
         minSdk = 28
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.7.0"
+        versionCode = 12
+        versionName = "1.8.0"
     }
 
     // yt-dlp ships a Python runtime and ffmpeg per architecture, so a universal
@@ -84,6 +86,33 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+    }
+}
+
+/**
+ * Names the APKs after the version inside them.
+ *
+ * They were all called app-<abi>-debug.apk, so the file in someone's Downloads
+ * folder said nothing about which build it was, two releases were
+ * indistinguishable once downloaded, and a GitHub release page listed four
+ * assets whose names would be identical next time. The version belongs in the
+ * filename of anything people keep.
+ *
+ * The ABI stays in the name and stays spelled the way Build.SUPPORTED_ABIS
+ * spells it: UpdateRepository picks the right asset by looking for it.
+ */
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val abi = output.filters
+                .find { it.filterType == FilterConfiguration.FilterType.ABI }
+                ?.identifier
+            val suffix = if (variant.buildType == "release") "" else "-" + variant.buildType
+            (output as? VariantOutputImpl)?.outputFileName?.set(
+                listOfNotNull("mero", variant.outputs.first().versionName.orNull, abi)
+                    .joinToString("-") + suffix + ".apk",
+            )
+        }
     }
 }
 
