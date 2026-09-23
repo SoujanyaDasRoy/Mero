@@ -24,6 +24,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Speaker
+import androidx.compose.material.icons.rounded.Usb
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
@@ -111,6 +115,8 @@ data class PlayerUi(
      * progress bar, so this wins whenever it's known.
      */
     val durationSec: Int = 0,
+    /** Where the sound is going, for the output button. */
+    val output: com.mero.playback.OutputDevice? = null,
 ) {
     val effectiveDurationSec: Int
         get() = if (durationSec > 0) durationSec else song.durationSec
@@ -142,6 +148,8 @@ data class PlayerActions(
     /** Opens search for the artist whose name was tapped. */
     val onArtist: (String) -> Unit = {},
     val onMore: () -> Unit = {},
+    /** Opens the phone's "play on" panel. */
+    val onOutput: () -> Unit = {},
 )
 
 /**
@@ -295,7 +303,7 @@ private fun StandardPlayer(
                 textAlign = TextAlign.Center,
             )
         }
-        PlayerToolsRow(actions)
+        PlayerToolsRow(actions, ui.output)
         Spacer(Modifier.height(8.dp))
     }
 }
@@ -398,7 +406,7 @@ private fun FullBleedPlayer(
             }
 
             Spacer(Modifier.height(10.dp))
-            PlayerToolsRow(actions, horizontalPadding = 0)
+            PlayerToolsRow(actions, ui.output, horizontalPadding = 0)
         }
         Spacer(Modifier.height(8.dp))
     }
@@ -515,6 +523,14 @@ private fun QueueForwardPlayer(
                 // The equalizer and the sleep timer used to exist in the
                 // Classic layout only, so choosing a different one quietly
                 // took two features away.
+                IconButton(onClick = actions.onOutput, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        outputIcon(ui.output),
+                        "Play on " + (ui.output?.name ?: "another device"),
+                        Modifier.size(20.dp),
+                        tint = scheme.onSurfaceVariant,
+                    )
+                }
                 IconButton(onClick = actions.onEqualizer, modifier = Modifier.size(36.dp)) {
                     Icon(
                         Icons.Rounded.GraphicEq,
@@ -1011,7 +1027,7 @@ private fun CompactPlayer(
 
             Spacer(Modifier.height(10.dp))
         }
-        PlayerToolsRow(actions, horizontalPadding = 12)
+        PlayerToolsRow(actions, ui.output, horizontalPadding = 12)
         Spacer(Modifier.height(12.dp))
     }
 }
@@ -1026,7 +1042,11 @@ private fun CompactPlayer(
  * it should not also decide whether the equalizer and the sleep timer exist.
  */
 @Composable
-private fun PlayerToolsRow(actions: PlayerActions, horizontalPadding: Int = 20) {
+private fun PlayerToolsRow(
+    actions: PlayerActions,
+    output: com.mero.playback.OutputDevice?,
+    horizontalPadding: Int = 20,
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -1034,9 +1054,25 @@ private fun PlayerToolsRow(actions: PlayerActions, horizontalPadding: Int = 20) 
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // First, and labelled with the device rather than the word "Output":
+        // "Pixel Buds" answers "where is this playing?" before anyone asks.
+        PlayerTool(
+            outputIcon(output),
+            output?.name ?: "Output",
+            actions.onOutput,
+            Modifier.weight(1f),
+        )
         PlayerTool(Icons.Rounded.Lyrics, "Lyrics", actions.onLyrics, Modifier.weight(1f))
         PlayerTool(Icons.Rounded.GraphicEq, "Equalizer", actions.onEqualizer, Modifier.weight(1f))
         PlayerTool(Icons.Rounded.Bedtime, "Sleep", actions.onSleepTimer, Modifier.weight(1f))
         PlayerTool(Icons.Rounded.QueueMusic, "Queue", actions.onQueue, Modifier.weight(1f))
     }
 }
+
+private fun outputIcon(output: com.mero.playback.OutputDevice?): androidx.compose.ui.graphics.vector.ImageVector =
+    when (output?.kind) {
+        com.mero.playback.OutputDevice.Kind.Bluetooth -> Icons.Rounded.Bluetooth
+        com.mero.playback.OutputDevice.Kind.Wired -> Icons.Rounded.Headphones
+        com.mero.playback.OutputDevice.Kind.Usb -> Icons.Rounded.Usb
+        else -> Icons.Rounded.Speaker
+    }

@@ -42,6 +42,11 @@ enum class OutputRoute(val label: String) {
     val key: String get() = name.lowercase()
 }
 
+/** The physical thing the sound is coming out of, named the way a person would. */
+data class OutputDevice(val name: String, val kind: Kind) {
+    enum class Kind { Speaker, Wired, Bluetooth, Usb }
+}
+
 /**
  * Watches the audio output and reports which of the two it currently is.
  *
@@ -60,6 +65,11 @@ class OutputRouteWatcher(context: Context) {
     private val _route = MutableStateFlow(currentRoute())
     val route: StateFlow<OutputRoute> = _route.asStateFlow()
 
+    private val _device = MutableStateFlow(currentDevice())
+
+    /** What the Now Playing screen shows on its output button. */
+    val device: StateFlow<OutputDevice> = _device.asStateFlow()
+
     /** What is actually plugged in, regardless of any override. */
     val detected: OutputRoute get() = detectedRoute()
 
@@ -68,19 +78,20 @@ class OutputRouteWatcher(context: Context) {
         _route.value = currentRoute()
     }
 
-    private val callback = object : AudioDeviceCallback() {
-        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
-            _route.value = currentRoute()
-        }
+    private fun refresh() {
+        _route.value = currentRoute()
+        _device.value = currentDevice()
+    }
 
-        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
-            _route.value = currentRoute()
-        }
+    private val callback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = refresh()
+
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = refresh()
     }
 
     fun start() {
         audioManager?.registerAudioDeviceCallback(callback, Handler(Looper.getMainLooper()))
-        _route.value = currentRoute()
+        refresh()
     }
 
     fun stop() {
@@ -95,7 +106,38 @@ class OutputRouteWatcher(context: Context) {
         return if (wearing) OutputRoute.Headphones else OutputRoute.Speaker
     }
 
+    /**
+     * The output Android is most likely using. It does not say outright, but
+     * it routes media to the most recently connected personal device ahead of
+     * the built-in speaker, so the first match down this list is the one.
+     */
+    private fun currentDevice(): OutputDevice {
+        val devices = audioManager?.getDevices(AudioManager.GET_DEVICES_OUTPUTS).orEmpty()
+        fun named(info: AudioDeviceInfo, fallback: String) =
+            info.productName?.toString()?.trim()
+                // The phone's own model name is what Android reports for the
+                // built-in speaker and for anonymous wired jacks, which reads
+                // as nonsense on a button — "Pixel 7" is not an output.
+                ?.takeIf { it.isNotEmpty() && it != android.os.Build.MODEL }
+                ?: fallback
+        devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
+            ?.let { return OutputDevice(named(it, "Bluetooth"), OutputDevice.Kind.Bluetooth) }
+        devices.firstOrNull { it.type in USB_TYPES }
+            ?.let { return OutputDevice(named(it, "USB audio"), OutputDevice.Kind.Usb) }
+        devices.firstOrNull { it.type in WIRED_TYPES }
+            ?.let { return OutputDevice(named(it, "Headphones"), OutputDevice.Kind.Wired) }
+        return OutputDevice("This phone", OutputDevice.Kind.Speaker)
+    }
+
     private companion object {
+        val WIRED_TYPES = setOf(
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        )
+        val USB_TYPES = setOf(
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_USB_DEVICE,
+        )
         val HEADPHONE_TYPES = setOf(
             AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
             AudioDeviceInfo.TYPE_WIRED_HEADSET,
@@ -104,6 +146,39 @@ class OutputRouteWatcher(context: Context) {
             AudioDeviceInfo.TYPE_USB_HEADSET,
             AudioDeviceInfo.TYPE_USB_DEVICE,
             AudioDeviceInfo.TYPE_HEARING_AID,
+        )
+    }
+}
+
+/**
+ * Opens Android's own "play on" panel — the list of speakers, earbuds and
+ * cast devices the phone can route media to.
+ *
+ * The system panel rather than a list of Mero's own: switching output is
+ * something Android does for the whole phone, it already knows every device
+ * including ones Mero cannot see, and a home-made list would go stale the
+ * first time someone paired a new pair of earbuds. Three ways in, newest
+ * first, because the public API only arrived in Android 14.
+ */
+fun openOutputSwitcher(context: Context) {
+    if (android.os.Build.VERSION.SDK_INT >= 34) {
+        val shown = runCatching {
+            android.media.MediaRouter2.getInstance(context).showSystemOutputSwitcher()
+        }.getOrDefault(false)
+        if (shown) return
+    }
+    // Android 11 to 13 on Pixels and most phones built close to stock.
+    val panel = android.content.Intent("com.android.systemui.action.LAUNCH_MEDIA_OUTPUT_DIALOG")
+        .setPackage("com.android.systemui")
+        .putExtra("package_name", context.packageName)
+        .addFlags(android.content.Intent.FLAG_RECEIVER_FOREGROUND)
+    val sent = runCatching { context.sendBroadcast(panel) }.isSuccess
+    if (sent && android.os.Build.VERSION.SDK_INT >= 30) return
+    // Everything else: the Bluetooth screen, which is where a person would go.
+    runCatching {
+        context.startActivity(
+            android.content.Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
         )
     }
 }

@@ -543,6 +543,7 @@ private fun MeroContent(
     // rescues the phone speaker sounds bloated on headphones, so each route
     // keeps its own and they swap over when the output does.
     val outputRoute by container.outputRoute.route.collectAsStateWithLifecycle()
+    val outputDevice by container.outputRoute.device.collectAsStateWithLifecycle()
     var routeOverride by remember {
         mutableStateOf(
             container.settings.string(SettingsStore.ROUTE_OVERRIDE, "")
@@ -1888,6 +1889,7 @@ private fun MeroContent(
                             qualityLabel = resolved?.label,
                             buffering = buffering,
                             durationSec = playerDuration.intValue,
+                            output = outputDevice,
                         ),
                         position = positionOf,
                         actions = PlayerActions(
@@ -1957,6 +1959,7 @@ private fun MeroContent(
                             },
                             onSleepTimer = { overlay = "sleep" },
                             onMore = { menuSong = song },
+                            onOutput = { com.mero.playback.openOutputSwitcher(context) },
                         ),
                     )
                 }
