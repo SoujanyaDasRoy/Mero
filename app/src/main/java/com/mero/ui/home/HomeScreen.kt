@@ -39,6 +39,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -77,6 +78,8 @@ fun HomeScreen(
     updateAvailableVersion: String?,
     onUpdateClick: () -> Unit,
     contentPadding: PaddingValues,
+    /** The user's own photo icon, when they have made one (Settings > App icon). */
+    customLogo: androidx.compose.ui.graphics.ImageBitmap? = null,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -103,13 +106,29 @@ fun HomeScreen(
                 .padding(start = 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(
-                painter = painterResource(R.drawable.mero_logo),
-                contentDescription = null,
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(9.dp)),
-            )
+            if (customLogo != null) {
+                // The saved icon carries the adaptive-icon margin; scaled up,
+                // this shows the part a launcher would.
+                androidx.compose.foundation.layout.Box(
+                    Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(9.dp)),
+                ) {
+                    Image(
+                        customLogo,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize().scale(1.5f),
+                    )
+                }
+            } else {
+                Image(
+                    painter = painterResource(R.drawable.mero_logo),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(9.dp)),
+                )
+            }
             Column(
                 Modifier
                     .weight(1f)

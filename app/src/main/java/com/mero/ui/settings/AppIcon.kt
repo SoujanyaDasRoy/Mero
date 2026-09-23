@@ -3,6 +3,17 @@ package com.mero.ui.settings
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -180,5 +191,110 @@ internal fun AppIconPicker() {
                 )
             }
         }
+        CustomIconTile()
+    }
+}
+
+/**
+ * The seventh tile: a photo of your own. Empty, it opens the photo picker;
+ * set, it opens the editor to re-frame, change or remove it.
+ */
+@Composable
+private fun CustomIconTile() {
+    val context = LocalContext.current
+    val scheme = MaterialTheme.colorScheme
+    val icon by CustomIcon.icon(context).collectAsState()
+    var editing by remember { mutableStateOf<Bitmap?>(null) }
+    var framing by remember { mutableStateOf(CustomIcon.Framing()) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    // The system photo picker: no storage permission, and only the one photo
+    // chosen is ever visible to Mero.
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            runCatching { CustomIcon.decode(context, uri) }
+                .onSuccess {
+                    framing = CustomIcon.Framing()
+                    editing = it
+                }
+                .onFailure { message = "That photo couldn't be opened." }
+        }
+    }
+    fun pick() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+
+    Column(
+        Modifier
+            .width(60.dp)
+            .semantics { contentDescription = if (icon == null) "Use your own photo as the icon" else "Edit your photo icon" }
+            .clickable {
+                val source = if (icon != null) CustomIcon.source(context) else null
+                if (source != null) {
+                    framing = CustomIcon.framing(context)
+                    editing = source
+                } else {
+                    pick()
+                }
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier
+                .size(56.dp)
+                .border(2.dp, if (icon != null) scheme.primary else Color.Transparent, RoundedCornerShape(18.dp))
+                .padding(4.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(scheme.surfaceContainerHighest)
+                .border(1.dp, scheme.outlineVariant, RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            val current = icon
+            if (current != null) {
+                // The saved icon has the adaptive margin around it; scaled up,
+                // the tile shows what the launcher shows.
+                Image(current.asImageBitmap(), null, Modifier.fillMaxSize().scale(1.5f))
+            } else {
+                Icon(Icons.Rounded.AddPhotoAlternate, null, tint = scheme.onSurfaceVariant)
+            }
+        }
+        Text(
+            "Photo",
+            Modifier.padding(top = 6.dp),
+            fontSize = 12.sp,
+            fontWeight = if (icon != null) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (icon != null) scheme.primary else scheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+
+    editing?.let { source ->
+        CustomIconEditor(
+            source = source,
+            initial = framing,
+            hasIcon = icon != null,
+            onChangePhoto = { pick() },
+            onRemove = {
+                CustomIcon.remove(context)
+                editing = null
+                message = "Removed. If its icon is still on your home screen, long-press it to take it off."
+            },
+            onCancel = { editing = null },
+            onSave = { rendered, framed ->
+                val shown = CustomIcon.apply(context, source, rendered, framed)
+                editing = null
+                message = if (shown) {
+                    null
+                } else {
+                    "Saved as Mero's logo, but this home screen doesn't let apps add icons to it."
+                }
+            },
+        )
+    }
+
+    message?.let { text ->
+        AlertDialog(
+            onDismissRequest = { message = null },
+            text = { Text(text) },
+            confirmButton = { TextButton(onClick = { message = null }) { Text("OK") } },
+        )
     }
 }

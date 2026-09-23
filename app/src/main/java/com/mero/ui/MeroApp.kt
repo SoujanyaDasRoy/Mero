@@ -12,6 +12,7 @@ import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -495,6 +496,9 @@ private fun MeroContent(
      * in a callback that knows nothing about who asked.
      */
     var phonePickTarget by remember { mutableStateOf<String?>(null) }
+    val customIcon by remember { com.mero.ui.settings.CustomIcon.icon(context) }.collectAsStateWithLifecycle()
+    val customLogo = remember(customIcon) { customIcon?.asImageBitmap() }
+
     var batteryUnrestricted by remember {
         mutableStateOf(com.mero.playback.BatteryExemption.isExempt(context))
     }
@@ -1146,6 +1150,7 @@ private fun MeroContent(
                             ?.release?.versionName,
                         onUpdateClick = { openTab(SettingsRoute) },
                         contentPadding = contentPadding,
+                        customLogo = customLogo,
                     )
                 }
 
