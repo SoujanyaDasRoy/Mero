@@ -242,11 +242,11 @@ private fun StandardPlayer(
 
         // Artwork sits high, not centred — Tidal-style.
         Spacer(Modifier.height(20.dp))
-        Box(
+        CoverGestures(
+            ui.liked, actions.onLike, actions.onPrev, actions.onNext,
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 28.dp),
-            contentAlignment = Alignment.Center,
         ) {
             Artwork(
                 ui.song.thumbnailUrl,
@@ -330,12 +330,14 @@ private fun FullBleedPlayer(
                 .fillMaxWidth()
                 .height(430.dp),
         ) {
-            Artwork(
-                ui.song.thumbnailUrl,
-                size = 430,
-                radius = 0,
-                modifier = Modifier.fillMaxSize(),
-            )
+            CoverGestures(ui.liked, actions.onLike, actions.onPrev, actions.onNext, Modifier.fillMaxSize()) {
+                Artwork(
+                    ui.song.thumbnailUrl,
+                    size = 430,
+                    radius = 0,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
             // Fade the bottom 160dp of the art into the surface.
             Box(
                 Modifier
@@ -437,7 +439,7 @@ private fun QueueForwardPlayer(
         )
 
         Spacer(Modifier.height(8.dp))
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        CoverGestures(ui.liked, actions.onLike, actions.onPrev, actions.onNext, Modifier.fillMaxWidth()) {
             Artwork(ui.song.thumbnailUrl, size = 200, radius = 12)
         }
 
@@ -980,12 +982,12 @@ private fun CompactPlayer(
         // The art gets whatever is left, and shrinks first on a short screen —
         // it is the one element here that can lose height without costing
         // anyone a control.
-        Box(
+        CoverGestures(
+            ui.liked, actions.onLike, actions.onPrev, actions.onNext,
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp, vertical = 12.dp),
-            contentAlignment = Alignment.Center,
         ) {
             Artwork(
                 ui.song.thumbnailUrl,

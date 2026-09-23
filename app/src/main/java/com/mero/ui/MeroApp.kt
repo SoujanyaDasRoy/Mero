@@ -707,6 +707,10 @@ private fun MeroContent(
                 current = songsById[id] ?: com.mero.playback.songFrom(item)
                 position.intValue = 0
                 playerDuration.intValue = 0
+                // Moving to the next track changes what is "next" without
+                // changing the timeline, so onTimelineChanged never fired and
+                // Next Up kept listing the song now playing at the top.
+                queue = upcomingFrom(controller, songsById)
                 refillInfinitePlayback()
             }
 
@@ -921,6 +925,19 @@ private fun MeroContent(
         }
     }
 
+    // "Play next" with nothing loaded used to drop the song into the empty
+    // player as a paused current track while saying it "plays next" — which it
+    // never would on its own. With nothing to come after, play it now.
+    fun playNext(song: Song) {
+        if ((connection.controller?.mediaItemCount ?: 0) == 0) {
+            playFrom(song, listOf(song))
+            say("Playing " + song.title)
+        } else {
+            connection.playNextInQueue(song)
+            say(song.title + " plays next")
+        }
+    }
+
     // A file opened from another app. Keyed on the controller as well, because
     // a cold start from the Files app gets here before the player has
     // connected, and a play command against no player is silently dropped.
@@ -1059,6 +1076,22 @@ private fun MeroContent(
                 }
             },
     ) {
+        // Every song row in every list swipes the same way: right to play
+        // next, left to like. Provided once here rather than wired per screen.
+        val swipeActions = remember(likedSongs) {
+            com.mero.ui.components.SongSwipeActions(
+                playNext = { song -> playNext(song) },
+                toggleLike = { song ->
+                    val wasLiked = likedSongs.any { it.id == song.id }
+                    scope.launch { library.toggleLiked(song) }
+                    say(if (wasLiked) "Removed from Liked" else "Added to Liked")
+                },
+                isLiked = { song -> likedSongs.any { it.id == song.id } },
+            )
+        }
+        androidx.compose.runtime.CompositionLocalProvider(
+            com.mero.ui.components.LocalSongSwipeActions provides swipeActions,
+        ) {
 
         Scaffold(
             snackbarHost = { SnackbarHost(snackbars) },
@@ -2024,10 +2057,7 @@ private fun MeroContent(
             SongMenuSheet(
                 song = song,
                 liked = likedSongs.any { it.id == song.id },
-                onPlayNext = {
-                    connection.playNextInQueue(song)
-                    say(song.title + " plays next")
-                },
+                onPlayNext = { playNext(song) },
                 onAddToQueue = {
                     connection.addToQueue(listOf(song))
                     say(song.title + " added to the queue")
@@ -2223,6 +2253,7 @@ private fun MeroContent(
                     },
                 )
             }
+        }
         }
     }
 }

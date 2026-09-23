@@ -26,6 +26,10 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -64,6 +68,7 @@ import java.util.Calendar
  * addressed by time of day), the first shelf is given room to be a feature,
  * and discovery continues below it endlessly as before.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     sections: List<HomeSection>,
@@ -84,6 +89,17 @@ fun HomeScreen(
 ) {
     val scheme = MaterialTheme.colorScheme
     val listState = rememberLazyListState()
+
+    // The feed's own loading flag only covers an empty screen, so a pull keeps
+    // its own: on until new shelves arrive, and never stuck if none do.
+    var pulled by remember { mutableStateOf(false) }
+    LaunchedEffect(sections) { pulled = false }
+    LaunchedEffect(pulled) {
+        if (pulled) {
+            kotlinx.coroutines.delay(10_000)
+            pulled = false
+        }
+    }
 
     // Pull in the next batch of shelves before the user hits the bottom, so the
     // feed reads as continuous rather than as a page that ran out.
@@ -175,14 +191,24 @@ fun HomeScreen(
                 )
             }
 
-            else -> LazyColumn(
+            // Pull down for a fresh feed, the way every feed on the phone works.
+            // The refresh icon stays for anyone who does not know to pull.
+            else -> PullToRefreshBox(
+                modifier = Modifier.fillMaxSize(),
+                isRefreshing = pulled,
+                onRefresh = {
+                    pulled = true
+                    onRetry()
+                },
+            ) {
+            LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
                 // Nothing else tells anyone a new build exists, so the one
                 // place everybody opens has to.
                 item {
-                    AnimatedVisibility(updateAvailableVersion != null) {
+                    androidx.compose.animation.AnimatedVisibility(updateAvailableVersion != null) {
                         UpdateBanner(updateAvailableVersion.orEmpty(), onUpdateClick)
                     }
                 }
@@ -224,6 +250,7 @@ fun HomeScreen(
                         Spacer(Modifier.height(16.dp))
                     }
                 }
+            }
             }
         }
     }

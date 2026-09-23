@@ -1,5 +1,24 @@
 package com.mero.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.HeartBroken
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -148,7 +167,30 @@ fun MeroChip(
     }
 }
 
-/** 64dp browse/search row. */
+/**
+ * What a swipe on a song row does, provided once at the top of the app so
+ * every list gets the same gestures without each screen wiring them up.
+ */
+class SongSwipeActions(
+    val playNext: (Song) -> Unit,
+    val toggleLike: (Song) -> Unit,
+    val isLiked: (Song) -> Boolean,
+)
+
+val LocalSongSwipeActions = compositionLocalOf<SongSwipeActions?> { null }
+
+/** How far a row is pulled before letting go does something. */
+private val SWIPE_ACTION_DISTANCE = 96.dp
+
+/**
+ * 64dp browse/search row.
+ *
+ * On a real song (one with a menu) it also takes gestures: long-press opens
+ * the menu, swipe right plays it next, swipe left likes or unlikes it. The
+ * action shows under the finger as the row moves, and it springs back either
+ * way; nothing is removed from a list by swiping it.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SongRow(
     song: Song,
@@ -159,47 +201,125 @@ fun SongRow(
     onMore: (() -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
-    Row(
-        modifier = modifier
+    val haptics = LocalHapticFeedback.current
+    // Albums and artists in search results reuse this row with no menu; a
+    // swipe to "play next" an album would do nothing sensible.
+    val swipe = if (onMore != null) LocalSongSwipeActions.current else null
+    val scope = rememberCoroutineScope()
+    val offset = remember { Animatable(0f) }
+    val density = LocalDensity.current
+    val threshold = with(density) { SWIPE_ACTION_DISTANCE.toPx() }
+
+    Box(
+        modifier
             .fillMaxWidth()
-            .height(64.dp)
-            .clickable(onClick = onClick)
-            .padding(start = 16.dp, end = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+            .height(64.dp),
     ) {
-        Artwork(song.thumbnailUrl, size = 48)
-        Column(Modifier.weight(1f)) {
-            Text(
-                song.title,
-                fontSize = 16.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = if (highlighted) scheme.primary else scheme.onSurface,
-            )
-            Text(
-                subtitle,
-                fontSize = 13.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = scheme.onSurfaceVariant,
-            )
-        }
-        if (song.downloaded) {
-            Icon(
-                Icons.Rounded.DownloadDone,
-                contentDescription = "Downloaded",
-                tint = scheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        if (onMore != null) {
-            IconButton(onClick = onMore) {
+        if (swipe != null && offset.value != 0f) {
+            val right = offset.value > 0
+            val armed = abs(offset.value) >= threshold
+            val liked = swipe.isLiked(song)
+            Row(
+                Modifier
+                    .align(if (right) Alignment.CenterStart else Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .width(with(density) { abs(offset.value).toDp() })
+                    .background(if (armed) scheme.primaryContainer else scheme.surfaceContainerHighest)
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = if (right) Arrangement.Start else Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Icon(
-                    Icons.Rounded.MoreVert,
-                    contentDescription = "More",
-                    tint = scheme.onSurfaceVariant,
+                    when {
+                        right -> Icons.AutoMirrored.Rounded.PlaylistPlay
+                        liked -> Icons.Rounded.HeartBroken
+                        else -> Icons.Rounded.Favorite
+                    },
+                    contentDescription = null,
+                    tint = if (armed) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
                 )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { translationX = offset.value }
+                .then(
+                    if (swipe == null) {
+                        Modifier
+                    } else {
+                        Modifier.pointerInput(song.id) {
+                            var armedTick = false
+                            detectHorizontalDragGestures(
+                                onDragStart = { armedTick = false },
+                                onDragEnd = {
+                                    val travelled = offset.value
+                                    if (abs(travelled) >= threshold) {
+                                        if (travelled > 0) swipe.playNext(song) else swipe.toggleLike(song)
+                                    }
+                                    scope.launch { offset.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) }
+                                },
+                                onDragCancel = { scope.launch { offset.animateTo(0f) } },
+                            ) { change, dx ->
+                                change.consume()
+                                val next = (offset.value + dx).coerceIn(-threshold * 1.4f, threshold * 1.4f)
+                                // One tick as it arms, so the hand knows without looking.
+                                if (!armedTick && abs(next) >= threshold) {
+                                    armedTick = true
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                }
+                                if (abs(next) < threshold) armedTick = false
+                                scope.launch { offset.snapTo(next) }
+                            }
+                        }
+                    },
+                )
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onMore?.let { more ->
+                        {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            more()
+                        }
+                    },
+                )
+                .padding(start = 16.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Artwork(song.thumbnailUrl, size = 48)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    song.title,
+                    fontSize = 16.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = if (highlighted) scheme.primary else scheme.onSurface,
+                )
+                Text(
+                    subtitle,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = scheme.onSurfaceVariant,
+                )
+            }
+            if (song.downloaded) {
+                Icon(
+                    Icons.Rounded.DownloadDone,
+                    contentDescription = "Downloaded",
+                    tint = scheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            if (onMore != null) {
+                IconButton(onClick = onMore) {
+                    Icon(
+                        Icons.Rounded.MoreVert,
+                        contentDescription = "More",
+                        tint = scheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

@@ -1,5 +1,10 @@
 package com.mero.ui.player
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -274,16 +279,42 @@ fun QueueSheet(
                 letterSpacing = 0.5.sp,
                 color = scheme.onSurfaceVariant,
             )
-            Text("drag to reorder", fontSize = 11.sp, color = scheme.onSurfaceVariant)
+            Text("drag to reorder · swipe to remove", fontSize = 11.sp, color = scheme.onSurfaceVariant)
         }
 
         LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
             items(items, key = { it.id }) { song ->
                 ReorderableItem(reorderState, key = song.id) { isDragging ->
+                    // Either way off the edge removes it: the row follows the
+                    // finger, and past a third of the width it slides out.
+                    val swipe = remember { Animatable(0f) }
+                    val scope = rememberCoroutineScope()
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .height(60.dp)
+                            .graphicsLayer {
+                                translationX = swipe.value
+                                alpha = 1f - (kotlin.math.abs(swipe.value) / size.width).coerceIn(0f, 0.7f)
+                            }
+                            .pointerInput(song.id) {
+                                detectHorizontalDragGestures(
+                                    onDragEnd = {
+                                        scope.launch {
+                                            if (kotlin.math.abs(swipe.value) > size.width / 3f) {
+                                                swipe.animateTo(if (swipe.value > 0) size.width.toFloat() else -size.width.toFloat())
+                                                onRemove(song)
+                                            } else {
+                                                swipe.animateTo(0f)
+                                            }
+                                        }
+                                    },
+                                    onDragCancel = { scope.launch { swipe.animateTo(0f) } },
+                                ) { change, dx ->
+                                    change.consume()
+                                    scope.launch { swipe.snapTo(swipe.value + dx) }
+                                }
+                            }
                             .background(
                                 if (isDragging) scheme.surfaceContainerHigh else Color.Transparent,
                             )
