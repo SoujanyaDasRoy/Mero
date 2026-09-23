@@ -84,6 +84,7 @@ import com.mero.playback.mediaItemFor
 import com.mero.ui.equalizer.EqualizerScreen
 import com.mero.ui.artist.ArtistScreen
 import com.mero.ui.collection.CollectionScreen
+import com.mero.ui.playlist.AddSongsScreen
 import com.mero.ui.home.HomeScreen
 import com.mero.ui.library.LibraryScreen
 import com.mero.ui.player.LyricsSheet
@@ -123,6 +124,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class PlaylistRoute(val playlistId: String)
 @Serializable data class SmartPlaylistRoute(val playlistId: String)
 @Serializable data class ArtistRoute(val artistId: String)
+@Serializable data class AddSongsRoute(val playlistId: String)
 
 /**
  * An album or a remote playlist, opened rather than played.
@@ -139,7 +141,11 @@ import kotlinx.serialization.Serializable
 )
 
 @Composable
-fun MeroApp() {
+fun MeroApp(
+    /** A file another app asked Mero to open, or null. */
+    openedAudio: kotlinx.coroutines.flow.StateFlow<android.net.Uri?>? = null,
+    onOpenedHandled: () -> Unit = {},
+) {
     val appContext = LocalContext.current.applicationContext
     // UI-layer state only. Replaced by PlayerConnection over a MediaController in
     // M2 — see docs/architecture.md, "Playback state is not screen state".
@@ -213,6 +219,8 @@ fun MeroApp() {
             }
 
             MeroContent(
+                openedAudio = openedAudio,
+                onOpenedHandled = onOpenedHandled,
                 accent = accent,
                 displayName = displayName,
                 onEditName = { askingName = true },
@@ -248,6 +256,8 @@ fun MeroApp() {
 
 @Composable
 private fun MeroContent(
+    openedAudio: kotlinx.coroutines.flow.StateFlow<android.net.Uri?>?,
+    onOpenedHandled: () -> Unit,
     accent: MeroAccent,
     displayName: String,
     onEditName: () -> Unit,
@@ -351,6 +361,7 @@ private fun MeroContent(
     val playlists by library.playlists.collectAsStateWithLifecycle(emptyList())
     val smartPlaylists by library.smartPlaylists.collectAsStateWithLifecycle(emptyList())
     val downloadedSongs by library.downloads.collectAsStateWithLifecycle(emptyList())
+    val onDeviceSongs by library.onDevice.collectAsStateWithLifecycle(emptyList())
     val sleepRemaining by container.sleepTimer.remainingSec.collectAsStateWithLifecycle(null)
     val sleepAfterTrack by container.sleepTimer.stopAfterTrack.collectAsStateWithLifecycle(false)
 
@@ -471,6 +482,36 @@ private fun MeroContent(
     fun toast(text: String) {
         android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
     }
+
+    /**
+     * Where files picked from the phone should go: a playlist id, or null for
+     * just the library. Kept outside the launcher because the result arrives
+     * in a callback that knows nothing about who asked.
+     */
+    var phonePickTarget by remember { mutableStateOf<String?>(null) }
+    val phonePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { picked ->
+        val target = phonePickTarget
+        phonePickTarget = null
+        if (picked.isEmpty()) return@rememberLauncherForActivityResult
+        scope.launch {
+            val songs = picked.map { com.mero.data.LocalAudio.songFrom(context, it) }
+            container.libraryRepository.saveSongs(songs)
+            if (target != null) container.libraryRepository.addToPlaylist(target, songs)
+            toast(
+                songs.size.toString() + (if (songs.size == 1) " song" else " songs") +
+                    if (target != null) " added to the playlist" else " added from your phone",
+            )
+        }
+    }
+
+    fun pickFromPhone(playlistId: String?) {
+        phonePickTarget = playlistId
+        // audio/* only: the picker then shows music, not every PDF and photo.
+        phonePicker.launch(arrayOf("audio/*"))
+    }
+
     // Any touch anywhere counts as "still listening" for the inactivity pause.
     var lastInteractionMs by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
     fun markInteraction() {
@@ -483,6 +524,7 @@ private fun MeroContent(
         "Recent" -> recentlyPlayed
         "Most played" -> mostPlayed
         "Downloads" -> downloadedSongs
+        "On this phone" -> onDeviceSongs
         else -> likedSongs
     }
     var homeError by remember { mutableStateOf<String?>(null) }
@@ -626,14 +668,7 @@ private fun MeroContent(
                 if (item == null) return
                 markInteraction()
                 val id = item.mediaId
-                val meta = item.mediaMetadata
-                val songFromMeta = Song(
-                    id = id,
-                    title = meta.title?.toString() ?: id,
-                    artist = meta.artist?.toString() ?: "",
-                    thumbnailUrl = meta.artworkUri?.toString(),
-                )
-                current = songsById[id] ?: songFromMeta
+                current = songsById[id] ?: com.mero.playback.songFrom(item)
                 position.intValue = 0
                 playerDuration.intValue = 0
                 refillInfinitePlayback()
@@ -743,7 +778,9 @@ private fun MeroContent(
     // worth showing a picture of. Resolved once per change rather than every
     // time Search is opened.
     LaunchedEffect(mostPlayed.firstOrNull()?.id, recentlyPlayed.firstOrNull()?.id) {
-        val history = mostPlayed.ifEmpty { recentlyPlayed }
+        // YouTube tracks only: a podcast's "artist" is the show, and searching
+        // YouTube for it as a musician returns a stranger's face.
+        val history = mostPlayed.ifEmpty { recentlyPlayed }.filter { it.isYouTube }
         // Who to show, and it is two different questions. With a listening
         // history the answer is "the people you play". Without one — a fresh
         // install, which is exactly when the search screen was nothing but
@@ -843,6 +880,25 @@ private fun MeroContent(
             library.onPlayed(song)
             library.setQueue(queue)
         }
+    }
+
+    // A file opened from another app. Keyed on the controller as well, because
+    // a cold start from the Files app gets here before the player has
+    // connected, and a play command against no player is silently dropped.
+    val opened = openedAudio?.collectAsStateWithLifecycle()?.value
+    LaunchedEffect(opened, connection.controller != null) {
+        val uri = opened ?: return@LaunchedEffect
+        if (connection.controller == null) return@LaunchedEffect
+        val song = com.mero.data.LocalAudio.songFrom(context, uri)
+        if (com.mero.data.LocalAudio.isKept(context, uri)) library.saveSongs(listOf(song))
+        songsById = songsById + (song.id to song)
+        playFrom(song, listOf(song), "From your phone")
+        expanded = true
+        // Last, not first. Clearing it changes this effect's own key, and
+        // Compose cancels a LaunchedEffect whose key changes — so clearing it
+        // up front killed the effect before it had read the file, and every
+        // "Open with Mero" did nothing at all.
+        onOpenedHandled()
     }
 
     fun playNext() {
@@ -1088,6 +1144,20 @@ private fun MeroContent(
                         // request per character.
                         delay(120)
                         isSearching = true
+                        if (searchTab == "Podcasts") {
+                            // Apple's directory, not YouTube: one page, no
+                            // continuation, and a show rather than a track.
+                            container.podcastRepository.search(trimmed).fold(
+                                onSuccess = {
+                                    results = it
+                                    continuationToken = null
+                                    searchError = null
+                                },
+                                onFailure = { e -> searchError = e.message ?: e.toString() },
+                            )
+                            isSearching = false
+                            return@LaunchedEffect
+                        }
                         container.searchRepository.searchItemsPage(
                             trimmed,
                             when (searchTab) {
@@ -1185,6 +1255,16 @@ private fun MeroContent(
                                     ),
                                 ) { launchSingleTop = true }
 
+                                SearchResultType.Podcast -> navController.navigate(
+                                    CollectionRoute(
+                                        browseId = item.browseId ?: item.id,
+                                        title = item.title,
+                                        subtitle = item.subtitle,
+                                        artworkUrl = item.thumbnailUrl,
+                                        kind = "podcast",
+                                    ),
+                                ) { launchSingleTop = true }
+
                                 SearchResultType.Playlist -> navController.navigate(
                                     CollectionRoute(
                                         browseId = item.browseId ?: item.id,
@@ -1211,19 +1291,64 @@ private fun MeroContent(
                     }
                 }
 
+                composable<AddSongsRoute> { entry ->
+                    val route = entry.toRoute<AddSongsRoute>()
+                    val meta by library.playlist(route.playlistId).collectAsStateWithLifecycle(null)
+                    val inPlaylist by library.playlistSongs(route.playlistId)
+                        .collectAsStateWithLifecycle(emptyList())
+                    var addQuery by remember { mutableStateOf("") }
+                    var addResults by remember { mutableStateOf(emptyList<Song>()) }
+                    var addSearching by remember { mutableStateOf(false) }
+
+                    LaunchedEffect(addQuery) {
+                        val q = addQuery.trim()
+                        if (q.isEmpty()) {
+                            addResults = emptyList()
+                            return@LaunchedEffect
+                        }
+                        delay(200)
+                        addSearching = true
+                        container.searchRepository.search(q).onSuccess { addResults = it }
+                        addSearching = false
+                    }
+
+                    AddSongsScreen(
+                        playlistName = meta?.name ?: "this playlist",
+                        query = addQuery,
+                        onQueryChange = { addQuery = it },
+                        results = addResults,
+                        suggestions = recentlyPlayed.take(30),
+                        searching = addSearching,
+                        alreadyIn = inPlaylist.mapTo(HashSet()) { it.id },
+                        onAdd = { song ->
+                            songsById = songsById + (song.id to song)
+                            scope.launch { library.addToPlaylist(route.playlistId, song) }
+                        },
+                        onAddFromPhone = { pickFromPhone(route.playlistId) },
+                        onBack = { navController.popBackStack() },
+                        contentPadding = contentPadding,
+                    )
+                }
+
                 composable<CollectionRoute> { entry ->
                     val route = entry.toRoute<CollectionRoute>()
                     var tracks by remember(route.browseId) { mutableStateOf(emptyList<Song>()) }
                     var tracksLoading by remember(route.browseId) { mutableStateOf(true) }
                     var tracksError by remember(route.browseId) { mutableStateOf<String?>(null) }
 
+                    /** Episode dates, for the row subtitle. Empty for albums and playlists. */
+                    var published by remember(route.browseId) { mutableStateOf(emptyMap<String, Long>()) }
+
                     suspend fun fetch() {
                         tracksLoading = true
                         val repo = container.artistRepository
-                        val result = if (route.kind == "playlist") {
-                            repo.playlistSongs(route.browseId)
-                        } else {
-                            repo.albumSongs(route.browseId)
+                        val result = when (route.kind) {
+                            "playlist" -> repo.playlistSongs(route.browseId)
+                            "podcast" -> container.podcastRepository.episodes(route.browseId).map { eps ->
+                                published = eps.mapNotNull { e -> e.publishedAt?.let { e.song.id to it } }.toMap()
+                                eps.map { it.song }
+                            }
+                            else -> repo.albumSongs(route.browseId)
                         }
                         result.fold(
                             onSuccess = {
@@ -1241,7 +1366,10 @@ private fun MeroContent(
                         title = route.title,
                         subtitle = listOfNotNull(
                             route.subtitle.takeIf { it.isNotBlank() },
-                            tracks.size.takeIf { it > 0 }?.let { "$it songs" },
+                            tracks.size.takeIf { it > 0 }?.let {
+                                val noun = if (route.kind == "podcast") "episode" else "song"
+                                "$it $noun" + if (it == 1) "" else "s"
+                            },
                         ).joinToString(" · "),
                         // The tracks carry the album's own art, so prefer it:
                         // a cover URL squeezed through a navigation argument
@@ -1261,6 +1389,12 @@ private fun MeroContent(
                             shuffled.firstOrNull()?.let { playFrom(it, shuffled, route.title) }
                         },
                         onSongMore = { menuSong = it },
+                        numbered = route.kind != "podcast",
+                        rowSubtitle = if (route.kind == "podcast") {
+                            { song -> episodeLine(published[song.id], song.durationSec) }
+                        } else {
+                            { song -> song.artist }
+                        },
                         onRetry = { scope.launch { fetch() } },
                         onBack = { navController.popBackStack() },
                         contentPadding = contentPadding,
@@ -1324,6 +1458,8 @@ private fun MeroContent(
                         recentlyPlayed = recentlyPlayed,
                         mostPlayed = mostPlayed,
                         downloads = downloadedSongs,
+                        onDevice = onDeviceSongs,
+                        onAddFromPhone = { pickFromPhone(null) },
                         playlists = playlists,
                         smartPlaylists = smartPlaylists,
                         onOpenPlaylist = { navController.navigate(PlaylistRoute(it)) },
@@ -1476,6 +1612,9 @@ private fun MeroContent(
                             scope.launch { library.setPlaylistDescription(route.playlistId, text) }
                         },
                         onPickCover = { coverTarget = route.playlistId; coverPicker.launch("image/*") },
+                        onAddSongs = {
+                            navController.navigate(AddSongsRoute(route.playlistId)) { launchSingleTop = true }
+                        },
                         onClearCover = {
                             scope.launch { library.setPlaylistCover(route.playlistId, null) }
                         },
@@ -1516,6 +1655,7 @@ private fun MeroContent(
                         onDescriptionChange = {},
                         onPickCover = {},
                         onClearCover = {},
+                        onAddSongs = null,
                         onDelete = {
                             scope.launch { library.deleteSmartPlaylist(route.playlistId) }
                             navController.popBackStack()
@@ -1852,6 +1992,7 @@ private fun MeroContent(
                                 com.mero.playback.MediaCache.download(
                                     container.downloadDataSourceFactory(context, downloadCodec),
                                     song.id,
+                                    sourceUri = song.sourceUri,
                                 ) {}
                                 downloadFolderUri?.let { folder ->
                                     com.mero.playback.MediaCache.exportDownload(
@@ -2042,14 +2183,10 @@ private fun upcomingFrom(
 ): List<Song> = buildList {
     for (i in (controller.currentMediaItemIndex + 1) until controller.mediaItemCount) {
         val item = controller.getMediaItemAt(i)
-        add(
-            known[item.mediaId] ?: Song(
-                id = item.mediaId,
-                title = item.mediaMetadata.title?.toString().orEmpty(),
-                artist = item.mediaMetadata.artist?.toString().orEmpty(),
-                thumbnailUrl = item.mediaMetadata.artworkUri?.toString(),
-            ),
-        )
+        // songFrom keeps a podcast's or local file's address: this list is
+        // saved as the queue, and a song rebuilt without it would be stored
+        // as if it were a YouTube id.
+        add(known[item.mediaId] ?: com.mero.playback.songFrom(item))
     }
 }
 
@@ -2117,4 +2254,20 @@ private fun readThemeMode(settings: SettingsStore): ThemeMode {
         return if (settings.boolean("toggle_dark", true)) ThemeMode.Dark else ThemeMode.Light
     }
     return ThemeMode.System
+}
+
+/**
+ * "12 Sep 2026 · 1 hr 4 min" — what a podcast list shows under each episode.
+ * Either half is dropped when the feed did not say.
+ */
+internal fun episodeLine(publishedAt: Long?, durationSec: Int): String {
+    val date = publishedAt?.let {
+        java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(it))
+    }
+    val length = when {
+        durationSec <= 0 -> null
+        durationSec >= 3600 -> "${durationSec / 3600} hr ${(durationSec % 3600) / 60} min"
+        else -> "${(durationSec + 59) / 60} min"
+    }
+    return listOfNotNull(date, length).joinToString(" · ").ifEmpty { "Episode" }
 }

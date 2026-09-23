@@ -65,6 +65,14 @@ fun CollectionScreen(
     onBack: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
+    /**
+     * The line under each title. Albums show the artist; a podcast shows the
+     * date and length, because every episode has the same "artist" and
+     * repeating the show's name down the list tells you nothing.
+     */
+    rowSubtitle: (Song) -> String = { it.artist },
+    /** Track numbers mean something on an album and nothing in a podcast feed. */
+    numbered: Boolean = true,
 ) {
     val scheme = MaterialTheme.colorScheme
 
@@ -183,17 +191,19 @@ fun CollectionScreen(
                         // track on an album shares one, so a column of
                         // identical thumbnails says nothing and track order is
                         // most of what an album list is for.
-                        Text(
-                            position.toString(),
-                            Modifier.width(28.dp),
-                            fontSize = 13.sp,
-                            color = if (playing) scheme.primary else scheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
+                        if (numbered) {
+                            Text(
+                                position.toString(),
+                                Modifier.width(28.dp),
+                                fontSize = 13.sp,
+                                color = if (playing) scheme.primary else scheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                         Column(
                             Modifier
                                 .weight(1f)
-                                .padding(start = 8.dp),
+                                .padding(start = if (numbered) 8.dp else 4.dp),
                         ) {
                             Text(
                                 song.title,
@@ -203,7 +213,7 @@ fun CollectionScreen(
                                 color = if (playing) scheme.primary else scheme.onSurface,
                             )
                             Text(
-                                song.artist,
+                                rowSubtitle(song),
                                 fontSize = 12.sp,
                                 color = scheme.onSurfaceVariant,
                                 maxLines = 1,

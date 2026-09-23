@@ -18,6 +18,9 @@ class RadioRepository {
 
     /** Tracks to continue with after [videoId], excluding the seed itself. */
     suspend fun radioFor(videoId: String): Result<List<Song>> = runCatchingCancellable {
+        // YouTube has no "more like this" for a podcast episode or a file on
+        // the phone. An empty answer lets infinite playback simply stop there.
+        if (!com.mero.domain.isYouTubeId(videoId)) return@runCatchingCancellable emptyList()
         YouTube.next(WatchEndpoint(videoId = videoId)).getOrThrow()
             .items
             .filter { it.id.isNotBlank() && it.id != videoId }

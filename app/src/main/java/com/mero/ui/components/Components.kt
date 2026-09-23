@@ -134,7 +134,7 @@ fun MeroChip(
                 shape = pill,
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(

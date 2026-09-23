@@ -64,7 +64,7 @@ import com.mero.ui.components.Artwork
 import com.mero.ui.components.MeroChip
 import com.mero.ui.components.SongRow
 
-private val SEARCH_TABS = listOf("Songs", "Albums", "Artists", "Playlists")
+private val SEARCH_TABS = listOf("Songs", "Albums", "Artists", "Playlists", "Podcasts")
 
 @Composable
 fun SearchScreen(
@@ -165,21 +165,22 @@ fun SearchScreen(
                 contentPadding = contentPadding,
             )
         } else {
-            // Four fixed tabs, so they share the width evenly rather than
-            // scrolling: a row that ends mid-word invites a swipe, and there
-            // was never anything past the fourth one to swipe to.
+            // Fixed tabs across the full width with equal gaps: each pill is as
+            // wide as its label, and the space left over is split evenly
+            // between them. Equal-width slots were tried and cut "Playlists"
+            // to "Playlis…" while "Songs" sat in half-empty space; slots sized
+            // by character count cut the short ones instead.
             Row(
                 Modifier
                     .fillMaxWidth()
                     .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 SEARCH_TABS.forEach { tab ->
                     MeroChip(
                         label = tab,
                         selected = tab == selectedTab,
                         onClick = { onTabChange(tab) },
-                        modifier = Modifier.weight(1f),
                     )
                 }
             }

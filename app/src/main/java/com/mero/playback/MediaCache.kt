@@ -104,9 +104,16 @@ object MediaCache {
     fun download(
         factory: CacheDataSource.Factory,
         videoId: String,
+        /** Where the audio is, when it is not a YouTube track — a podcast episode. */
+        sourceUri: String? = null,
         onProgress: (Float) -> Unit,
     ) {
-        val spec = DataSpec.Builder().setUri("mero://" + videoId).build()
+        // Keyed by the song id whatever the address, so playback — which keys
+        // the same way — finds it.
+        val spec = DataSpec.Builder()
+            .setUri(sourceUri ?: ("mero://" + videoId))
+            .setKey(videoId)
+            .build()
         CacheWriter(
             factory.createDataSource(),
             spec,
@@ -160,7 +167,19 @@ object MediaCache {
         }
     }
 
-    val keyFactory = CacheKeyFactory { spec -> spec.key ?: spec.uri.host ?: spec.uri.toString() }
+    /**
+     * Every media item sets its own key (the song id), so this is the fallback.
+     * The host is only the video id for `mero://`; for anything else it is the
+     * server's name, and falling back to it put every episode of a podcast
+     * under one cache entry — each would have played the last one's bytes.
+     */
+    val keyFactory = CacheKeyFactory { spec ->
+        spec.key ?: if (spec.uri.scheme == "mero") {
+            spec.uri.host ?: spec.uri.toString()
+        } else {
+            spec.uri.toString()
+        }
+    }
 
     fun isWarm(videoId: String): Boolean =
         instance?.isCached(videoId, 0, WARM_BYTES) == true
@@ -170,7 +189,9 @@ object MediaCache {
      * immediately. Blocking — call it from a background dispatcher.
      */
     fun warm(factory: CacheDataSource.Factory, videoId: String) {
-        if (isWarm(videoId)) return
+        // Only YouTube tracks: this builds a mero:// address, and a podcast
+        // episode or phone file has none.
+        if (!com.mero.domain.isYouTubeId(videoId) || isWarm(videoId)) return
         val spec = DataSpec.Builder()
             .setUri("mero://$videoId")
             .setLength(WARM_BYTES)

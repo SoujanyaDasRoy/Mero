@@ -20,6 +20,7 @@ private fun SongEntity.toDomain() = Song(
     durationSec = durationSec,
     thumbnailUrl = thumbnailUrl,
     downloaded = downloadedAt != null,
+    sourceUri = sourceUri,
 )
 
 private fun Song.toEntity() = SongEntity(
@@ -29,6 +30,7 @@ private fun Song.toEntity() = SongEntity(
     album = album,
     durationSec = durationSec,
     thumbnailUrl = thumbnailUrl,
+    sourceUri = sourceUri,
 )
 
 /**
@@ -43,6 +45,13 @@ class LibraryRepository(private val dao: MeroDao) {
     val recentlyPlayed: Flow<List<Song>> = dao.recentlyPlayed().map { rows -> rows.map { it.toDomain() } }
     val mostPlayed: Flow<List<Song>> = dao.mostPlayed().map { rows -> rows.map { it.toDomain() } }
     val queue: Flow<List<Song>> = dao.queue().map { rows -> rows.map { it.toDomain() } }
+    val onDevice: Flow<List<Song>> = dao.onDevice().map { rows -> rows.map { it.toDomain() } }
+
+    /**
+     * Keeps songs that have no life outside the library — files from the phone
+     * — so they are there to find next time rather than only while playing.
+     */
+    suspend fun saveSongs(songs: List<Song>) = songs.forEach { ensure(it) }
 
     fun isLiked(songId: String): Flow<Boolean?> = dao.isLiked(songId)
 

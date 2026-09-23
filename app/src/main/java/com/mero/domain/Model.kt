@@ -12,7 +12,35 @@ data class Song(
     val durationSec: Int = 0,
     val thumbnailUrl: String? = null,
     val downloaded: Boolean = false,
-)
+    /**
+     * Where the audio actually is, for anything that is not a YouTube track: a
+     * `content://` file picked from the phone, or a podcast episode's
+     * `https://` enclosure. Null means the id is a YouTube video id, resolved
+     * to a fresh stream each time it is opened.
+     *
+     * Storing these is fine where storing a YouTube URL is not (CLAUDE.md
+     * constraint 2): a podcast enclosure and a persisted content URI do not
+     * expire after six hours.
+     */
+    val sourceUri: String? = null,
+) {
+    /** A YouTube track, which the extraction, radio and lyrics paths assume. */
+    val isYouTube: Boolean get() = sourceUri == null
+
+    /** Something on this phone, which needs neither downloading nor streaming. */
+    val isOnDevice: Boolean
+        get() = sourceUri?.startsWith("content:") == true || sourceUri?.startsWith("file:") == true
+}
+
+/**
+ * True when [id] is a YouTube video id rather than one of Mero's own ids for
+ * local files (`local:…`) and podcast episodes (`pod:…`).
+ *
+ * The id-only paths — prefetch, cache warming, radio — have nothing else to go
+ * on, and handing them a podcast episode would send it to YouTube's extractor
+ * to fail slowly. YouTube ids never contain a colon.
+ */
+fun isYouTubeId(id: String): Boolean = ':' !in id
 
 data class Playlist(
     val id: String,
@@ -24,7 +52,7 @@ data class Playlist(
 
 data class LyricLine(val atSec: Int, val text: String)
 
-enum class SearchResultType { Song, Album, Artist, Playlist }
+enum class SearchResultType { Song, Album, Artist, Playlist, Podcast }
 
 data class SearchItem(
     val id: String,

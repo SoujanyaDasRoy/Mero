@@ -163,7 +163,7 @@ fun PlaylistsTab(
         if (playlists.isEmpty() && smartPlaylists.isEmpty()) {
             item {
                 Text(
-                    "No playlists yet.\nCreate one, then add songs from the ⋮ menu on any track.",
+                    "No playlists yet.\nCreate one, then open it and tap Add songs.",
                     Modifier
                         .fillMaxWidth()
                         .padding(32.dp),
@@ -276,6 +276,8 @@ fun PlaylistDetailScreen(
     onDescriptionChange: (String) -> Unit,
     onPickCover: () -> Unit,
     onClearCover: () -> Unit,
+    /** Null for playlists nobody edits by hand — smart playlists fill themselves. */
+    onAddSongs: (() -> Unit)?,
     onDelete: () -> Unit,
     contentPadding: PaddingValues,
 ) {
@@ -454,16 +456,53 @@ fun PlaylistDetailScreen(
                 }
             }
 
-            if (songs.isEmpty()) {
+            // Only where there is no Add songs row to point at — smart playlists,
+            // which fill themselves and never show one.
+            if (songs.isEmpty() && onAddSongs == null) {
                 item {
                     Text(
-                        "Nothing here yet.\nUse the ⋮ menu on any song to add it.",
+                        "Nothing matches this playlist's rules yet.",
                         Modifier
                             .fillMaxWidth()
                             .padding(32.dp),
                         color = scheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
+                }
+            }
+
+            if (onAddSongs != null) {
+                item(key = "add-songs") {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onAddSongs)
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Box(
+                            Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(scheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Rounded.Add, null, tint = scheme.onPrimaryContainer)
+                        }
+                        Column {
+                            Text("Add songs", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            Text(
+                                if (songs.isEmpty()) {
+                                    "Search, or pick from music on this phone"
+                                } else {
+                                    "Search or add from this phone"
+                                },
+                                fontSize = 12.sp,
+                                color = scheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
 

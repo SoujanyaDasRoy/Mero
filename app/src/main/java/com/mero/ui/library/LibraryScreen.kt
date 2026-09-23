@@ -42,7 +42,7 @@ import com.mero.data.db.SmartPlaylistSummary
 import com.mero.ui.components.MeroChip
 import com.mero.ui.components.SongRow
 
-val LIBRARY_TABS = listOf("Playlists", "Liked", "Downloads", "Recent", "Most played")
+val LIBRARY_TABS = listOf("Playlists", "Liked", "On this phone", "Downloads", "Recent", "Most played")
 
 @Composable
 fun LibraryScreen(
@@ -52,6 +52,8 @@ fun LibraryScreen(
     recentlyPlayed: List<Song>,
     mostPlayed: List<Song>,
     downloads: List<Song>,
+    onDevice: List<Song>,
+    onAddFromPhone: () -> Unit,
     playlists: List<com.mero.data.db.PlaylistSummary>,
     smartPlaylists: List<SmartPlaylistSummary>,
     onOpenPlaylist: (String) -> Unit,
@@ -71,6 +73,7 @@ fun LibraryScreen(
         "Recent" -> recentlyPlayed
         "Most played" -> mostPlayed
         "Downloads" -> downloads
+        "On this phone" -> onDevice
         else -> liked
     }
 
@@ -136,22 +139,39 @@ fun LibraryScreen(
         } else if (songs.isEmpty()) {
             // An empty tab used to be a sentence alone in the middle of
             // nothing. It now says what would fill it and offers the way there.
-            EmptyTab(
-                message = when (selectedTab) {
-                    "Recent" -> "Nothing played yet."
-                    "Most played" -> "Play a few things and your favourites collect here."
-                    "Downloads" -> "Nothing downloaded yet." + NL +
-                        "Use the menu on a track to keep it offline."
-                    else -> "No liked songs yet." + NL +
-                        "Tap the heart on a track to save it here."
-                },
-                actionLabel = "Find something to play",
-                onAction = onBrowse,
-            )
+            if (selectedTab == "On this phone") {
+                EmptyTab(
+                    message = "Music already on your phone plays here too —" + NL +
+                        "MP3s, FLAC, anything Android can open.",
+                    actionLabel = "Add music from this phone",
+                    onAction = onAddFromPhone,
+                )
+            } else {
+                EmptyTab(
+                    message = when (selectedTab) {
+                        "Recent" -> "Nothing played yet."
+                        "Most played" -> "Play a few things and your favourites collect here."
+                        "Downloads" -> "Nothing downloaded yet." + NL +
+                            "Use the menu on a track to keep it offline."
+                        else -> "No liked songs yet." + NL +
+                            "Tap the heart on a track to save it here."
+                    },
+                    actionLabel = "Find something to play",
+                    onAction = onBrowse,
+                )
+            }
         } else {
             LazyColumn(
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
+                if (selectedTab == "On this phone") {
+                    item(key = "add-from-phone") {
+                        TextButton(
+                            onClick = onAddFromPhone,
+                            modifier = Modifier.padding(start = 8.dp),
+                        ) { Text("+ Add more from this phone") }
+                    }
+                }
                 items(songs, key = { it.id }) { song ->
                     SongRow(
                         song = song,

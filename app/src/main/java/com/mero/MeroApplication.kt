@@ -9,10 +9,13 @@ import coil3.memory.MemoryCache
 import coil3.request.crossfade
 import okio.Path.Companion.toOkioPath
 import android.content.Context
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.room.Room
+import com.mero.playback.LocalBypassDataSource
 import com.mero.playback.MediaCache
 import com.mero.playback.StreamResolver
 import com.mero.data.HomeRepository
@@ -33,6 +36,7 @@ import com.mero.data.db.MIGRATION_1_2
 import com.mero.data.db.MIGRATION_2_3
 import com.mero.data.db.MIGRATION_3_4
 import com.mero.data.db.MIGRATION_4_5
+import com.mero.data.db.MIGRATION_5_6
 import com.mero.data.db.MeroDatabase
 import com.mero.playback.SleepTimer
 import com.mero.playback.AudioEffects
@@ -59,7 +63,8 @@ class AppContainer(context: Context) {
             context.applicationContext,
             MeroDatabase::class.java,
             "mero.db",
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .build()
     }
 
     val searchRepository: SearchRepository by lazy { SearchRepository(InnerTubeSearchApi) }
@@ -70,6 +75,7 @@ class AppContainer(context: Context) {
     val artistRepository: ArtistRepository by lazy { ArtistRepository() }
     val importRepository: ImportRepository by lazy { ImportRepository(searchRepository) }
     val radioRepository: RadioRepository by lazy { RadioRepository() }
+    val podcastRepository: com.mero.data.PodcastRepository by lazy { com.mero.data.PodcastRepository() }
     val updateRepository: UpdateRepository by lazy {
         UpdateRepository(context.applicationContext, settings)
     }
@@ -94,8 +100,14 @@ class AppContainer(context: Context) {
      * the same cache. See playback/MediaCache.kt.
      */
     fun mediaDataSourceFactory(ctx: Context): CacheDataSource.Factory {
+        // DefaultDataSource rather than the HTTP one on its own: a podcast
+        // episode is plain https, which HTTP alone handled, but a file picked
+        // from the phone is content://, which it cannot open at all.
         val resolving = ResolvingDataSource.Factory(
-            DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true),
+            DefaultDataSource.Factory(
+                ctx.applicationContext,
+                DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true),
+            ),
             StreamResolver(streamRepository),
         )
         val streaming = CacheDataSource.Factory()
@@ -113,13 +125,32 @@ class AppContainer(context: Context) {
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
     }
 
+    /**
+     * What the player reads through: files on the phone straight off the disk,
+     * everything else through the caches.
+     *
+     * A local file sent through the streaming cache would be copied into it on
+     * every play — pointless IO, and with a 512 MB least-recently-used cache it
+     * would push out the streamed songs that cache exists to keep.
+     */
+    fun playbackDataSourceFactory(ctx: Context): DataSource.Factory {
+        val cached = mediaDataSourceFactory(ctx)
+        val direct = DefaultDataSource.Factory(ctx.applicationContext)
+        return DataSource.Factory {
+            LocalBypassDataSource(direct.createDataSource(), cached.createDataSource())
+        }
+    }
+
     /** Writes into the download cache rather than reading through it. */
     fun downloadDataSourceFactory(
         ctx: Context,
         codec: CodecPreference? = null,
     ): CacheDataSource.Factory {
         val resolving = ResolvingDataSource.Factory(
-            DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true),
+            DefaultDataSource.Factory(
+                ctx.applicationContext,
+                DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true),
+            ),
             StreamResolver(streamRepository, codec),
         )
         return CacheDataSource.Factory()

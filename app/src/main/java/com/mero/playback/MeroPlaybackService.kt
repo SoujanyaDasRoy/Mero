@@ -10,6 +10,7 @@ import androidx.media3.common.C
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.google.common.util.concurrent.ListenableFuture
@@ -45,7 +46,17 @@ class MeroPlaybackService : MediaSessionService() {
         settings = container.settings
 
         val player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(container.mediaDataSourceFactory(this)))
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(
+                    container.playbackDataSourceFactory(this),
+                    // Podcast episodes are mostly MP3 without a seek table, and
+                    // without this ExoPlayer refuses to seek in them at all —
+                    // no scrubbing through a two-hour episode, no resuming in
+                    // the middle. Estimating from the bitrate is what every
+                    // podcast app does.
+                    DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true),
+                ),
+            )
             .setLoadControl(
                 // Defaults wait 2.5s of buffered audio before starting. For a
                 // 160 kbps stream that is pure dead time on top of extraction.

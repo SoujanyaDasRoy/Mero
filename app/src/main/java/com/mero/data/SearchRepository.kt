@@ -120,6 +120,8 @@ private fun SearchResultType.filter() = when (this) {
     SearchResultType.Album -> YouTube.SearchFilter.FILTER_ALBUM
     SearchResultType.Artist -> YouTube.SearchFilter.FILTER_ARTIST
     SearchResultType.Playlist -> YouTube.SearchFilter.FILTER_FEATURED_PLAYLIST
+    // Podcasts come from their own directory (PodcastRepository), never from here.
+    SearchResultType.Podcast -> error("Podcasts are not searched on YouTube")
 }
 
 private fun YTItem.toSearchItem(): SearchItem? = when (this) {

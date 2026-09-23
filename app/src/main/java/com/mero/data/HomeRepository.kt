@@ -125,8 +125,11 @@ class HomeRepository {
     ): List<HomeSection> = coroutineScope {
         if (recentlyPlayed.isEmpty() && mostPlayed.isEmpty()) return@coroutineScope emptyList()
 
-        val seed = recentlyPlayed.firstOrNull()
-        val artists = topArtists(mostPlayed.ifEmpty { recentlyPlayed })
+        // YouTube tracks only. A podcast episode has no "more like this" and
+        // its show is not an artist; skipping them means an evening of
+        // podcasts does not wipe the music out of the home screen.
+        val seed = recentlyPlayed.firstOrNull { it.isYouTube }
+        val artists = topArtists(mostPlayed.ifEmpty { recentlyPlayed }.filter { it.isYouTube })
 
         val moreLikeThis = seed?.let { song ->
             async {

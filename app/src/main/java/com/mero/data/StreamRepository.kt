@@ -143,6 +143,9 @@ class StreamRepository(private val api: PlayerApi) {
      * must never delay the track someone actually pressed.
      */
     suspend fun prefetch(videoId: String, quality: Quality = Quality.HIGH) {
+        // Podcast episodes and phone files have nothing to extract. Guarded
+        // here rather than at each caller, of which there are five.
+        if (!com.mero.domain.isYouTubeId(videoId)) return
         val key = "$videoId:${quality.name}:${codecPreference.name}"
         if (cached(key) != null) return
         if (extractionSlot.availablePermits == 0) return

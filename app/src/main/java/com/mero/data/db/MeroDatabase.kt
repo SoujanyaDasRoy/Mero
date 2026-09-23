@@ -31,6 +31,8 @@ data class SongEntity(
     val playCount: Int = 0,
     /** When the audio was pinned to the download cache; null means streaming only. */
     val downloadedAt: Long? = null,
+    /** Local file or podcast enclosure; null for a YouTube track. See Song.sourceUri. */
+    val sourceUri: String? = null,
 )
 
 /** Persisted playback queue; `position` is the order within it. */
@@ -125,6 +127,10 @@ interface MeroDao {
 
     @Query("SELECT * FROM songs WHERE playCount > 0 ORDER BY playCount DESC LIMIT 50")
     fun mostPlayed(): Flow<List<SongEntity>>
+
+    /** Files added from the phone, most recently added first. */
+    @Query("SELECT * FROM songs WHERE sourceUri LIKE 'content:%' OR sourceUri LIKE 'file:%' ORDER BY rowid DESC")
+    fun onDevice(): Flow<List<SongEntity>>
 
     @Query("UPDATE songs SET liked = :liked, likedAt = :at WHERE id = :id")
     suspend fun setLiked(id: String, liked: Boolean, at: Long?)
@@ -316,7 +322,7 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         PlaylistSongEntity::class,
         SmartPlaylistEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class MeroDatabase : RoomDatabase() {
@@ -329,6 +335,13 @@ abstract class MeroDatabase : RoomDatabase() {
  * Both nullable with no default: an existing playlist has neither, and null is
  * what "borrow the first track's cover" already means everywhere it is read.
  */
+/** Songs that are not YouTube tracks: files from the phone, podcast episodes. */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE songs ADD COLUMN sourceUri TEXT")
+    }
+}
+
 val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE playlists ADD COLUMN coverUri TEXT")

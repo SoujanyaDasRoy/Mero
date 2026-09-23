@@ -136,13 +136,21 @@ fun SongMenuSheet(
             if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
             if (liked) "Remove from liked" else "Add to liked",
         ) { onClose(); onToggleLike() }
-        MenuRow(
-            if (downloaded) Icons.Rounded.DownloadDone else Icons.Rounded.Download,
-            if (downloaded) "Remove from device" else "Download to device",
-        ) { onClose(); onDownload() }
-        MenuRow(Icons.Rounded.Radio, "Start radio") { onClose(); onStartRadio() }
-        MenuRow(Icons.Rounded.Person, "Go to artist") { onClose(); onGoToArtist() }
-        MenuRow(Icons.Rounded.Share, "Share") { onClose(); onShare() }
+        // A file already on the phone has nothing to download.
+        if (!song.isOnDevice) {
+            MenuRow(
+                if (downloaded) Icons.Rounded.DownloadDone else Icons.Rounded.Download,
+                if (downloaded) "Remove from device" else "Download to device",
+            ) { onClose(); onDownload() }
+        }
+        // Radio, artist pages and share links are all YouTube's. A podcast
+        // episode or a phone file offered them would fail quietly or share
+        // a link to nothing.
+        if (song.isYouTube) {
+            MenuRow(Icons.Rounded.Radio, "Start radio") { onClose(); onStartRadio() }
+            MenuRow(Icons.Rounded.Person, "Go to artist") { onClose(); onGoToArtist() }
+            MenuRow(Icons.Rounded.Share, "Share") { onClose(); onShare() }
+        }
     }
     }
 }
