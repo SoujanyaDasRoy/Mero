@@ -54,6 +54,12 @@
                 <data android:scheme="content" />
                 <data android:mimeType="audio/*" />
             </intent-filter>
+            <!-- "Hey Google, play Kesariya on Mero" on the phone itself; in a
+                 car the same request reaches the session instead. -->
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <!-- One launcher entry per app icon; exactly one is enabled at a time

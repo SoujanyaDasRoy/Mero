@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             openedAudio.value = audioFrom(intent)
             remindedSong.value = remindedFrom(intent)
+            playFromSearch(intent)
         }
         setContent {
             MeroApp(
@@ -49,6 +50,38 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         audioFrom(intent)?.let { openedAudio.value = it }
         remindedFrom(intent)?.let { remindedSong.value = it }
+        playFromSearch(intent)
+    }
+
+    /**
+     * A spoken "play X on Mero". Handed to the playback service as a search
+     * request, the same way Android Auto hands it over, so there is one place
+     * that turns words into music (MeroPlaybackService.playFromVoice). An empty
+     * query — "play music on Mero" — carries on where things stopped.
+     */
+    private fun playFromSearch(intent: Intent?) {
+        if (intent?.action != android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH) return
+        val query = intent.getStringExtra(android.app.SearchManager.QUERY).orEmpty()
+        val token = androidx.media3.session.SessionToken(
+            this,
+            android.content.ComponentName(this, com.mero.playback.MeroPlaybackService::class.java),
+        )
+        val future = androidx.media3.session.MediaController.Builder(this, token).buildAsync()
+        future.addListener({
+            val controller = runCatching { future.get() }.getOrNull() ?: return@addListener
+            controller.setMediaItem(
+                androidx.media3.common.MediaItem.Builder()
+                    .setRequestMetadata(
+                        androidx.media3.common.MediaItem.RequestMetadata.Builder().setSearchQuery(query).build(),
+                    )
+                    .build(),
+            )
+            controller.prepare()
+            controller.play()
+            // Released once the request is on its way; the app's own
+            // controller follows whatever the service then plays.
+            android.os.Handler(mainLooper).postDelayed({ controller.release() }, 5_000)
+        }, androidx.core.content.ContextCompat.getMainExecutor(this))
     }
 
     /** Reminders wait until Mero has gone unopened for a while; this is the clock. */
