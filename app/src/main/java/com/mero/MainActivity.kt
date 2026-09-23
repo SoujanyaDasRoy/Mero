@@ -20,14 +20,27 @@ class MainActivity : ComponentActivity() {
     /** An audio file another app asked Mero to open, until the UI has played it. */
     private val openedAudio = MutableStateFlow<Uri?>(null)
 
+    /** A song a tapped reminder asked to play, until the UI has played it. */
+    private val remindedSong = MutableStateFlow<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         // Not on a restore: the intent that opened a file is still attached
         // after a rotation, and replaying the file every time would be wrong.
-        if (savedInstanceState == null) openedAudio.value = audioFrom(intent)
-        setContent { MeroApp(openedAudio = openedAudio, onOpenedHandled = { openedAudio.value = null }) }
+        if (savedInstanceState == null) {
+            openedAudio.value = audioFrom(intent)
+            remindedSong.value = remindedFrom(intent)
+        }
+        setContent {
+            MeroApp(
+                openedAudio = openedAudio,
+                onOpenedHandled = { openedAudio.value = null },
+                remindedSong = remindedSong,
+                onRemindedHandled = { remindedSong.value = null },
+            )
+        }
     }
 
     /** singleTask: a file opened while Mero is running arrives here, not in onCreate. */
@@ -35,7 +48,18 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         audioFrom(intent)?.let { openedAudio.value = it }
+        remindedFrom(intent)?.let { remindedSong.value = it }
     }
+
+    /** Reminders wait until Mero has gone unopened for a while; this is the clock. */
+    override fun onStart() {
+        super.onStart()
+        (application as MeroApplication).container.settings
+            .putLong(com.mero.data.SettingsStore.LAST_OPENED, System.currentTimeMillis())
+    }
+
+    private fun remindedFrom(intent: Intent?): String? =
+        intent?.getStringExtra(com.mero.data.SongReminderWorker.EXTRA_PLAY_SONG)?.takeIf { it.isNotBlank() }
 
     /**
      * A new app icon is switched here, on the way out, not when it is picked:

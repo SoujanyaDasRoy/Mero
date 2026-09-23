@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Hd
 import androidx.compose.material.icons.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.MotionPhotosPause
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Person
@@ -127,6 +128,8 @@ fun SettingsScreen(
     onDownloadCodecChange: (CodecPreference) -> Unit,
     onBatterySettingsClick: () -> Unit,
     batteryUnrestricted: Boolean,
+    reminderFrequency: com.mero.data.ReminderFrequency,
+    onReminderFrequencyChange: (com.mero.data.ReminderFrequency) -> Unit,
     appVersion: String,
     updateState: UpdateState,
     onSourceClick: () -> Unit,
@@ -221,6 +224,17 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
                     }
+                    PreferenceRow(
+                        Icons.Rounded.NotificationsActive,
+                        "Song reminders",
+                        reminderFrequency.description,
+                    )
+                    SegmentedChoice(
+                        options = com.mero.data.ReminderFrequency.entries,
+                        selected = reminderFrequency,
+                        label = { it.label },
+                        onSelect = onReminderFrequencyChange,
+                    )
                 }
             }
 

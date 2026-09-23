@@ -196,6 +196,7 @@ class MeroApplication : Application(), SingletonImageLoader.Factory {
         // once and made the first real play slower, not faster.
         CoroutineScope(Dispatchers.IO).launch { container.ytDlpApi.prepare() }
         container.outputRoute.start()
+        com.mero.data.SongReminderWorker.schedule(this)
     }
 
     /**

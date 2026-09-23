@@ -146,6 +146,9 @@ fun MeroApp(
     /** A file another app asked Mero to open, or null. */
     openedAudio: kotlinx.coroutines.flow.StateFlow<android.net.Uri?>? = null,
     onOpenedHandled: () -> Unit = {},
+    /** The id of a song a tapped reminder asked to play, or null. */
+    remindedSong: kotlinx.coroutines.flow.StateFlow<String?>? = null,
+    onRemindedHandled: () -> Unit = {},
 ) {
     val appContext = LocalContext.current.applicationContext
     // UI-layer state only. Replaced by PlayerConnection over a MediaController in
@@ -222,6 +225,8 @@ fun MeroApp(
             MeroContent(
                 openedAudio = openedAudio,
                 onOpenedHandled = onOpenedHandled,
+                remindedSong = remindedSong,
+                onRemindedHandled = onRemindedHandled,
                 accent = accent,
                 displayName = displayName,
                 onEditName = { askingName = true },
@@ -259,6 +264,8 @@ fun MeroApp(
 private fun MeroContent(
     openedAudio: kotlinx.coroutines.flow.StateFlow<android.net.Uri?>?,
     onOpenedHandled: () -> Unit,
+    remindedSong: kotlinx.coroutines.flow.StateFlow<String?>?,
+    onRemindedHandled: () -> Unit,
     accent: MeroAccent,
     displayName: String,
     onEditName: () -> Unit,
@@ -955,6 +962,41 @@ private fun MeroContent(
         // up front killed the effect before it had read the file, and every
         // "Open with Mero" did nothing at all.
         onOpenedHandled()
+    }
+
+    // A tapped reminder: play that song, with the rest of the liked songs after
+    // it when it is one of them, so one tap starts an evening rather than a
+    // single track.
+    val reminded = remindedSong?.collectAsStateWithLifecycle()?.value
+    LaunchedEffect(reminded, connection.controller != null) {
+        val id = reminded ?: return@LaunchedEffect
+        if (connection.controller == null) return@LaunchedEffect
+        val song = library.song(id)
+        if (song != null) {
+            val liked = likedSongs
+            playFrom(song, if (liked.any { it.id == id }) liked else listOf(song), "Your favourites")
+            expanded = true
+        }
+        onRemindedHandled()
+    }
+
+    // Asked for when it first means something: the first song someone likes,
+    // which is also what reminders are about. On Android 13+ nothing Mero
+    // posts — reminders or the update notice — shows without it.
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {}
+    LaunchedEffect(likedSongs.isNotEmpty()) {
+        if (likedSongs.isNotEmpty() &&
+            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            !container.settings.boolean(SettingsStore.ASKED_NOTIFICATIONS, false)
+        ) {
+            container.settings.putBoolean(SettingsStore.ASKED_NOTIFICATIONS, true)
+            notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    var reminderFrequency by remember {
+        mutableStateOf(com.mero.data.ReminderFrequency.from(container.settings.string(SettingsStore.REMINDERS, "")))
     }
 
     fun playNext() {
@@ -1880,6 +1922,16 @@ private fun MeroContent(
                             qualityPrefs.edit().putString("download", it.name).apply()
                         },
                         batteryUnrestricted = batteryUnrestricted,
+                        reminderFrequency = reminderFrequency,
+                        onReminderFrequencyChange = {
+                            reminderFrequency = it
+                            container.settings.putString(SettingsStore.REMINDERS, it.name)
+                            if (it != com.mero.data.ReminderFrequency.Off &&
+                                android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU
+                            ) {
+                                notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        },
                         onBatterySettingsClick = { requestBatteryExemption() },
                         playerVariant = playerVariant,
                         onPlayerVariantChange = {

@@ -124,6 +124,7 @@ dependencies {
     implementation(libs.androidx.media3.datasource)
     implementation(libs.jtransforms)
     implementation(libs.kotlinx.coroutines.guava)
+    implementation(libs.androidx.work.runtime)
 
     // Escape hatch: innertube's /player is currently rejected by YouTube
     // (missing PO token support, upstream issue z-huang/InnerTune#1748, open
