@@ -49,7 +49,8 @@ data class Playlist(
     val downloaded: Boolean = false,
 )
 
-data class LyricLine(val atSec: Int, val text: String)
+/** One line of lyrics and when it is sung, in milliseconds from the start. */
+data class LyricLine(val atMs: Long, val text: String)
 
 enum class SearchResultType { Song, Album, Artist, Playlist, Podcast }
 

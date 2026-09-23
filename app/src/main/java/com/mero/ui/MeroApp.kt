@@ -472,6 +472,7 @@ private fun MeroContent(
     var failedTrackId by remember { mutableStateOf<String?>(null) }
     var lyrics by remember { mutableStateOf(com.mero.data.Lyrics(emptyList(), false)) }
     var lyricsLoading by remember { mutableStateOf(false) }
+    var lyricsScale by remember { mutableStateOf(container.settings.float(SettingsStore.LYRICS_SCALE, 1f)) }
     var addingToPlaylist by remember { mutableStateOf<Song?>(null) }
     var menuSong by remember { mutableStateOf<Song?>(null) }
     var importSource by remember { mutableStateOf("YouTube") }
@@ -2195,14 +2196,30 @@ private fun MeroContent(
 
                 "lyrics" -> LyricsSheet(
                     song = song,
-                    position = positionOf,
-                    lines = lyrics.lines,
-                    synced = lyrics.synced,
+                    positionMs = { connection.controller?.currentPosition ?: 0L },
+                    lyrics = lyrics,
                     loading = lyricsLoading,
+                    textScale = lyricsScale,
+                    onTextScale = {
+                        lyricsScale = it
+                        container.settings.putFloat(SettingsStore.LYRICS_SCALE, it)
+                    },
                     onClose = { overlay = null },
-                    onSeek = { sec ->
-                        position.intValue = sec
-                        connection.controller?.seekTo(sec * 1000L)
+                    onSeek = { ms ->
+                        position.intValue = (ms / 1000).toInt()
+                        connection.controller?.let { c ->
+                            c.seekTo(ms)
+                            // Tapping a line means "sing me this bit".
+                            if (!c.isPlaying) c.play()
+                        }
+                    },
+                    onSearch = { query ->
+                        scope.launch {
+                            lyricsLoading = true
+                            val found = container.lyricsRepository.search(song, query)
+                            if (!found.isEmpty) lyrics = found else toast("Nothing found for \"$query\". Try fewer words?")
+                            lyricsLoading = false
+                        }
                     },
                 )
             }

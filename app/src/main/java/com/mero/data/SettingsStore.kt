@@ -89,6 +89,7 @@ class SettingsStore(context: Context) {
         /** Set once the first-run name prompt has been shown, asked or skipped. */
         const val ASKED_NAME = "asked_name"
         const val ASKED_BATTERY = "asked_battery"
+        const val LYRICS_SCALE = "lyrics_scale"
         const val PLAYER_VARIANT = "player_variant"
         const val EQ_ENABLED = "eq_enabled"
         const val EQ_PRESET = "eq_preset"
