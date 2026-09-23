@@ -50,6 +50,9 @@ class LocalBypassDataSource(
     }
 
     private companion object {
-        val LOCAL_SCHEMES = setOf("content", "file", "android.resource")
+        // content:// only — what the file picker and "Open with" hand over.
+        // Nothing Mero stores is file://, and the podcast parser refuses it,
+        // so there is no legitimate reason to open one.
+        val LOCAL_SCHEMES = setOf("content")
     }
 }

@@ -28,8 +28,7 @@ data class Song(
     val isYouTube: Boolean get() = sourceUri == null
 
     /** Something on this phone, which needs neither downloading nor streaming. */
-    val isOnDevice: Boolean
-        get() = sourceUri?.startsWith("content:") == true || sourceUri?.startsWith("file:") == true
+    val isOnDevice: Boolean get() = sourceUri?.startsWith("content:") == true
 }
 
 /**

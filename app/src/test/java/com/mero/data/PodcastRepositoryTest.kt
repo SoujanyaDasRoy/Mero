@@ -93,6 +93,23 @@ class PodcastFeedTest {
         assertEquals("https://example.invalid/ep.jpg", parseFeed(feed(own)).single().song.thumbnailUrl)
     }
 
+    /**
+     * A feed is written by a stranger and the enclosure goes straight to a
+     * player that can open content:// and file://. Only web audio gets through.
+     */
+    @Test
+    fun `enclosures that are not web addresses are refused`() {
+        fun enclosure(url: String) = episode.replace("https://cdn.example.invalid/one.mp3", url)
+        listOf(
+            "file:///data/data/com.mero/databases/mero.db",
+            "content://com.mero.provider/secret",
+            "javascript:alert(1)",
+            "jar:file:///x.jar!/a.mp3",
+        ).forEach { bad ->
+            assertTrue("accepted $bad", parseFeed(feed(enclosure(bad))).isEmpty())
+        }
+    }
+
     @Test
     fun `a missing guid falls back to the audio address for a stable id`() {
         val noGuid = episode.replace("<guid>abc-123</guid>", "")
@@ -136,7 +153,8 @@ class PodcastDirectoryTest {
             {"resultCount":2,"results":[
               {"collectionName":"Show A","artistName":"Host A",
                "feedUrl":"https://feeds.example.invalid/a","artworkUrl600":"https://img/a600.jpg"},
-              {"collectionName":"No Feed","artistName":"Nobody"}
+              {"collectionName":"No Feed","artistName":"Nobody"},
+              {"collectionName":"Local","artistName":"Nobody","feedUrl":"file:///etc/hosts"}
             ]}
         """.trimIndent()
         val rows = parseDirectory(body)

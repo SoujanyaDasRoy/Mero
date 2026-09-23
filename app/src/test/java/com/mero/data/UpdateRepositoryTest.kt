@@ -67,7 +67,7 @@ class ReleaseParsingTest {
           "prerelease": false,
           "assets": [
             ${assetNames.joinToString(",") { name ->
-        """{"name":"$name","size":1234,"browser_download_url":"https://example.invalid/$name"}"""
+        """{"name":"$name","size":1234,"browser_download_url":"https://github.com/SoujanyaDasRoy/Mero/releases/download/v1.8.0/$name"}"""
     }}
           ]
         }
@@ -175,10 +175,25 @@ class ReleaseParsingTest {
     fun `unknown fields do not break parsing`() {
         val body = """
             {"tag_name":"v9.9.9","body":"x","assets":[
-              {"name":"a.apk","size":1,"browser_download_url":"https://example.invalid/a.apk",
+              {"name":"a.apk","size":1,"browser_download_url":"https://github.com/o/r/releases/download/v9.9.9/a.apk",
                "uploader":{"login":"someone"},"content_type":"application/vnd.android.package-archive"}
             ],"author":{"login":"someone"},"reactions":{"total_count":0}}
         """.trimIndent()
         assertEquals("9.9.9", parseRelease(body, listOf("arm64-v8a"))!!.versionName)
+    }
+
+    /**
+     * The installer is handed whatever this URL points at, so only GitHub's
+     * own release downloads are accepted, and only over https.
+     */
+    @Test
+    fun `an asset hosted anywhere but GitHub is refused`() {
+        fun body(url: String) = """
+            {"tag_name":"v9.9.9","assets":[{"name":"mero-arm64-v8a.apk","size":1,"browser_download_url":"$url"}]}
+        """.trimIndent()
+        assertNull(parseRelease(body("https://evil.example/mero-arm64-v8a.apk"), listOf("arm64-v8a")))
+        assertNull(parseRelease(body("http://github.com/o/r/releases/download/v1/mero-arm64-v8a.apk"), listOf("arm64-v8a")))
+        assertNull(parseRelease(body("https://github.com.evil.example/mero-arm64-v8a.apk"), listOf("arm64-v8a")))
+        assertNull(parseRelease(body("file:///sdcard/mero-arm64-v8a.apk"), listOf("arm64-v8a")))
     }
 }

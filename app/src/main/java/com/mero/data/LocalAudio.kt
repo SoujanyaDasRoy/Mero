@@ -72,8 +72,7 @@ object LocalAudio {
      * visit — so it is played but not kept, rather than kept and then broken.
      */
     fun isKept(context: Context, uri: Uri): Boolean =
-        uri.scheme == "file" ||
-            context.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission }
+        context.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission }
 
     private fun displayName(context: Context, uri: Uri): String {
         val name = runCatching {

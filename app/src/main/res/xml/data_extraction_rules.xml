@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Library, playlists and settings are backed up; the Spotify client secret is
+  not. Auto Backup copies shared preferences to the person's Google Drive as
+  plain files, and a secret that is only ever meant to sit on one phone should
+  not end up in a cloud copy of it.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="spotify.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="spotify.xml" />
+    </device-transfer>
+</data-extraction-rules>

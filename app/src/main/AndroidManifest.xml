@@ -13,6 +13,8 @@
     <application
         android:name=".MeroApplication"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:extractNativeLibs="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -37,8 +39,12 @@
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <!-- content:// only. A file:// URI from another app would let it
+                     point Mero at Mero's own private files — the database,
+                     the Spotify secret — and have them read with Mero's
+                     permissions. Android has refused to hand out file:// to
+                     other apps since 7.0 anyway. -->
                 <data android:scheme="content" />
-                <data android:scheme="file" />
                 <data android:mimeType="audio/*" />
             </intent-filter>
         </activity>

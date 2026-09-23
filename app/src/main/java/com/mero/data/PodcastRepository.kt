@@ -41,6 +41,7 @@ class PodcastRepository {
     }
 
     suspend fun episodes(feedUrl: String): Result<List<PodcastEpisode>> = runCatchingCancellable {
+        require(isWebUrl(feedUrl)) { "That is not a podcast feed address" }
         withContext(Dispatchers.IO) { fetch(feedUrl).use { parseFeed(it) } }
     }
 
@@ -64,6 +65,7 @@ class PodcastRepository {
                 connection.disconnect()
                 requireNotNull(next) { "The podcast server sent a redirect to nowhere" }
                 current = secure(URL(URL(current), next).toString())
+                require(isWebUrl(current)) { "The podcast server redirected somewhere that is not a web page" }
                 return@repeat
             }
             if (code !in 200..299) {
@@ -95,7 +97,7 @@ private val directoryJson = Json { ignoreUnknownKeys = true }
 /** The directory's answer as search rows. A show with no feed cannot be played, so it is left out. */
 internal fun parseDirectory(body: String): List<SearchItem> =
     directoryJson.decodeFromString<DirectoryResponse>(body).results.mapNotNull { entry ->
-        val feed = entry.feedUrl?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        val feed = entry.feedUrl?.trim()?.takeIf { isWebUrl(it) } ?: return@mapNotNull null
         SearchItem(
             id = feed,
             title = entry.collectionName.orEmpty().ifBlank { "Untitled podcast" },
@@ -135,7 +137,11 @@ internal fun parseFeed(input: InputStream): List<PodcastEpisode> {
         val item = items.item(index) as Element
         val enclosure = item.getElementsByTagName("enclosure").item(0) as? Element
             ?: return@mapNotNull null
-        val audio = enclosure.getAttribute("url").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        // Web addresses only. A feed is written by a stranger, and this string
+        // goes straight to a player that also opens content:// and file:// —
+        // an enclosure of file:///data/data/com.mero/... would have Mero open
+        // its own private files with its own permissions.
+        val audio = enclosure.getAttribute("url").trim().takeIf { isWebUrl(it) } ?: return@mapNotNull null
         val type = enclosure.getAttribute("type")
         if (type.isNotBlank() && !type.startsWith("audio")) return@mapNotNull null
 
@@ -185,6 +191,10 @@ internal fun parseDate(raw: String?): Long? {
  */
 internal fun secure(url: String): String =
     if (url.startsWith("http://", ignoreCase = true)) "https://" + url.substring(7) else url
+
+/** http or https, and nothing else — not file:, content:, jar: or javascript:. */
+internal fun isWebUrl(url: String): Boolean =
+    url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true)
 
 /** A short id that is the same every time the feed is read, so plays and likes attach to it. */
 internal fun stableId(key: String): String =

@@ -430,6 +430,11 @@ fun parseRelease(body: String, abis: List<String>): Release? {
         ?: apks.firstOrNull { it.name.contains("universal", true) }
         ?: apks.first()
 
+    // The installer is about to be handed whatever this points at. GitHub
+    // serves release assets from github.com and redirects to its own storage;
+    // anything else in this field is not a Mero release.
+    if (!isGithubAsset(asset.url)) return null
+
     val version = release.tagName.removePrefix("v").trim()
     return Release(
         versionName = version.ifBlank { release.name.trim() },
@@ -437,6 +442,11 @@ fun parseRelease(body: String, abis: List<String>): Release? {
         apkUrl = asset.url,
         sizeBytes = asset.size,
     )
+}
+
+internal fun isGithubAsset(url: String): Boolean {
+    val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return false
+    return uri.scheme == "https" && uri.host == "github.com"
 }
 
 /**
