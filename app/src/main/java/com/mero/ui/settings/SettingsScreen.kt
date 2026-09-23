@@ -42,6 +42,7 @@ import androidx.compose.material.icons.rounded.Hd
 import androidx.compose.material.icons.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.MotionPhotosPause
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.SdCard
 import androidx.compose.material.icons.rounded.Smartphone
@@ -348,6 +349,16 @@ fun SettingsScreen(
                             checked = toggles["autopause"] == true,
                             enabled = toggles["infinite"] != true,
                             onCheckedChange = { onToggle("autopause", it) },
+                        )
+                    }
+                    PreferenceRow(
+                        Icons.Rounded.PlayCircle,
+                        "Resume after other audio",
+                        "When a video or voice note in another app ends, carry on playing",
+                    ) {
+                        Switch(
+                            checked = toggles[com.mero.playback.RESUME_AFTER_TOGGLE] != false,
+                            onCheckedChange = { onToggle(com.mero.playback.RESUME_AFTER_TOGGLE, it) },
                         )
                     }
                     PreferenceRow(

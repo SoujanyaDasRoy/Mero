@@ -2272,6 +2272,8 @@ private val TOGGLE_DEFAULTS = mapOf(
     // On by default: music that stops dead at the end of a queue is the more
     // surprising behaviour of the two.
     "infinite" to true, "autopause" to false,
+    // On: a reel or a voice note ending the music for good was reported as a bug.
+    com.mero.playback.RESUME_AFTER_TOGGLE to true,
 )
 
 /**

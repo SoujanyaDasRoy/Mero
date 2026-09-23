@@ -61,6 +61,7 @@ class MeroPlaybackService : MediaLibraryService() {
     private var lastCarSearch: Pair<String, List<Song>>? = null
 
     private var recovery: PlaybackRecovery? = null
+    private var resumeAfter: ResumeAfterInterruption? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -124,6 +125,12 @@ class MeroPlaybackService : MediaLibraryService() {
             MediaCache.invalidateStreaming(id)
         }.also { it.start() }
 
+        // Read when the interruption happens, so flipping the setting applies
+        // straight away without restarting the service.
+        resumeAfter = ResumeAfterInterruption(this, player) {
+            settings.boolean("toggle_" + RESUME_AFTER_TOGGLE, true)
+        }.also { it.start() }
+
         // Remember where playback stopped. Without this a headset button
         // pressed the next morning would restart the queue from the top.
         player.addListener(object : Player.Listener {
@@ -161,6 +168,8 @@ class MeroPlaybackService : MediaLibraryService() {
     override fun onDestroy() {
         recovery?.stop()
         recovery = null
+        resumeAfter?.release()
+        resumeAfter = null
         mediaSession?.run {
             saveResumePoint(player)
             player.release()
@@ -468,3 +477,6 @@ private class SkipIgnoresRepeatOne(player: Player) : ForwardingPlayer(player) {
 
 /** The key Android Auto reads off the root to decide whether to show search. */
 private const val SEARCH_SUPPORTED = "android.media.browse.SEARCH_SUPPORTED"
+
+/** Settings > Audio > "Resume after other audio"; the key the UI's toggle map uses. */
+const val RESUME_AFTER_TOGGLE = "resumeafter"
