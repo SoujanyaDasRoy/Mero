@@ -657,12 +657,16 @@ private fun MeroContent(
             // playWhenReady, not isPlaying: it flips the instant play/pause is
             // pressed, whereas isPlaying stays false through the (multi-second)
             // extraction + buffering, which made the button look dead.
+            //
+            // Except when the player has stopped on an error: playWhenReady
+            // stays true there, and the button showed pause over silence.
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-                playing = playWhenReady
+                playing = playWhenReady && controller.playbackState != Player.STATE_IDLE
                 markInteraction()
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                playing = controller.playWhenReady && playbackState != Player.STATE_IDLE
                 buffering = playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_ENDED) endedTick++
                 if (playbackState == Player.STATE_READY) failedTrackId = null
@@ -703,29 +707,22 @@ private fun MeroContent(
                 shuffle = shuffleModeEnabled
             }
 
-            // A failed load leaves the player IDLE, where play() does nothing —
-            // which is why a second press "worked". Re-prepare once so the
-            // retry is automatic, and drop the spinner either way.
+            // Retrying is the service's job (PlaybackRecovery), because it is
+            // alive when this screen is not. This only says what is happening —
+            // once per outage, not once per retry. Spec §9: visible, and play
+            // retries straight away.
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 buffering = false
-                val trackId = current?.id
-                if (trackId != null) {
-                    MediaCache.invalidateStreaming(trackId)
-                }
-                if (trackId != null && failedTrackId != trackId) {
-                    failedTrackId = trackId
-                    container.streamRepository.invalidate(trackId)
-                    controller.prepare()
-                    controller.play()
-                    return
-                }
-                failedTrackId = null
-                // Second failure on the same error: stop retrying and say so.
-                // Spec §9 — extraction failure is visible and retryable, never
-                // an indefinite spinner. Retrying is pressing play again.
+                playing = false
+                val trackId = current?.id ?: return
+                if (failedTrackId == trackId) return
+                failedTrackId = trackId
+                // One message: a failed extraction offline surfaces as a
+                // generic source error, so the error code cannot tell a
+                // dropped connection from a broken track.
                 android.widget.Toast.makeText(
                     context,
-                    "Couldn't load that track. Tap play to try again.",
+                    "Couldn't load that track. Mero will keep trying.",
                     android.widget.Toast.LENGTH_LONG,
                 ).show()
             }

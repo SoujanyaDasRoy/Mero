@@ -60,6 +60,8 @@ class MeroPlaybackService : MediaLibraryService() {
      */
     private var lastCarSearch: Pair<String, List<Song>>? = null
 
+    private var recovery: PlaybackRecovery? = null
+
     override fun onCreate() {
         super.onCreate()
         val container = (application as MeroApplication).container
@@ -117,6 +119,11 @@ class MeroPlaybackService : MediaLibraryService() {
         // whatever the setting said.
         player.setPlaybackSpeed(settings.float(SettingsStore.PLAYBACK_SPEED, 1f))
 
+        recovery = PlaybackRecovery(this, player) { id ->
+            container.streamRepository.invalidate(id)
+            MediaCache.invalidateStreaming(id)
+        }.also { it.start() }
+
         // Remember where playback stopped. Without this a headset button
         // pressed the next morning would restart the queue from the top.
         player.addListener(object : Player.Listener {
@@ -152,6 +159,8 @@ class MeroPlaybackService : MediaLibraryService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
 
     override fun onDestroy() {
+        recovery?.stop()
+        recovery = null
         mediaSession?.run {
             saveResumePoint(player)
             player.release()
