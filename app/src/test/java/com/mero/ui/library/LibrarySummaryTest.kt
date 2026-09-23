@@ -30,4 +30,9 @@ class LibrarySummaryTest {
     fun `everything together reads as one line`() {
         assertEquals("2 playlists · 12 liked · 4 downloaded", summaryOf(2, 12, 4))
     }
+
+    @Test
+    fun `files from the phone count as something saved`() {
+        assertEquals("3 from this phone", summaryOf(0, 0, 0, 3))
+    }
 }

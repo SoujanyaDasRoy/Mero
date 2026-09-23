@@ -107,6 +107,9 @@ interface MeroDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSong(song: SongEntity)
 
+    @Query("UPDATE songs SET sourceUri = :uri WHERE id = :id")
+    suspend fun setSourceUri(id: String, uri: String?)
+
     @Query("SELECT * FROM songs WHERE id = :id")
     suspend fun song(id: String): SongEntity?
 

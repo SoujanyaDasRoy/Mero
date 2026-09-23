@@ -34,7 +34,7 @@ object LocalAudio {
             context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
 
-        val id = "local:" + stableId(uri.toString())
+        val id = "local:" + stableId(identityOf(context, uri))
         val retriever = MediaMetadataRetriever()
         try {
             retriever.setDataSource(context, uri)
@@ -73,6 +73,34 @@ object LocalAudio {
      */
     fun isKept(context: Context, uri: Uri): Boolean =
         context.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission }
+
+    /**
+     * What makes two addresses the same file.
+     *
+     * Not the URI: the file picker and "Open with" hand over different URIs for
+     * one file — a documents-provider address and a media-store one — so the
+     * same song arrived twice, with two ids, two play counts and two entries in
+     * Recently played. Name and size are the same whichever door the file came
+     * in by. Two genuinely different files with the same name and the same
+     * size to the byte are rare enough to accept.
+     */
+    private fun identityOf(context: Context, uri: Uri): String {
+        val (name, size) = runCatching {
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null,
+                null,
+                null,
+            )?.use { c ->
+                if (!c.moveToFirst()) return@use null
+                val n = c.getString(0)
+                val z = if (c.isNull(1)) null else c.getLong(1)
+                n to z
+            }
+        }.getOrNull() ?: (null to null)
+        return if (name != null && size != null && size > 0) "$name:$size" else uri.toString()
+    }
 
     private fun displayName(context: Context, uri: Uri): String {
         val name = runCatching {

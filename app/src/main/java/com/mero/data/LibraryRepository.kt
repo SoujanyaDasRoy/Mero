@@ -51,9 +51,18 @@ class LibraryRepository(private val dao: MeroDao) {
      * Keeps songs that have no life outside the library — files from the phone
      * — so they are there to find next time rather than only while playing.
      */
-    suspend fun saveSongs(songs: List<Song>) = songs.forEach { ensure(it) }
+    suspend fun saveSongs(songs: List<Song>) = songs.forEach {
+        ensure(it)
+        // A file first met through "Open with" was stored with an address
+        // that stops working once that visit ends. Adding it properly later
+        // has to replace that address, not be ignored because the song exists.
+        if (it.sourceUri != null) dao.setSourceUri(it.id, it.sourceUri)
+    }
 
     fun isLiked(songId: String): Flow<Boolean?> = dao.isLiked(songId)
+
+    /** One stored song, for callers that only have its id — the car, mostly. */
+    suspend fun song(id: String): Song? = dao.song(id)?.toDomain()
 
     /** Songs only exist in the DB once they're touched, so upsert before mutating. */
     private suspend fun ensure(song: Song) {

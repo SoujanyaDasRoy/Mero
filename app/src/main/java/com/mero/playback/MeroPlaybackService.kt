@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.C
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -12,12 +13,19 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaLibraryService.LibraryParams
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
+import androidx.media3.session.SessionError
+import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.mero.MainActivity
 import com.mero.MeroApplication
 import com.mero.data.LibraryRepository
 import com.mero.data.SettingsStore
+import com.mero.domain.Song
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,9 +38,15 @@ import kotlinx.coroutines.guava.future
  * Bluetooth/headset buttons, Android Auto. See docs/architecture.md,
  * "Why MediaSessionService rather than a plain foreground service".
  */
-class MeroPlaybackService : MediaSessionService() {
+class MeroPlaybackService : MediaLibraryService() {
 
-    private var mediaSession: MediaSession? = null
+    /**
+     * A library session rather than a plain one: Android Auto can control a
+     * plain session, but it can only *browse* a library one, and a car screen
+     * with nothing to pick from is a remote control for whatever the phone
+     * happened to be playing. See [CarBrowseTree].
+     */
+    private var mediaSession: MediaLibrarySession? = null
 
     /** Outlives the composition; the session answers buttons the UI never sees. */
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -107,8 +121,7 @@ class MeroPlaybackService : MediaSessionService() {
             }
         })
 
-        mediaSession = MediaSession.Builder(this, SkipIgnoresRepeatOne(player))
-            .setCallback(ResumptionCallback())
+        mediaSession = MediaLibrarySession.Builder(this, SkipIgnoresRepeatOne(player), LibraryCallback())
             // Without this the notification is not tappable: Media3 only makes
             // it open something if the session says what to open. Tapping it
             // did nothing at all.
@@ -128,7 +141,7 @@ class MeroPlaybackService : MediaSessionService() {
             .build()
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = mediaSession
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
 
     override fun onDestroy() {
         mediaSession?.run {
@@ -160,7 +173,7 @@ class MeroPlaybackService : MediaSessionService() {
      * The queue is the one the app last persisted, resumed at the track and
      * position it stopped at.
      */
-    private inner class ResumptionCallback : MediaSession.Callback {
+    private inner class LibraryCallback : MediaLibrarySession.Callback {
 
         override fun onPlaybackResumption(
             mediaSession: MediaSession,
@@ -178,6 +191,130 @@ class MeroPlaybackService : MediaSessionService() {
                 settings.long(SettingsStore.RESUME_POSITION_MS, 0L),
             )
         }
+
+        override fun onGetLibraryRoot(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<MediaItem>> =
+            Futures.immediateFuture(LibraryResult.ofItem(folder(CarBrowseTree.ROOT, "Mero"), params))
+
+        override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = serviceScope.future {
+            val children: List<MediaItem> = when (val node = CarBrowseTree.nodeOf(parentId)) {
+                CarBrowseTree.Node.Root -> CarBrowseTree.sections.map { folder(it.id, it.title) }
+                is CarBrowseTree.Node.SectionNode -> if (node.key == "playlists") {
+                    library.playlists.first().map { folder(CarBrowseTree.playlistNodeId(it.id), it.name) }
+                } else {
+                    songsIn(parentId).map { playable(parentId, it) }
+                }
+                is CarBrowseTree.Node.PlaylistNode -> songsIn(parentId).map { playable(parentId, it) }
+                null -> emptyList()
+            }
+            LibraryResult.ofItemList(ImmutableList.copyOf(pageOf(children, page, pageSize)), params)
+        }
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String,
+        ): ListenableFuture<LibraryResult<MediaItem>> = serviceScope.future {
+            val song = library.song(CarBrowseTree.parse(mediaId).second)
+            if (song != null) {
+                LibraryResult.ofItem(mediaItemFor(song), null)
+            } else {
+                LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
+            }
+        }
+
+        /**
+         * A tap on a song in the car. It arrives as one bare id; this turns it
+         * into the whole list it was tapped in, starting at that song, so the
+         * car keeps playing the list instead of stopping after one track.
+         */
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long,
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val single = mediaItems.singleOrNull()
+            val parsed = single?.let { CarBrowseTree.parse(it.mediaId) }
+            // Items that already carry an address came from the app itself —
+            // leave those exactly as they are.
+            if (single == null || parsed?.first == null || single.localConfiguration != null) {
+                return super.onSetMediaItems(mediaSession, controller, mediaItems, startIndex, startPositionMs)
+            }
+            val (parent, songId) = parsed
+            return serviceScope.future {
+                val list = songsIn(parent!!)
+                val at = list.indexOfFirst { it.id == songId }
+                if (at < 0) error("That song is no longer in this list")
+                MediaSession.MediaItemsWithStartPosition(list.map(::mediaItemFor), at, startPositionMs)
+            }
+        }
+
+        /** "Add to queue" from the car: fill in where each song actually is. */
+        override fun onAddMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+        ): ListenableFuture<MutableList<MediaItem>> = serviceScope.future {
+            mediaItems.mapNotNull { item ->
+                if (item.localConfiguration != null) {
+                    item
+                } else {
+                    library.song(CarBrowseTree.parse(item.mediaId).second)?.let(::mediaItemFor)
+                }
+            }.toMutableList()
+        }
+    }
+
+    private suspend fun songsIn(parentId: String): List<Song> =
+        when (val node = CarBrowseTree.nodeOf(parentId)) {
+            is CarBrowseTree.Node.SectionNode -> when (node.key) {
+                "recent" -> library.recentlyPlayed.first()
+                "liked" -> library.liked.first()
+                "phone" -> library.onDevice.first()
+                "downloads" -> library.downloads.first()
+                else -> emptyList()
+            }
+            is CarBrowseTree.Node.PlaylistNode -> library.playlistSongs(node.playlistId).first()
+            else -> emptyList()
+        }
+
+    private fun folder(id: String, title: String): MediaItem = MediaItem.Builder()
+        .setMediaId(id)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(title)
+                .setIsBrowsable(true)
+                .setIsPlayable(false)
+                .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                .build(),
+        )
+        .build()
+
+    /** A song as the car lists it — with the list it sits in folded into its id. */
+    private fun playable(parentId: String, song: Song): MediaItem {
+        val item = mediaItemFor(song)
+        return item.buildUpon()
+            .setMediaId(CarBrowseTree.playableId(parentId, song.id))
+            .setMediaMetadata(
+                item.mediaMetadata.buildUpon()
+                    .setIsBrowsable(false)
+                    .setIsPlayable(true)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                    .build(),
+            )
+            .build()
     }
 }
 

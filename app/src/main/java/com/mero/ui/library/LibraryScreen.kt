@@ -98,7 +98,7 @@ fun LibraryScreen(
                 // What is actually in here, so the screen says something before
                 // a tab is chosen.
                 Text(
-                    summaryOf(playlists.size + smartPlaylists.size, liked.size, downloads.size),
+                    summaryOf(playlists.size + smartPlaylists.size, liked.size, downloads.size, onDevice.size),
                     fontSize = 12.sp,
                     color = scheme.onSurfaceVariant,
                     maxLines = 1,
@@ -188,11 +188,12 @@ fun LibraryScreen(
 private const val NL = "\n"
 
 /** One line describing what the library holds, for the header. */
-internal fun summaryOf(playlists: Int, liked: Int, downloads: Int): String {
+internal fun summaryOf(playlists: Int, liked: Int, downloads: Int, onDevice: Int = 0): String {
     val parts = buildList {
         if (playlists > 0) add(playlists.toString() + if (playlists == 1) " playlist" else " playlists")
         if (liked > 0) add("$liked liked")
         if (downloads > 0) add("$downloads downloaded")
+        if (onDevice > 0) add("$onDevice from this phone")
     }
     return if (parts.isEmpty()) "Nothing saved yet" else parts.joinToString(" · ")
 }
