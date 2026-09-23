@@ -33,6 +33,12 @@ object CarBrowseTree {
 
     fun playlistNodeId(playlistId: String): String = PLAYLIST + playlistId
 
+    /** The list a song tapped in the car's search results belongs to. */
+    fun searchNodeId(query: String): String = SEARCH + query
+
+    /** The query behind [searchNodeId], or null if [id] is not a search. */
+    fun searchQueryOf(id: String): String? = id.takeIf { it.startsWith(SEARCH) }?.removePrefix(SEARCH)
+
     /** An id for a song tapped inside a list. */
     fun playableId(parentId: String, songId: String): String = parentId + SEP + songId
 
@@ -62,6 +68,7 @@ object CarBrowseTree {
 
     private const val SECTION = "section:"
     private const val PLAYLIST = "playlist:"
+    private const val SEARCH = "search:"
 
     /**
      * Not a character any id on either side can contain: YouTube ids are

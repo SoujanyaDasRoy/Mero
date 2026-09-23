@@ -22,6 +22,16 @@ class CarBrowseTreeTest {
         }
     }
 
+    /** A query is typed by a person and can contain anything, the separator included. */
+    @Test
+    fun `a search result keeps its query whatever was typed`() {
+        val parent = CarBrowseTree.searchNodeId("AC|DC live")
+        val (list, song) = CarBrowseTree.parse(CarBrowseTree.playableId(parent, "dQw4w9WgXcQ"))
+        assertEquals("dQw4w9WgXcQ", song)
+        assertEquals("AC|DC live", CarBrowseTree.searchQueryOf(list!!))
+        assertNull(CarBrowseTree.searchQueryOf("section:liked"))
+    }
+
     @Test
     fun `a bare id has no list`() {
         assertEquals(null to "dQw4w9WgXcQ", CarBrowseTree.parse("dQw4w9WgXcQ"))

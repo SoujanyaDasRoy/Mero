@@ -52,12 +52,20 @@ class MeroPlaybackService : MediaLibraryService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var library: LibraryRepository
     private lateinit var settings: SettingsStore
+    private lateinit var search: com.mero.data.SearchRepository
+
+    /**
+     * The car's last search. A tap on a result arrives later as a bare id, and
+     * searching again to rebuild the list could come back in another order.
+     */
+    private var lastCarSearch: Pair<String, List<Song>>? = null
 
     override fun onCreate() {
         super.onCreate()
         val container = (application as MeroApplication).container
         library = container.libraryRepository
         settings = container.settings
+        search = container.searchRepository
 
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(
@@ -197,7 +205,47 @@ class MeroPlaybackService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<MediaItem>> =
-            Futures.immediateFuture(LibraryResult.ofItem(folder(CarBrowseTree.ROOT, "Mero"), params))
+            Futures.immediateFuture(
+                LibraryResult.ofItem(
+                    folder(CarBrowseTree.ROOT, "Mero"),
+                    // Without this the car shows no search button at all.
+                    LibraryParams.Builder()
+                        .setExtras(android.os.Bundle().apply { putBoolean(SEARCH_SUPPORTED, true) })
+                        .build(),
+                ),
+            )
+
+        /** Search typed or spoken on the car's own search screen. */
+        override fun onSearch(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<Void>> = serviceScope.future {
+            carSearch(query).fold(
+                onSuccess = {
+                    session.notifySearchResultChanged(browser, query, it.size, params)
+                    LibraryResult.ofVoid()
+                },
+                onFailure = { LibraryResult.ofError(SessionError.ERROR_IO) },
+            )
+        }
+
+        override fun onGetSearchResult(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = serviceScope.future {
+            val parent = CarBrowseTree.searchNodeId(query)
+            val songs = carSearch(query).getOrDefault(emptyList())
+            LibraryResult.ofItemList(
+                ImmutableList.copyOf(pageOf(songs, page, pageSize).map { playable(parent, it) }),
+                params,
+            )
+        }
 
         override fun onGetChildren(
             session: MediaLibrarySession,
@@ -246,6 +294,13 @@ class MeroPlaybackService : MediaLibraryService() {
             startPositionMs: Long,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
             val single = mediaItems.singleOrNull()
+            // "Hey Google, play Arijit Singh on Mero": no id at all, only
+            // the words. Without this the default found nothing to play and
+            // the car sat silent.
+            val spoken = single?.requestMetadata?.searchQuery
+            if (spoken != null && single.localConfiguration == null) {
+                return serviceScope.future { playFromVoice(spoken) }
+            }
             val parsed = single?.let { CarBrowseTree.parse(it.mediaId) }
             // Items that already carry an address came from the app itself —
             // leave those exactly as they are.
@@ -268,8 +323,11 @@ class MeroPlaybackService : MediaLibraryService() {
             mediaItems: MutableList<MediaItem>,
         ): ListenableFuture<MutableList<MediaItem>> = serviceScope.future {
             mediaItems.mapNotNull { item ->
+                val spoken = item.requestMetadata.searchQuery
                 if (item.localConfiguration != null) {
                     item
+                } else if (spoken != null) {
+                    carSearch(spoken).getOrNull()?.firstOrNull()?.let(::mediaItemFor)
                 } else {
                     library.song(CarBrowseTree.parse(item.mediaId).second)?.let(::mediaItemFor)
                 }
@@ -277,8 +335,39 @@ class MeroPlaybackService : MediaLibraryService() {
         }
     }
 
-    private suspend fun songsIn(parentId: String): List<Song> =
-        when (val node = CarBrowseTree.nodeOf(parentId)) {
+    private suspend fun carSearch(query: String): Result<List<Song>> {
+        lastCarSearch?.let { (q, songs) -> if (q == query) return Result.success(songs) }
+        return search.search(query).onSuccess { lastCarSearch = query to it }
+    }
+
+    /**
+     * A spoken request. "Play music on Mero", with nothing after it, means
+     * carry on: the saved queue where it stopped, or liked songs shuffled if
+     * there is no queue. Anything else is a search, played from the top.
+     */
+    private suspend fun playFromVoice(query: String): MediaSession.MediaItemsWithStartPosition {
+        if (query.isBlank()) {
+            val queue = library.queue.first()
+            if (queue.isNotEmpty()) {
+                val index = settings.int(SettingsStore.RESUME_INDEX, 0).coerceIn(0, queue.lastIndex)
+                return MediaSession.MediaItemsWithStartPosition(
+                    queue.map(::mediaItemFor),
+                    index,
+                    settings.long(SettingsStore.RESUME_POSITION_MS, 0L),
+                )
+            }
+            val liked = library.liked.first().shuffled()
+            if (liked.isEmpty()) error("Nothing saved to play yet")
+            return MediaSession.MediaItemsWithStartPosition(liked.map(::mediaItemFor), 0, C.TIME_UNSET)
+        }
+        val songs = carSearch(query).getOrThrow()
+        if (songs.isEmpty()) error("Nothing found for " + query)
+        return MediaSession.MediaItemsWithStartPosition(songs.map(::mediaItemFor), 0, C.TIME_UNSET)
+    }
+
+    private suspend fun songsIn(parentId: String): List<Song> {
+        CarBrowseTree.searchQueryOf(parentId)?.let { return carSearch(it).getOrDefault(emptyList()) }
+        return when (val node = CarBrowseTree.nodeOf(parentId)) {
             is CarBrowseTree.Node.SectionNode -> when (node.key) {
                 "recent" -> library.recentlyPlayed.first()
                 "liked" -> library.liked.first()
@@ -289,6 +378,7 @@ class MeroPlaybackService : MediaLibraryService() {
             is CarBrowseTree.Node.PlaylistNode -> library.playlistSongs(node.playlistId).first()
             else -> emptyList()
         }
+    }
 
     private fun folder(id: String, title: String): MediaItem = MediaItem.Builder()
         .setMediaId(id)
@@ -366,3 +456,6 @@ private class SkipIgnoresRepeatOne(player: Player) : ForwardingPlayer(player) {
         return super.hasPreviousMediaItem()
     }
 }
+
+/** The key Android Auto reads off the root to decide whether to show search. */
+private const val SEARCH_SUPPORTED = "android.media.browse.SEARCH_SUPPORTED"
