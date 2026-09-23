@@ -36,8 +36,16 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Podcasts
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -87,6 +95,12 @@ fun SearchScreen(
     onResultClick: (SearchItem) -> Unit,
     onSongMore: (Song) -> Unit,
     contentPadding: PaddingValues,
+    recentSearches: List<String>,
+    onClearRecent: () -> Unit,
+    suggestions: List<String>,
+    onPodcastCategory: (String) -> Unit,
+    error: String?,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -113,7 +127,7 @@ fun SearchScreen(
                 Box(Modifier.weight(1f)) {
                     if (query.isEmpty()) {
                         Text(
-                            "Search songs, artists, albums...",
+                            "Songs, artists, albums, podcasts",
                             fontSize = 16.sp,
                             color = scheme.onSurfaceVariant,
                         )
@@ -163,6 +177,10 @@ fun SearchScreen(
                 onSongClick = onSongClick,
                 onGenreClick = onGenreClick,
                 contentPadding = contentPadding,
+                recentSearches = recentSearches,
+                onRecentClick = onQueryChange,
+                onClearRecent = onClearRecent,
+                onPodcastCategory = onPodcastCategory,
             )
         } else {
             // Fixed tabs across the full width with equal gaps: each pill is as
@@ -185,69 +203,92 @@ fun SearchScreen(
                 }
             }
 
-            val listState = rememberLazyListState()
-
-            val shouldLoadMore = remember {
-                derivedStateOf {
-                    val totalItems = listState.layoutInfo.totalItemsCount
-                    val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                    totalItems > 0 && lastVisibleIndex >= totalItems - 4
-                }
-            }
-
-            LaunchedEffect(shouldLoadMore.value) {
-                if (shouldLoadMore.value && hasMoreResults && !isLoadingMore && !isSearching) {
-                    onLoadMore()
-                }
-            }
-
-            LazyColumn(
-                state = listState,
-                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 80.dp),
-            ) {
-                items(results, key = { it.id }) { result ->
-                    val rowSong = result.song ?: Song(
-                        id = result.id,
-                        title = result.title,
-                        artist = result.subtitle,
-                        thumbnailUrl = result.thumbnailUrl,
-                    )
-                    SongRow(
-                        song = rowSong,
-                        subtitle = result.subtitle,
-                        highlighted = result.song?.id == nowPlayingId,
-                        onClick = {
-                            // Picking a result is the end of typing. Without
-                            // this the track started but the keyboard stayed
-                            // up, covering half the screen and needing a back
-                            // press of its own to dismiss.
-                            // Both: clearing focus alone leaves the IME up on
-                            // some keyboards, and hiding alone leaves the field
-                            // focused so the next tap re-opens it.
-                            keyboard?.hide()
-                            focusManager.clearFocus()
-                            onResultClick(result)
-                        },
-                        onMore = result.song?.let { { onSongMore(it) } },
-                    )
-                }
-
-                if (isLoadingMore) {
-                    item(key = "loading-more") {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(28.dp),
-                                color = scheme.primary,
-                                strokeWidth = 2.5.dp,
-                            )
-                        }
+            // What YouTube would complete this to. One tap replaces the query,
+            // which is faster than finishing a long artist name on a phone
+            // keyboard and fixes the spelling while it is at it.
+            if (suggestions.isNotEmpty() && selectedTab != "Podcasts") {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    suggestions.forEach { suggestion ->
+                        SuggestionPill(suggestion) { onQueryChange(suggestion) }
                     }
                 }
+            }
+
+            if (error != null && results.isEmpty() && !isSearching) {
+                SearchFailed(error, onRetry)
+            } else {
+                val listState = rememberLazyListState()
+
+                val shouldLoadMore = remember {
+                    derivedStateOf {
+                        val totalItems = listState.layoutInfo.totalItemsCount
+                        val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                        totalItems > 0 && lastVisibleIndex >= totalItems - 4
+                    }
+                }
+
+                LaunchedEffect(shouldLoadMore.value) {
+                    if (shouldLoadMore.value && hasMoreResults && !isLoadingMore && !isSearching) {
+                        onLoadMore()
+                    }
+                }
+
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 80.dp),
+                ) {
+                    items(results, key = { it.id }) { result ->
+                        val rowSong = result.song ?: Song(
+                            id = result.id,
+                            title = result.title,
+                            artist = result.subtitle,
+                            thumbnailUrl = result.thumbnailUrl,
+                        )
+                        SongRow(
+                            song = rowSong,
+                            subtitle = result.subtitle,
+                            // null == null would light up every album and podcast
+                            // while nothing is playing.
+                            highlighted = nowPlayingId != null && result.song?.id == nowPlayingId,
+                            onClick = {
+                                // Picking a result is the end of typing. Without
+                                // this the track started but the keyboard stayed
+                                // up, covering half the screen and needing a back
+                                // press of its own to dismiss.
+                                // Both: clearing focus alone leaves the IME up on
+                                // some keyboards, and hiding alone leaves the field
+                                // focused so the next tap re-opens it.
+                                keyboard?.hide()
+                                focusManager.clearFocus()
+                                onResultClick(result)
+                            },
+                            onMore = result.song?.let { { onSongMore(it) } },
+                        )
+                    }
+
+                    if (isLoadingMore) {
+                        item(key = "loading-more") {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                    color = scheme.primary,
+                                    strokeWidth = 2.5.dp,
+                                )
+                            }
+                        }
+                    }
+            }
             }
         }
     }
@@ -379,6 +420,10 @@ private fun IdleSuggestions(
     onSongClick: (Song) -> Unit,
     onGenreClick: (String) -> Unit,
     contentPadding: PaddingValues,
+    recentSearches: List<String>,
+    onRecentClick: (String) -> Unit,
+    onClearRecent: () -> Unit,
+    onPodcastCategory: (String) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     LazyVerticalGrid(
@@ -391,6 +436,18 @@ private fun IdleSuggestions(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (recentSearches.isNotEmpty()) {
+            item(key = "recent-searches-heading", span = { GridItemSpan(maxLineSpan) }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { IdleHeading("Recent searches") }
+                    TextButton(onClick = onClearRecent) { Text("Clear") }
+                }
+            }
+            item(key = "recent-searches", span = { GridItemSpan(maxLineSpan) }) {
+                PillFlow(recentSearches, onRecentClick, leading = Icons.Rounded.History)
+            }
+        }
+
         if (artists.isNotEmpty()) {
             item(key = "artists-heading", span = { GridItemSpan(maxLineSpan) }) {
                 IdleHeading(if (recentlyPlayed.isEmpty()) "Artists" else "Artists you play")
@@ -462,6 +519,13 @@ private fun IdleSuggestions(
             }
         }
 
+        item(key = "podcasts-heading", span = { GridItemSpan(maxLineSpan) }) {
+            IdleHeading("Podcasts")
+        }
+        item(key = "podcasts", span = { GridItemSpan(maxLineSpan) }) {
+            PillFlow(PODCAST_CATEGORIES, onPodcastCategory, leading = Icons.Rounded.Podcasts)
+        }
+
         item(key = "browse-heading", span = { GridItemSpan(maxLineSpan) }) {
             IdleHeading("Browse")
         }
@@ -484,4 +548,63 @@ private fun IdleHeading(text: String) {
         fontSize = 18.sp,
         fontWeight = FontWeight.Bold,
     )
+}
+
+/** Pills that wrap onto as many lines as they need, each with the same small icon. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PillFlow(labels: List<String>, onClick: (String) -> Unit, leading: ImageVector) {
+    FlowRow(
+        Modifier.padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        labels.forEach { label -> SuggestionPill(label, leading) { onClick(label) } }
+    }
+}
+
+@Composable
+private fun SuggestionPill(label: String, leading: ImageVector = Icons.Rounded.Search, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        Modifier
+            .height(36.dp)
+            .clip(RoundedCornerShape(percent = 50))
+            .background(scheme.surfaceContainerHigh)
+            .clickable(onClick = onClick)
+            .padding(start = 12.dp, end = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(leading, null, Modifier.size(16.dp), tint = scheme.onSurfaceVariant)
+        Text(label, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Spec §9: a failed search says so and offers the retry, never a blank list. */
+@Composable
+private fun SearchFailed(message: String, onRetry: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(Icons.Rounded.CloudOff, null, Modifier.size(40.dp), tint = scheme.onSurfaceVariant)
+        Text(
+            "Search didn't go through",
+            Modifier.padding(top = 12.dp),
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            message,
+            Modifier.padding(top = 6.dp),
+            fontSize = 13.sp,
+            color = scheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Button(onClick = onRetry, Modifier.padding(top = 16.dp)) { Text("Try again") }
+    }
 }

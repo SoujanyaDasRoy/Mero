@@ -426,6 +426,12 @@ private fun MeroContent(
 
     var query by remember { mutableStateOf("") }
     var searchTab by remember { mutableStateOf("Songs") }
+    val recentStore = remember { com.mero.ui.search.RecentSearches(context) }
+    var recentSearches by remember { mutableStateOf(recentStore.load()) }
+    fun rememberSearch(q: String) {
+        recentSearches = com.mero.ui.search.withRecent(recentSearches, q)
+        recentStore.save(recentSearches)
+    }
 
     /**
      * When the search box was last touched.
@@ -1129,9 +1135,25 @@ private fun MeroContent(
                     var isSearching by remember { mutableStateOf(false) }
                     var isLoadingMore by remember { mutableStateOf(false) }
                     var searchError by remember { mutableStateOf<String?>(null) }
+                    var searchAttempt by remember { mutableStateOf(0) }
+                    var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+
+                    LaunchedEffect(query) {
+                        val trimmed = query.trim()
+                        if (trimmed.length < 2) {
+                            suggestions = emptyList()
+                            return@LaunchedEffect
+                        }
+                        delay(150)
+                        container.searchRepository.suggest(trimmed).onSuccess { s ->
+                            suggestions = s.queries
+                                .filterNot { it.equals(trimmed, ignoreCase = true) }
+                                .take(6)
+                        }
+                    }
 
                     // Active live search as the user writes ("since writing")
-                    LaunchedEffect(query, searchTab) {
+                    LaunchedEffect(query, searchTab, searchAttempt) {
                         val trimmed = query.trim()
                         if (trimmed.isBlank()) {
                             results = emptyList()
@@ -1154,7 +1176,7 @@ private fun MeroContent(
                                     continuationToken = null
                                     searchError = null
                                 },
-                                onFailure = { e -> searchError = e.message ?: e.toString() },
+                                onFailure = { e -> searchError = searchFailureText(e) },
                             )
                             isSearching = false
                             return@LaunchedEffect
@@ -1176,7 +1198,7 @@ private fun MeroContent(
                                 page.items.firstOrNull()?.song?.let(::warmForPlayback)
                             },
                             onFailure = { e ->
-                                searchError = e.message ?: e.toString()
+                                searchError = searchFailureText(e)
                                 isSearching = false
                             },
                         )
@@ -1223,9 +1245,7 @@ private fun MeroContent(
                             query = it
                             lastSearchAt = System.currentTimeMillis()
                         },
-                        onSearch = {
-                            // Focus clear / instant active search
-                        },
+                        onSearch = { rememberSearch(query) },
                         selectedTab = searchTab,
                         onTabChange = { searchTab = it },
                         results = results,
@@ -1235,6 +1255,9 @@ private fun MeroContent(
                         onLoadMore = { loadMoreResults() },
                         nowPlayingId = current?.id,
                         onResultClick = { item ->
+                            // A tapped result is the surest sign the query was
+                            // the one they meant, not a half-typed stop on the way.
+                            rememberSearch(query)
                             when (item.type) {
                                 SearchResultType.Song -> item.song?.let { song ->
                                     playFrom(song, results.mapNotNull { it.song }, "Search")
@@ -1279,17 +1302,20 @@ private fun MeroContent(
                         },
                         onSongMore = { menuSong = it },
                         contentPadding = contentPadding,
+                        recentSearches = recentSearches,
+                        onClearRecent = {
+                            recentSearches = emptyList()
+                            recentStore.save(emptyList())
+                        },
+                        suggestions = suggestions,
+                        onPodcastCategory = { category ->
+                            searchTab = "Podcasts"
+                            query = category
+                            lastSearchAt = System.currentTimeMillis()
+                        },
+                        error = searchError,
+                        onRetry = { searchAttempt++ },
                     )
-                    searchError?.let { msg ->
-                        androidx.compose.material3.Text(
-                            "Search failed: $msg",
-                            modifier = Modifier
-                                .padding(16.dp)
-                                .background(androidx.compose.ui.graphics.Color.Red.copy(alpha = 0.85f))
-                                .padding(12.dp),
-                            color = androidx.compose.ui.graphics.Color.White,
-                        )
-                    }
                 }
 
                 composable<AddSongsRoute> { entry ->
@@ -2273,4 +2299,12 @@ internal fun episodeLine(publishedAt: Long?, durationSec: Int): String {
         else -> "${(durationSec + 59) / 60} min"
     }
     return listOfNotNull(date, length).joinToString(" · ").ifEmpty { "Episode" }
+}
+
+/** What a failed search says. The exception text is for logs, not people. */
+private fun searchFailureText(e: Throwable): String = when (e) {
+    is java.net.UnknownHostException, is java.net.ConnectException ->
+        "You're offline. Check Wi-Fi or mobile data."
+    is java.net.SocketTimeoutException -> "The connection is too slow right now."
+    else -> e.message ?: "Something went wrong on the other end."
 }

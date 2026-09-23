@@ -6,6 +6,7 @@ import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
+import coil3.request.allowHardware
 import coil3.request.crossfade
 import okio.Path.Companion.toOkioPath
 import android.content.Context
@@ -180,6 +181,11 @@ class MeroApplication : Application(), SingletonImageLoader.Factory {
                     .build()
             }
             .crossfade(true)
+            // Hardware bitmaps drew nothing at all on an emulator's virtual GPU —
+            // every cover blank, no error logged — and the same class of driver
+            // bug exists on cheap OEM phones. Covers are small; the heap they
+            // cost as software bitmaps is not worth a screen of empty squares.
+            .allowHardware(false)
             .build()
 
     override fun onCreate() {
