@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.AllInclusive
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.BatteryAlert
+import androidx.compose.material.icons.rounded.BatteryFull
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -124,6 +125,7 @@ fun SettingsScreen(
     downloadCodec: CodecPreference,
     onDownloadCodecChange: (CodecPreference) -> Unit,
     onBatterySettingsClick: () -> Unit,
+    batteryUnrestricted: Boolean,
     appVersion: String,
     updateState: UpdateState,
     onSourceClick: () -> Unit,
@@ -435,13 +437,21 @@ fun SettingsScreen(
             item {
                 SettingsGroup("Playback reliability") {
                     PreferenceRow(
-                        icon = Icons.Rounded.BatteryAlert,
-                        label = "Background playback settings",
-                        subtitle = "Xiaomi, Oppo, Vivo and OnePlus kill background playback unless Mero is exempt",
-                        iconTint = scheme.error,
+                        icon = if (batteryUnrestricted) Icons.Rounded.BatteryFull else Icons.Rounded.BatteryAlert,
+                        label = "Battery optimisation",
+                        subtitle = if (batteryUnrestricted) {
+                            "Off for Mero, so music keeps playing with the screen off"
+                        } else {
+                            "On, so Android may stop music with the screen off. Tap to turn it off for Mero."
+                        },
+                        iconTint = if (batteryUnrestricted) null else scheme.error,
                         onClick = onBatterySettingsClick,
                     ) {
-                        Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
+                        if (batteryUnrestricted) {
+                            Icon(Icons.Rounded.Check, null, tint = scheme.primary)
+                        } else {
+                            Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
+                        }
                     }
                 }
             }

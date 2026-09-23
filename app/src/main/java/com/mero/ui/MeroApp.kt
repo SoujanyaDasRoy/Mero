@@ -495,6 +495,26 @@ private fun MeroContent(
      * in a callback that knows nothing about who asked.
      */
     var phonePickTarget by remember { mutableStateOf<String?>(null) }
+    var batteryUnrestricted by remember {
+        mutableStateOf(com.mero.playback.BatteryExemption.isExempt(context))
+    }
+    // Rechecked on return: the dialog reports nothing useful as a result, and
+    // the list screen reports nothing at all.
+    val batteryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { batteryUnrestricted = com.mero.playback.BatteryExemption.isExempt(context) }
+
+    fun requestBatteryExemption() {
+        // Already exempt: the list, which is where it can be undone.
+        if (batteryUnrestricted) {
+            runCatching { batteryLauncher.launch(com.mero.playback.BatteryExemption.listIntent()) }
+            return
+        }
+        val direct = com.mero.playback.BatteryExemption.requestIntent(context)
+        runCatching { batteryLauncher.launch(direct) }
+            .recoverCatching { batteryLauncher.launch(com.mero.playback.BatteryExemption.listIntent()) }
+    }
+
     val phonePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { picked ->
@@ -867,7 +887,17 @@ private fun MeroContent(
         }
     }
 
+    // Asked once, on the first play: the moment background playback starts to
+    // matter, and late enough that the question makes sense. Declined, it is
+    // not asked again — Settings keeps the row for changing your mind.
+    fun askBatteryOnce() {
+        if (container.settings.boolean(SettingsStore.ASKED_BATTERY, false)) return
+        container.settings.putBoolean(SettingsStore.ASKED_BATTERY, true)
+        if (!batteryUnrestricted) requestBatteryExemption()
+    }
+
     fun playFrom(song: Song, context: List<Song>, source: String = playSource) {
+        askBatteryOnce()
         playSource = source
         val list = if (context.any { it.id == song.id }) context else listOf(song) + context
         songsById = songsById + list.associateBy { it.id }
@@ -1810,13 +1840,8 @@ private fun MeroContent(
                             downloadCodec = it
                             qualityPrefs.edit().putString("download", it.name).apply()
                         },
-                        onBatterySettingsClick = {
-                            runCatching {
-                                context.startActivity(
-                                    android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
-                                )
-                            }
-                        },
+                        batteryUnrestricted = batteryUnrestricted,
+                        onBatterySettingsClick = { requestBatteryExemption() },
                         playerVariant = playerVariant,
                         onPlayerVariantChange = {
                             playerVariant = it
