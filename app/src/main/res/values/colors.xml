@@ -4,4 +4,15 @@
     <color name="mero_yellow">#FED703</color>
     <color name="mero_ink">#151515</color>
     <color name="mero_background">#141218</color>
+    <!-- Alternative launcher icons (Settings > App icon). -->
+    <color name="icon_midnight_bg">#151515</color>
+    <color name="icon_midnight_mark">#FED703</color>
+    <color name="icon_paper_bg">#F4EFE6</color>
+    <color name="icon_paper_mark">#151515</color>
+    <color name="icon_coral_bg">#FF6B57</color>
+    <color name="icon_coral_mark">#FFFFFF</color>
+    <color name="icon_ocean_bg">#1F4FD6</color>
+    <color name="icon_ocean_mark">#FFFFFF</color>
+    <color name="icon_mint_bg">#8FE3BD</color>
+    <color name="icon_mint_mark">#151515</color>
 </resources>

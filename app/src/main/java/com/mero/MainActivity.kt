@@ -37,6 +37,16 @@ class MainActivity : ComponentActivity() {
         audioFrom(intent)?.let { openedAudio.value = it }
     }
 
+    /**
+     * A new app icon is switched here, on the way out, not when it is picked:
+     * disabling the launcher alias this task was started from makes Android
+     * close the task, which on the Settings screen looks exactly like a crash.
+     */
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) com.mero.ui.settings.AppIcon.applyPending(this)
+    }
+
     private fun audioFrom(intent: Intent?): Uri? =
         intent?.takeIf { it.action == Intent.ACTION_VIEW }?.data
 }

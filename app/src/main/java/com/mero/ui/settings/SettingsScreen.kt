@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.AllInclusive
+import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.BatteryAlert
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Check
@@ -295,6 +296,12 @@ fun SettingsScreen(
                         selected = playerVariant,
                         onSelect = onPlayerVariantChange,
                     )
+                    PreferenceRow(
+                        Icons.Rounded.Apps,
+                        "App icon",
+                        "Switches when you leave Mero. Music keeps playing; a Mero icon on the home screen may need adding again.",
+                    )
+                    AppIconPicker()
                 }
             }
 

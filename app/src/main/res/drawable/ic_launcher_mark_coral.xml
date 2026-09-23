@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The same mark as the classic icon, recoloured: tint recolours the
+     opaque pixels and keeps the edges, so no extra artwork to keep in sync. -->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@mipmap/ic_launcher_foreground"
+    android:tint="@color/icon_coral_mark" />
