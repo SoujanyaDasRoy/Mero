@@ -868,6 +868,19 @@ private fun MeroContent(
 
     // The DB copy is for surviving a cold start, not for driving playback —
     // the player's timeline is the source of truth while the app is running.
+    // Opening Mero after it was closed showed no player at all, as if nothing
+    // had ever played. Put back where things stopped — loaded and paused, so
+    // one press of play carries on, and nothing starts by itself.
+    LaunchedEffect(connection.controller) {
+        val c = connection.controller ?: return@LaunchedEffect
+        if (c.mediaItemCount > 0) return@LaunchedEffect
+        val resume = com.mero.playback.resumeQueue(library, container.settings) ?: return@LaunchedEffect
+        if (c.mediaItemCount > 0) return@LaunchedEffect
+        songsById = songsById + resume.songs.associateBy { it.id }
+        playSource = "Where you left off"
+        c.setMediaItems(resume.songs.map(::mediaItemFor), 0, resume.positionMs)
+    }
+
     LaunchedEffect(persistedQueue) {
         if (current == null && queue.isEmpty()) queue = persistedQueue
         songsById = songsById + persistedQueue.associateBy { it.id }
@@ -926,16 +939,19 @@ private fun MeroContent(
         warmForPlayback(song)
         connection.play(list, list.indexOfFirst { it.id == song.id })
         queue = list.drop(list.indexOfFirst { it.id == song.id } + 1)
-        scope.launch {
-            library.onPlayed(song)
-            library.setQueue(queue)
-        }
+        // Counted as played by the service when it actually starts playing.
+        scope.launch { library.setQueue(queue) }
     }
 
     // "Play next" with nothing loaded used to drop the song into the empty
     // player as a paused current track while saying it "plays next" — which it
     // never would on its own. With nothing to come after, play it now.
     fun playNext(song: Song) {
+        // Queuing the song that is playing right after itself would play it twice.
+        if (connection.controller?.currentMediaItem?.mediaId == song.id) {
+            say(song.title + " is already playing")
+            return
+        }
         if ((connection.controller?.mediaItemCount ?: 0) == 0) {
             playFrom(song, listOf(song))
             say("Playing " + song.title)
@@ -1581,6 +1597,7 @@ private fun MeroContent(
                             ) { launchSingleTop = true }
                         },
                         onSongClick = { song -> playFrom(song, artistData?.songs.orEmpty(), "Artist") },
+                        onSongMore = { menuSong = it },
                         contentPadding = contentPadding,
                     )
                 }
@@ -1740,6 +1757,7 @@ private fun MeroContent(
                         onRemove = { song ->
                             scope.launch { library.removeFromPlaylist(route.playlistId, song.id) }
                         },
+                        onSongMore = { menuSong = it },
                         onRename = { name ->
                             scope.launch { library.renamePlaylist(route.playlistId, name) }
                         },
@@ -1786,6 +1804,7 @@ private fun MeroContent(
                             shuffled.firstOrNull()?.let { playFrom(it, shuffled, summary?.name ?: "Smart playlist") }
                         },
                         onRemove = {},
+                        onSongMore = { menuSong = it },
                         onRename = {},
                         onDescriptionChange = {},
                         onPickCover = {},
@@ -2025,7 +2044,10 @@ private fun MeroContent(
                             shuffle = shuffle,
                             repeat = repeat,
                             upNext = queue,
-                            qualityLabel = resolved?.label,
+                            // Only for the track that was actually resolved: a podcast,
+                            // a phone file or a cached song showed the previous
+                            // YouTube track's "Opus · 164 kbps".
+                            qualityLabel = resolved?.takeIf { it.videoId == song.id }?.label,
                             buffering = buffering,
                             durationSec = playerDuration.intValue,
                             output = outputDevice,

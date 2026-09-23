@@ -32,6 +32,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.guava.future
+import kotlinx.coroutines.launch
 
 /**
  * Free, with no code of our own: notification, lock-screen controls,
@@ -134,11 +135,28 @@ class MeroPlaybackService : MediaLibraryService() {
         // Remember where playback stopped. Without this a headset button
         // pressed the next morning would restart the queue from the top.
         player.addListener(object : Player.Listener {
+            /** The track last counted as played, so pausing and resuming it counts once. */
+            private var counted: String? = null
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (!isPlaying) saveResumePoint(player)
+                if (!isPlaying) {
+                    saveResumePoint(player)
+                    return
+                }
+                // Counted here, when it actually starts, and here only. The
+                // app used to count songs someone tapped and nothing else, so
+                // everything that played next on its own was missing from
+                // Recently played, Most played, the home shelves built from
+                // them — and from the resume point.
+                val item = player.currentMediaItem ?: return
+                if (item.mediaId == counted) return
+                counted = item.mediaId
+                serviceScope.launch { library.onPlayed(songFrom(item)) }
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // A repeat of the same track is a new listen.
+                counted = null
                 saveResumePoint(player)
             }
         })
@@ -182,7 +200,7 @@ class MeroPlaybackService : MediaLibraryService() {
 
     private fun saveResumePoint(player: Player) {
         if (player.mediaItemCount == 0) return
-        settings.putInt(SettingsStore.RESUME_INDEX, player.currentMediaItemIndex)
+        settings.putString(SettingsStore.RESUME_SONG_ID, player.currentMediaItem?.mediaId.orEmpty())
         settings.putLong(SettingsStore.RESUME_POSITION_MS, player.currentPosition)
     }
 
@@ -205,17 +223,11 @@ class MeroPlaybackService : MediaLibraryService() {
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = serviceScope.future {
-            val songs = library.queue.first()
             // Failing the future is how Media3 is told there is nothing to
             // resume; returning an empty list puts the player into a state it
             // cannot play out of.
-            if (songs.isEmpty()) error("No queue to resume")
-            val index = settings.int(SettingsStore.RESUME_INDEX, 0).coerceIn(0, songs.lastIndex)
-            MediaSession.MediaItemsWithStartPosition(
-                songs.map(::mediaItemFor),
-                index,
-                settings.long(SettingsStore.RESUME_POSITION_MS, 0L),
-            )
+            val resume = resumeQueue(library, settings) ?: error("No queue to resume")
+            MediaSession.MediaItemsWithStartPosition(resume.songs.map(::mediaItemFor), 0, resume.positionMs)
         }
 
         override fun onGetLibraryRoot(
@@ -365,14 +377,8 @@ class MeroPlaybackService : MediaLibraryService() {
      */
     private suspend fun playFromVoice(query: String): MediaSession.MediaItemsWithStartPosition {
         if (query.isBlank()) {
-            val queue = library.queue.first()
-            if (queue.isNotEmpty()) {
-                val index = settings.int(SettingsStore.RESUME_INDEX, 0).coerceIn(0, queue.lastIndex)
-                return MediaSession.MediaItemsWithStartPosition(
-                    queue.map(::mediaItemFor),
-                    index,
-                    settings.long(SettingsStore.RESUME_POSITION_MS, 0L),
-                )
+            resumeQueue(library, settings)?.let { resume ->
+                return MediaSession.MediaItemsWithStartPosition(resume.songs.map(::mediaItemFor), 0, resume.positionMs)
             }
             val liked = library.liked.first().shuffled()
             if (liked.isEmpty()) error("Nothing saved to play yet")

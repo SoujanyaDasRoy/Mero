@@ -272,6 +272,8 @@ fun PlaylistDetailScreen(
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
     onRemove: (Song) -> Unit,
+    /** The song menu, so a playlist song can be queued, liked or shared like any other. */
+    onSongMore: ((Song) -> Unit)? = null,
     onRename: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onPickCover: () -> Unit,
@@ -507,12 +509,15 @@ fun PlaylistDetailScreen(
             }
 
             items(songs, key = { it.id }) { song ->
+                com.mero.ui.components.SongGestures(
+                    song = song,
+                    onClick = { onPlay(song) },
+                    onMore = onSongMore?.let { more -> { more(song) } },
+                    height = 64.dp,
+                    modifier = Modifier.padding(start = 16.dp, end = 8.dp),
+                ) {
                 Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .clickable { onPlay(song) }
-                        .padding(start = 16.dp, end = 8.dp),
+                    Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
@@ -541,6 +546,12 @@ fun PlaylistDetailScreen(
                             tint = scheme.onSurfaceVariant,
                         )
                     }
+                    if (onSongMore != null) {
+                        IconButton(onClick = { onSongMore(song) }) {
+                            Icon(Icons.Rounded.MoreVert, "More", tint = scheme.onSurfaceVariant)
+                        }
+                    }
+                }
                 }
             }
         }

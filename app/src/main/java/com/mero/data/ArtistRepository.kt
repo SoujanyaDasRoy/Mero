@@ -73,7 +73,10 @@ class ArtistRepository {
         val items = mutableListOf<com.zionhuang.innertube.models.YTItem>()
         var page: ArtistItemsPage? = YouTube.artistItems(endpoint).getOrNull()
         var count = 0
-        while (page != null && count++ < 20) {
+        // A few pages, not twenty: an artist with hundreds of singles made the
+        // page crawl for ten seconds before showing anything, for lists that
+        // are collapsed to their first few rows anyway.
+        while (page != null && count++ < MAX_SECTION_PAGES) {
             items += page.items
             page = page.continuation?.let { YouTube.artistItemsContinuation(it).getOrNull() }?.let {
                 ArtistItemsPage(page.title, it.items, it.continuation)
@@ -84,5 +87,6 @@ class ArtistRepository {
 
     private companion object {
         const val MAX_PLAYLIST_PAGES = 10
+        const val MAX_SECTION_PAGES = 3
     }
 }

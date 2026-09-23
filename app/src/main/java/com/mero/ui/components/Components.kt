@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -183,27 +185,27 @@ val LocalSongSwipeActions = compositionLocalOf<SongSwipeActions?> { null }
 private val SWIPE_ACTION_DISTANCE = 96.dp
 
 /**
- * 64dp browse/search row.
+ * The gestures every song row shares, around whatever the row draws.
  *
- * On a real song (one with a menu) it also takes gestures: long-press opens
- * the menu, swipe right plays it next, swipe left likes or unlikes it. The
- * action shows under the finger as the row moves, and it springs back either
- * way; nothing is removed from a list by swiping it.
+ * Long-press opens the song's menu; swipe right plays it next; swipe left
+ * likes or unlikes it. The action shows under the finger as the row moves,
+ * a haptic tick marks the point where letting go counts, and the row always
+ * springs back — nothing is removed from a list by swiping it. Without a
+ * menu ([onMore] null) there are no gestures: that is how an album or artist
+ * reusing a song row is told apart from a song.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SongRow(
+fun SongGestures(
     song: Song,
     onClick: () -> Unit,
+    onMore: (() -> Unit)?,
+    height: Dp,
     modifier: Modifier = Modifier,
-    subtitle: String = song.artist,
-    highlighted: Boolean = false,
-    onMore: (() -> Unit)? = null,
+    content: @Composable RowScope.() -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     val haptics = LocalHapticFeedback.current
-    // Albums and artists in search results reuse this row with no menu; a
-    // swipe to "play next" an album would do nothing sensible.
     val swipe = if (onMore != null) LocalSongSwipeActions.current else null
     val scope = rememberCoroutineScope()
     val offset = remember { Animatable(0f) }
@@ -213,7 +215,7 @@ fun SongRow(
     Box(
         modifier
             .fillMaxWidth()
-            .height(64.dp),
+            .height(height),
     ) {
         if (swipe != null && offset.value != 0f) {
             val right = offset.value > 0
@@ -282,8 +284,27 @@ fun SongRow(
                             more()
                         }
                     },
-                )
-                .padding(start = 16.dp, end = 8.dp),
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+    }
+}
+
+/** 64dp browse/search row, with [SongGestures] when it is a real song. */
+@Composable
+fun SongRow(
+    song: Song,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String = song.artist,
+    highlighted: Boolean = false,
+    onMore: (() -> Unit)? = null,
+) {
+    val scheme = MaterialTheme.colorScheme
+    SongGestures(song, onClick, onMore, height = 64.dp, modifier = modifier) {
+        Row(
+            Modifier.padding(start = 16.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {

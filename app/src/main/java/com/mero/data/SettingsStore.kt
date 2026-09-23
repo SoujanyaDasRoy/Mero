@@ -131,6 +131,8 @@ class SettingsStore(context: Context) {
         const val PLAYBACK_SPEED = "speed"
         const val RESUME_INDEX = "resume_index"
         const val RESUME_POSITION_MS = "resume_position_ms"
+        /** The track that was playing; the saved queue holds only what comes after it. */
+        const val RESUME_SONG_ID = "resume_song_id"
         const val STREAM_CODEC = "stream_codec"
         const val DOWNLOAD_CODEC = "download_codec"
     }

@@ -31,6 +31,8 @@ data class ResolvedStream(
     val headers: Map<String, String>,
     val bitrateKbps: Int,
     val codec: String,
+    /** Which track this is, so the UI never labels one song with another's format. */
+    val videoId: String = "",
 ) {
     /** e.g. "Opus · 160 kbps" — shown in Now Playing. */
     val label: String get() = "$codec · $bitrateKbps kbps"
@@ -126,6 +128,7 @@ class StreamRepository(private val api: PlayerApi) {
                             headers = chosen.headers,
                             bitrateKbps = chosen.bitrate / 1000,
                             codec = chosen.codecLabel(),
+                            videoId = videoId,
                         ).also { cache[key] = Cached(it, System.currentTimeMillis()) }
                     }
                 }

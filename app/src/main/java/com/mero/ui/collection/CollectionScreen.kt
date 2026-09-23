@@ -179,13 +179,12 @@ fun CollectionScreen(
                 itemsIndexed(songs, key = { _, song -> song.id }) { index, song ->
                     val position = index + 1
                     val playing = song.id == nowPlayingId
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(60.dp)
-                            .clickable { onPlayFrom(song) }
-                            .padding(start = 16.dp, end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    com.mero.ui.components.SongGestures(
+                        song = song,
+                        onClick = { onPlayFrom(song) },
+                        onMore = { onSongMore(song) },
+                        height = 60.dp,
+                        modifier = Modifier.padding(start = 16.dp, end = 4.dp),
                     ) {
                         // The number, not another copy of the cover: every
                         // track on an album shares one, so a column of
