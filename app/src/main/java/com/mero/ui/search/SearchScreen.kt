@@ -38,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Podcasts
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
@@ -101,6 +102,8 @@ fun SearchScreen(
     onPodcastCategory: (String) -> Unit,
     error: String?,
     onRetry: () -> Unit,
+    /** Opens speech-to-text; null when the phone has no speech recogniser. */
+    onVoice: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -127,7 +130,7 @@ fun SearchScreen(
                 Box(Modifier.weight(1f)) {
                     if (query.isEmpty()) {
                         Text(
-                            "Songs, artists, albums, podcasts",
+                            "Songs, artists, lyrics, podcasts",
                             fontSize = 16.sp,
                             color = scheme.onSurfaceVariant,
                         )
@@ -151,6 +154,16 @@ fun SearchScreen(
                         Icon(
                             Icons.Rounded.Close,
                             contentDescription = "Clear",
+                            tint = scheme.onSurfaceVariant,
+                        )
+                    }
+                } else if (onVoice != null) {
+                    // Say a song, an artist or a line of the lyrics; the words
+                    // go into the same search as typing them would.
+                    IconButton(onClick = onVoice, modifier = Modifier.size(40.dp)) {
+                        Icon(
+                            Icons.Rounded.Mic,
+                            contentDescription = "Search by voice",
                             tint = scheme.onSurfaceVariant,
                         )
                     }
@@ -233,7 +246,10 @@ fun SearchScreen(
                     }
                 }
 
-                LaunchedEffect(shouldLoadMore.value) {
+                // Keyed on the result count too: a page that adds a few rows can
+                // leave "near the end" true, and keyed on that alone nothing
+                // would ever ask for the next page.
+                LaunchedEffect(shouldLoadMore.value, results.size, hasMoreResults, isLoadingMore) {
                     if (shouldLoadMore.value && hasMoreResults && !isLoadingMore && !isSearching) {
                         onLoadMore()
                     }

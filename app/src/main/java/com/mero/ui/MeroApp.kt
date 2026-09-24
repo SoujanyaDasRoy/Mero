@@ -1256,6 +1256,9 @@ private fun MeroContent(
 
                     var results by remember { mutableStateOf<List<SearchItem>>(emptyList()) }
                     var continuationToken by remember { mutableStateOf<String?>(null) }
+                    // Songs whose radio has already been added after YouTube's
+                    // own pages ran out (see nextRadioSeed).
+                    var radioSeeds by remember { mutableStateOf(emptySet<String>()) }
                     var isSearching by remember { mutableStateOf(false) }
                     var isLoadingMore by remember { mutableStateOf(false) }
                     var searchError by remember { mutableStateOf<String?>(null) }
@@ -1279,6 +1282,7 @@ private fun MeroContent(
                     // Active live search as the user writes ("since writing")
                     LaunchedEffect(query, searchTab, searchAttempt) {
                         val trimmed = query.trim()
+                        radioSeeds = emptySet()
                         if (trimmed.isBlank()) {
                             results = emptyList()
                             continuationToken = null
@@ -1329,9 +1333,35 @@ private fun MeroContent(
                     }
 
                     fun loadMoreResults() {
-                        val token = continuationToken ?: return
                         val trimmed = query.trim()
+                        val tab = searchTab
                         if (trimmed.isBlank() || isLoadingMore || isSearching) return
+                        // A page that arrives after the search changed belongs to
+                        // the old search; appending it mixed two searches together.
+                        fun stillCurrent() = query.trim() == trimmed && searchTab == tab
+                        val token = continuationToken
+                        if (token == null) {
+                            // YouTube's pages are done. Songs keep going with what
+                            // is like the results, one result's radio at a time.
+                            if (tab != "Songs") return
+                            isLoadingMore = true
+                            scope.launch {
+                                var tries = 0
+                                while (tries++ < 4 && stillCurrent()) {
+                                    val seed = com.mero.ui.search.nextRadioSeed(results, radioSeeds) ?: break
+                                    radioSeeds = radioSeeds + seed.id
+                                    val more = container.radioRepository.radioFor(seed.id).getOrNull().orEmpty()
+                                    if (!stillCurrent()) break
+                                    val (merged, added) = com.mero.ui.search.appendSongs(results, more)
+                                    results = merged
+                                    // A radio of songs already shown adds nothing;
+                                    // try the next result rather than stop.
+                                    if (added > 0) break
+                                }
+                                isLoadingMore = false
+                            }
+                            return
+                        }
                         isLoadingMore = true
                         scope.launch {
                             container.searchRepository.searchItemsPage(
@@ -1345,16 +1375,47 @@ private fun MeroContent(
                                 continuation = token,
                             ).fold(
                                 onSuccess = { page ->
-                                    val existingIds = results.map { it.id }.toSet()
-                                    val newItems = page.items.filter { it.id !in existingIds }
-                                    results = results + newItems
-                                    continuationToken = page.continuation
+                                    if (stillCurrent()) {
+                                        val existingIds = results.map { it.id }.toSet()
+                                        val newItems = page.items.filter { it.id !in existingIds }
+                                        results = results + newItems
+                                        continuationToken = page.continuation
+                                    }
                                     isLoadingMore = false
                                 },
                                 onFailure = {
                                     isLoadingMore = false
                                 },
                             )
+                        }
+                    }
+
+                    // Speech-to-text from whatever recogniser the phone has; a
+                    // song, an artist or a line of lyrics all work, because the
+                    // search behind it already matches lyrics.
+                    val voiceIntent = remember {
+                        Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                            .putExtra(
+                                android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                            )
+                            .putExtra(
+                                android.speech.RecognizerIntent.EXTRA_PROMPT,
+                                "Say a song, an artist or a line of the lyrics",
+                            )
+                    }
+                    val canListen = remember { voiceIntent.resolveActivity(context.packageManager) != null }
+                    val voiceLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.StartActivityForResult(),
+                    ) { result ->
+                        val heard = result.data
+                            ?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)
+                            ?.firstOrNull()
+                            ?.trim()
+                        if (!heard.isNullOrEmpty()) {
+                            query = heard
+                            lastSearchAt = System.currentTimeMillis()
+                            rememberSearch(heard)
                         }
                     }
 
@@ -1375,7 +1436,8 @@ private fun MeroContent(
                         results = results,
                         isSearching = isSearching,
                         isLoadingMore = isLoadingMore,
-                        hasMoreResults = continuationToken != null,
+                        hasMoreResults = continuationToken != null ||
+                            (searchTab == "Songs" && com.mero.ui.search.nextRadioSeed(results, radioSeeds) != null),
                         onLoadMore = { loadMoreResults() },
                         nowPlayingId = current?.id,
                         onResultClick = { item ->
@@ -1439,6 +1501,11 @@ private fun MeroContent(
                         },
                         error = searchError,
                         onRetry = { searchAttempt++ },
+                        onVoice = if (canListen) {
+                            { runCatching { voiceLauncher.launch(voiceIntent) } }
+                        } else {
+                            null
+                        },
                     )
                 }
 

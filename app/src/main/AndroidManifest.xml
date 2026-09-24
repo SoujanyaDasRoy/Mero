@@ -15,6 +15,14 @@
          installer silently declines to open. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Lets the search bar's microphone check that a speech recogniser exists
+         (Android 11+ hides other apps' activities unless asked for like this). -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
+
     <application
         android:name=".MeroApplication"
         android:allowBackup="true"
