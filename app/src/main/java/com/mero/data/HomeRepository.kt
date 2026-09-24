@@ -203,3 +203,63 @@ class HomeRepository {
         }
     }
 }
+
+/**
+ * A song appears once on Home. The same track in "On repeat", "More like…"
+ * and an artist shelf reads as a feed that has run out of ideas. The first
+ * shelf to have a song keeps it; a shelf left with fewer than four is dropped.
+ */
+fun dedupeShelves(sections: List<HomeSection>, alreadyShown: Set<String>): List<HomeSection> {
+    val seen = HashSet(alreadyShown)
+    return sections.mapNotNull { section ->
+        val fresh = section.songs.filter { seen.add(it.id) }
+        if (fresh.size < MIN_SHELF_SIZE) null else section.copy(songs = fresh)
+    }
+}
+
+/**
+ * The genre shelves in the order this listener is likeliest to want them:
+ * shelves whose songs are by artists they like and play come first; among
+ * equals the order stands. A Hindi listener's feed should not open on
+ * Malayalam hits just because that seed came up first.
+ */
+fun rankShelvesByTaste(sections: List<HomeSection>, artistAffinity: Map<String, Int>): List<HomeSection> {
+    if (artistAffinity.isEmpty()) return sections
+    return sections
+        .withIndex()
+        .sortedWith(
+            compareByDescending<IndexedValue<HomeSection>> { (_, s) ->
+                s.songs.sumOf { artistAffinity[primaryArtist(it)] ?: 0 }
+            }.thenBy { it.index },
+        )
+        .map { it.value }
+}
+
+/** A "Made for you" mix: one artist this listener loves, and where to start. */
+data class MixSeed(val artist: String, val seed: Song)
+
+/**
+ * One mix per favourite artist, most-loved first, each starting from that
+ * artist's song highest in [ranked] (most played, then liked). Only YouTube
+ * songs: a podcast show or a phone file has no radio to build a mix from.
+ */
+fun mixSeeds(ranked: List<Song>, limit: Int = 4): List<MixSeed> {
+    val music = ranked.filter { it.isYouTube }
+    return topArtists(music, limit).mapNotNull { name ->
+        music.firstOrNull { primaryArtist(it) == name.lowercase() }?.let { MixSeed(name, it) }
+    }
+}
+
+/** Quick moods on Home. Each is a song search, reordered for this listener. */
+enum class Mood(val label: String, val query: String) {
+    Romance("Romance", "romantic songs"),
+    Chill("Chill", "chill songs"),
+    Party("Party", "party songs"),
+    Workout("Workout", "workout songs"),
+    Focus("Focus", "focus instrumental music"),
+    Sad("Sad", "sad songs"),
+    Devotional("Devotional", "devotional songs"),
+    Retro("Retro", "old is gold retro songs"),
+}
+
+private const val MIN_SHELF_SIZE = 4

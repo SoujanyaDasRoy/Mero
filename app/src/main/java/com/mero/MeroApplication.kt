@@ -197,6 +197,7 @@ class MeroApplication : Application(), SingletonImageLoader.Factory {
         CoroutineScope(Dispatchers.IO).launch { container.ytDlpApi.prepare() }
         container.outputRoute.start()
         com.mero.data.SongReminderWorker.schedule(this)
+        com.mero.data.UpdateCheckWorker.schedule(this)
     }
 
     /**

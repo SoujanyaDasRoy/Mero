@@ -83,12 +83,20 @@ fun HomeScreen(
     updateAvailableVersion: String?,
     onUpdateClick: () -> Unit,
     contentPadding: PaddingValues,
+    /** "Made for you": one mix per artist this listener loves. */
+    mixes: List<com.mero.data.MixSeed> = emptyList(),
+    onMix: (com.mero.data.MixSeed) -> Unit = {},
+    onMood: (com.mero.data.Mood) -> Unit = {},
     /** The user's own photo icon, when they have made one (Settings > App icon). */
     customLogo: androidx.compose.ui.graphics.ImageBitmap? = null,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
     val listState = rememberLazyListState()
+    // Each song once: what "Jump back in" shows is not repeated below it.
+    val shelves = remember(sections, recentlyPlayed) {
+        com.mero.data.dedupeShelves(sections, recentlyPlayed.take(6).mapTo(HashSet()) { it.id })
+    }
 
     // The feed's own loading flag only covers an empty screen, so a pull keeps
     // its own: on until new shelves arrive, and never stuck if none do.
@@ -172,12 +180,16 @@ fun HomeScreen(
         }
 
         when {
-            loading && sections.isEmpty() -> Box(
+            // Only when there is nothing of this listener's own to show. Moods,
+            // "Jump back in" and the mixes are on the phone; hiding them behind
+            // a spinner while YouTube answers made Home a blank page, and an
+            // error page when offline.
+            loading && sections.isEmpty() && recentlyPlayed.isEmpty() -> Box(
                 Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator(color = scheme.primary) }
 
-            error != null && sections.isEmpty() -> Box(
+            error != null && sections.isEmpty() && recentlyPlayed.isEmpty() -> Box(
                 Modifier
                     .fillMaxSize()
                     .clickable(onClick = onRetry),
@@ -213,6 +225,8 @@ fun HomeScreen(
                     }
                 }
 
+                item(key = "moods") { MoodPills(onMood) }
+
                 if (recentlyPlayed.isNotEmpty()) {
                     item(key = "jump-back-in") {
                         QuickPicks(
@@ -222,7 +236,31 @@ fun HomeScreen(
                     }
                 }
 
-                sections.forEachIndexed { index, section ->
+                if (mixes.isNotEmpty()) {
+                    item(key = "made-for-you") { MadeForYou(mixes, onMix) }
+                }
+
+                if (sections.isEmpty() && loading) {
+                    item(key = "shelves-loading") {
+                        Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(Modifier.size(28.dp), color = scheme.primary, strokeWidth = 2.dp)
+                        }
+                    }
+                } else if (sections.isEmpty() && error != null) {
+                    item(key = "shelves-error") {
+                        Text(
+                            "Couldn't load more music right now. Tap to try again.",
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onRetry)
+                                .padding(24.dp),
+                            color = scheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+
+                shelves.forEachIndexed { index, section ->
                     item(key = section.title) {
                         if (index == 0) {
                             FeatureShelf(section, onSongClick)
@@ -302,6 +340,95 @@ private fun QuickPicks(songs: List<Song>, onSongClick: (Song) -> Unit) {
             }
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+/**
+ * One tap to a mood. Each starts a mix of songs for that mood, reordered for
+ * this listener's taste, so "Romance" means their kind of romance.
+ */
+@Composable
+private fun MoodPills(onMood: (com.mero.data.Mood) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        Modifier
+            .horizontalScroll(rememberScrollState())
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        com.mero.data.Mood.entries.forEach { mood ->
+            Text(
+                mood.label,
+                Modifier
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(scheme.surfaceContainerHigh)
+                    .clickable { onMood(mood) }
+                    .padding(horizontal = 16.dp, vertical = 9.dp),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+    }
+}
+
+/**
+ * "Made for you": a mix per artist this listener loves. Each starts from
+ * that artist's most-played song and continues with similar music, ordered
+ * by the taste engine. Built from this phone's history, so it needs no
+ * loading and no account.
+ */
+@Composable
+private fun MadeForYou(mixes: List<com.mero.data.MixSeed>, onMix: (com.mero.data.MixSeed) -> Unit) {
+    Column(Modifier.padding(top = 4.dp)) {
+        ShelfTitle("Made for you", subtitle = "Mixes from what you love")
+        Row(
+            Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            mixes.forEach { mix ->
+                Box(
+                    Modifier
+                        .size(160.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable { onMix(mix) },
+                ) {
+                    Artwork(mix.seed.thumbnailUrl, size = 160, radius = 20)
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(
+                                androidx.compose.ui.graphics.Brush.verticalGradient(
+                                    0.35f to androidx.compose.ui.graphics.Color.Transparent,
+                                    1f to androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.8f),
+                                ),
+                            ),
+                    )
+                    Column(
+                        Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(12.dp),
+                    ) {
+                        Text(
+                            "MIX",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
+                        )
+                        Text(
+                            mix.artist,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = androidx.compose.ui.graphics.Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -149,6 +149,9 @@ fun MeroApp(
     /** The id of a song a tapped reminder asked to play, or null. */
     remindedSong: kotlinx.coroutines.flow.StateFlow<String?>? = null,
     onRemindedHandled: () -> Unit = {},
+    /** True when the update notification was tapped. */
+    openUpdate: kotlinx.coroutines.flow.StateFlow<Boolean>? = null,
+    onOpenUpdateHandled: () -> Unit = {},
 ) {
     val appContext = LocalContext.current.applicationContext
     // UI-layer state only. Replaced by PlayerConnection over a MediaController in
@@ -227,6 +230,9 @@ fun MeroApp(
                 onOpenedHandled = onOpenedHandled,
                 remindedSong = remindedSong,
                 onRemindedHandled = onRemindedHandled,
+                openUpdate = openUpdate,
+                onOpenUpdateHandled = onOpenUpdateHandled,
+                nameDialogOpen = askingName || !settings.boolean(SettingsStore.ASKED_NAME, false),
                 accent = accent,
                 displayName = displayName,
                 onEditName = { askingName = true },
@@ -266,6 +272,10 @@ private fun MeroContent(
     onOpenedHandled: () -> Unit,
     remindedSong: kotlinx.coroutines.flow.StateFlow<String?>?,
     onRemindedHandled: () -> Unit,
+    openUpdate: kotlinx.coroutines.flow.StateFlow<Boolean>?,
+    onOpenUpdateHandled: () -> Unit,
+    /** The first-launch name question is on screen; hold other prompts. */
+    nameDialogOpen: Boolean,
     accent: MeroAccent,
     displayName: String,
     onEditName: () -> Unit,
@@ -1005,6 +1015,16 @@ private fun MeroContent(
         onOpenedHandled()
     }
 
+    // The update notification: straight to Settings, where the update card
+    // sits at the top. Cleared last, for the same reason as openedAudio.
+    val wantsUpdate = openUpdate?.collectAsStateWithLifecycle()?.value == true
+    LaunchedEffect(wantsUpdate) {
+        if (!wantsUpdate) return@LaunchedEffect
+        expanded = false
+        openTab(SettingsRoute)
+        onOpenUpdateHandled()
+    }
+
     // A tapped reminder: play that song, with the rest of the liked songs after
     // it when it is one of them, so one tap starts an evening rather than a
     // single track.
@@ -1021,14 +1041,16 @@ private fun MeroContent(
         onRemindedHandled()
     }
 
-    // Asked for when it first means something: the first song someone likes,
-    // which is also what reminders are about. On Android 13+ nothing Mero
-    // posts — reminders or the update notice — shows without it.
+    // On Android 13+ nothing Mero posts — the update notice, reminders — shows
+    // without this. It used to be asked on the first liked song, so someone who
+    // never liked anything never heard about an update. Now: once, at setup,
+    // after the name question has closed (never two dialogs at once), and on
+    // the next launch for anyone already past setup.
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) {}
-    LaunchedEffect(likedSongs.isNotEmpty()) {
-        if (likedSongs.isNotEmpty() &&
+    LaunchedEffect(nameDialogOpen) {
+        if (!nameDialogOpen &&
             android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
             !container.settings.boolean(SettingsStore.ASKED_NOTIFICATIONS, false)
         ) {
@@ -1253,8 +1275,34 @@ private fun MeroContent(
                     .padding(bottom = scaffoldPadding.calculateBottomPadding()),
             ) {
                 composable<Home> {
+                    // Genre shelves ordered by the artists this listener likes
+                    // and plays; mixes from the same history.
+                    val affinity = remember(mostPlayed, likedSongs) {
+                        HashMap<String, Int>().apply {
+                            likedSongs.forEach { merge(com.mero.data.primaryArtist(it), 2, Int::plus) }
+                            mostPlayed.forEach { merge(com.mero.data.primaryArtist(it), 1, Int::plus) }
+                        }
+                    }
+                    val mixes = remember(mostPlayed, likedSongs) {
+                        com.mero.data.mixSeeds(mostPlayed + likedSongs)
+                    }
                     HomeScreen(
-                        sections = personalSections + homeSections,
+                        sections = personalSections + com.mero.data.rankShelvesByTaste(homeSections, affinity),
+                        mixes = mixes,
+                        onMix = { mix -> playWithSimilar(mix.seed, mix.artist + " Mix") },
+                        onMood = { mood ->
+                            say("Starting a " + mood.label.lowercase() + " mix")
+                            scope.launch {
+                                container.searchRepository.search(mood.query).fold(
+                                    onSuccess = { found ->
+                                        val ranked = com.mero.data.rankForTaste(found, library.taste())
+                                        ranked.firstOrNull()?.let { playFrom(it, ranked, mood.label) }
+                                            ?: say("Couldn't find " + mood.label.lowercase() + " songs right now")
+                                    },
+                                    onFailure = { say("Couldn't reach YouTube. Check your connection and try again.") },
+                                )
+                            }
+                        },
                         loading = homeLoading,
                         error = homeError,
                         onRetry = { loadHome() },

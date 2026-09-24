@@ -23,6 +23,9 @@ class MainActivity : ComponentActivity() {
     /** A song a tapped reminder asked to play, until the UI has played it. */
     private val remindedSong = MutableStateFlow<String?>(null)
 
+    /** Set when the update notification was tapped, until Settings is shown. */
+    private val openUpdate = MutableStateFlow(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         enableEdgeToEdge()
@@ -32,6 +35,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             openedAudio.value = audioFrom(intent)
             remindedSong.value = remindedFrom(intent)
+            openUpdate.value = wantsUpdate(intent)
             playFromSearch(intent)
         }
         setContent {
@@ -40,6 +44,8 @@ class MainActivity : ComponentActivity() {
                 onOpenedHandled = { openedAudio.value = null },
                 remindedSong = remindedSong,
                 onRemindedHandled = { remindedSong.value = null },
+                openUpdate = openUpdate,
+                onOpenUpdateHandled = { openUpdate.value = false },
             )
         }
     }
@@ -50,6 +56,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         audioFrom(intent)?.let { openedAudio.value = it }
         remindedFrom(intent)?.let { remindedSong.value = it }
+        if (wantsUpdate(intent)) openUpdate.value = true
         playFromSearch(intent)
     }
 
@@ -90,6 +97,9 @@ class MainActivity : ComponentActivity() {
         (application as MeroApplication).container.settings
             .putLong(com.mero.data.SettingsStore.LAST_OPENED, System.currentTimeMillis())
     }
+
+    private fun wantsUpdate(intent: Intent?): Boolean =
+        intent?.getBooleanExtra(com.mero.data.EXTRA_OPEN_UPDATE, false) == true
 
     private fun remindedFrom(intent: Intent?): String? =
         intent?.getStringExtra(com.mero.data.SongReminderWorker.EXTRA_PLAY_SONG)?.takeIf { it.isNotBlank() }

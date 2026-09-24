@@ -273,17 +273,35 @@ class UpdateRepository(
                     NotificationManager.IMPORTANCE_DEFAULT,
                 ).apply { description = "Tells you when a new version of Mero is out" },
             )
+            // Straight to the update card in Settings, not the front of the app
+            // with a banner to find.
             val open = PendingIntent.getActivity(
                 context,
                 0,
-                context.packageManager.getLaunchIntentForPackage(context.packageName)
-                    ?.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                Intent()
+                    .setClassName(context, "com.mero.MainActivity")
+                    .putExtra(EXTRA_OPEN_UPDATE, true)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
+            val headline = updateHeadline(release.notes)
             val notification = Notification.Builder(context, UPDATE_CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                .setContentTitle("Mero " + release.versionName + " is out")
-                .setContentText("Open Mero to download and install it")
+                .setContentTitle("Mero " + release.versionName + " is here 🎉")
+                .setContentText(headline ?: "Tap to update. Your music and playlists stay as they are.")
+                .setStyle(
+                    Notification.BigTextStyle().bigText(
+                        (headline?.let { it + "\n\n" } ?: "") +
+                            "Tap Update to get it. Your music, playlists and downloads stay as they are.",
+                    ),
+                )
+                .addAction(
+                    Notification.Action.Builder(
+                        android.graphics.drawable.Icon.createWithResource(context, android.R.drawable.stat_sys_download),
+                        "Update",
+                        open,
+                    ).build(),
+                )
                 .setAutoCancel(true)
                 .setContentIntent(open)
                 .build()
@@ -486,3 +504,58 @@ private fun versionParts(version: String): List<Int> =
         .takeWhile { it.isDigit() || it == '.' }
         .split(".")
         .mapNotNull { it.toIntOrNull() }
+
+/**
+ * The first real line of the release notes, as plain words for a
+ * notification: markdown bold, links and headings removed, and cut short
+ * before it runs past what a notification shows.
+ */
+internal fun updateHeadline(notes: String): String? {
+    val line = notes.lineSequence()
+        .map { it.trim() }
+        .firstOrNull { it.isNotEmpty() && !it.startsWith("#") && !it.startsWith("---") }
+        ?: return null
+    val plain = line
+        .replace(Regex("""\[([^\]]+)]\([^)]*\)"""), "$1")
+        .replace("**", "")
+        .replace("`", "")
+        .trim()
+    if (plain.isEmpty()) return null
+    return if (plain.length <= 140) plain else plain.take(137).trimEnd() + "…"
+}
+
+/**
+ * Checks for a new Mero twice a day with the app closed. Without it the
+ * notification only ever came from opening Mero — which is exactly what the
+ * people who most need an update are not doing. Announces once per version
+ * (UpdateRepository.announce); otherwise silent.
+ */
+class UpdateCheckWorker(context: Context, params: androidx.work.WorkerParameters) :
+    androidx.work.CoroutineWorker(context, params) {
+
+    override suspend fun doWork(): Result {
+        (applicationContext as com.mero.MeroApplication).container.updateRepository.check()
+        return Result.success()
+    }
+
+    companion object {
+        fun schedule(context: Context) {
+            runCatching {
+                androidx.work.WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                    "update-check",
+                    androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                    androidx.work.PeriodicWorkRequestBuilder<UpdateCheckWorker>(12, java.util.concurrent.TimeUnit.HOURS)
+                        .setConstraints(
+                            androidx.work.Constraints.Builder()
+                                .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED)
+                                .build(),
+                        )
+                        .build(),
+                )
+            }.onFailure { android.util.Log.w("MeroUpdates", "could not schedule update checks", it) }
+        }
+    }
+}
+
+/** Set on the update notification's intent: open Settings at the update card. */
+const val EXTRA_OPEN_UPDATE = "com.mero.OPEN_UPDATE"
