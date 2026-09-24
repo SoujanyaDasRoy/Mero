@@ -38,7 +38,11 @@ Your music in the car: **Recently played, Liked songs, Playlists, On this phone 
 The first button under the controls on Now Playing shows where your music is going — *This phone*, your earbuds, a speaker — and tapping it lets you switch.
 
 ### 🎨 Your icon, your way
-**Settings › App icon** has six colours: Classic, Midnight, Paper, Coral, Ocean and Mint. Or tap **Photo** to use any picture: frame it like a profile picture and it goes on your home screen. It also replaces the logo at the top of Home.
+**Settings › App icon** has six colours: Classic, Midnight, Paper, Coral, Ocean and Mint.
+
+Or tap **Photo** to use any picture of your own. Frame it like a profile picture, tap **Use as icon**, and it becomes **Mero's icon on your home screen** and **the logo inside the app**.
+
+> On Xiaomi, Redmi, POCO, Oppo, Vivo and Realme phones, allow **Home screen shortcuts** for Mero first (Mero's app settings › Permissions). Mero tells you if your phone blocked it and takes you to the right screen. The app drawer always keeps one of the six built-in icons, because Android doesn't let any app put a photo there.
 
 ### 🎤 Lyrics that keep time
 - **Many more songs have lyrics.** Mero now looks harder, and falls back to YouTube Music's own lyrics when it has to.

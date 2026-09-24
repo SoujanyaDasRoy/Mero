@@ -13,6 +13,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -207,6 +209,43 @@ private fun CustomIconTile() {
     var editing by remember { mutableStateOf<Bitmap?>(null) }
     var framing by remember { mutableStateOf(CustomIcon.Framing()) }
     var message by remember { mutableStateOf<String?>(null) }
+    var blocked by remember { mutableStateOf(false) }
+
+    // Did the icon actually reach the home screen? Android does not say. On a
+    // Pixel the launcher shows an "Add to home screen" sheet, which pauses
+    // Mero; on Xiaomi, Oppo, Vivo and Realme phones that have not been given
+    // the "Home screen shortcuts" permission, nothing appears at all and the
+    // request vanishes — which is how a photo ended up as Mero's logo and
+    // nowhere else. So: if Mero is never paused within a few seconds and the
+    // icon is not there, the phone blocked it; if it was paused, look again on
+    // return.
+    var waitingForPin by remember { mutableStateOf(false) }
+    var sheetShown by remember { mutableStateOf(false) }
+    val lifecycle = androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (!waitingForPin) return@LifecycleEventObserver
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> sheetShown = true
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> if (sheetShown) {
+                    waitingForPin = false
+                    // Declined on the sheet: their choice, nothing to say.
+                    if (CustomIcon.isPinned(context)) message = ADDED_MESSAGE
+                }
+                else -> Unit
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(waitingForPin) {
+        if (!waitingForPin) return@LaunchedEffect
+        kotlinx.coroutines.delay(3_000)
+        if (waitingForPin && !sheetShown) {
+            waitingForPin = false
+            if (CustomIcon.isPinned(context)) message = ADDED_MESSAGE else blocked = true
+        }
+    }
 
     // The system photo picker: no storage permission, and only the one photo
     // chosen is ever visible to Mero.
@@ -279,12 +318,14 @@ private fun CustomIconTile() {
             },
             onCancel = { editing = null },
             onSave = { rendered, framed ->
-                val shown = CustomIcon.apply(context, source, rendered, framed)
                 editing = null
-                message = if (shown) {
-                    null
-                } else {
-                    "Saved as Mero's logo, but this home screen doesn't let apps add icons to it."
+                when (CustomIcon.apply(context, source, rendered, framed)) {
+                    CustomIcon.PinResult.Updated -> message = "Updated. Your photo is now Mero's icon on the home screen and its logo inside the app."
+                    CustomIcon.PinResult.Requested -> {
+                        sheetShown = false
+                        waitingForPin = true
+                    }
+                    CustomIcon.PinResult.Unsupported -> blocked = true
                 }
             },
         )
@@ -297,4 +338,36 @@ private fun CustomIconTile() {
             confirmButton = { TextButton(onClick = { message = null }) { Text("OK") } },
         )
     }
+
+    if (blocked) {
+        AlertDialog(
+            onDismissRequest = { blocked = false },
+            title = { Text("Your phone didn't add the icon") },
+            text = {
+                Text(
+                    "Your photo is Mero's logo inside the app, but the phone stopped it going on the home screen.\n\n" +
+                        "Xiaomi, Redmi, POCO, Oppo, Vivo and Realme phones block this until you allow it: open " +
+                        "Mero's settings, then Permissions (or Other permissions), and turn on " +
+                        "\u201cHome screen shortcuts\u201d. Then come back, tap your photo and Use as icon.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    blocked = false
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                .setData(android.net.Uri.parse("package:" + context.packageName))
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                }) { Text("Open settings") }
+            },
+            dismissButton = { TextButton(onClick = { blocked = false }) { Text("Not now") } },
+        )
+    }
 }
+
+private const val ADDED_MESSAGE =
+    "Done! Your photo is now Mero's icon on your home screen and its logo inside the app. " +
+        "Move it wherever you like. The app drawer keeps a built-in icon; Android doesn't let any app change that one to a photo."

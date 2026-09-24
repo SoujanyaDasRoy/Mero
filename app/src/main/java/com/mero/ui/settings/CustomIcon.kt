@@ -137,12 +137,27 @@ object CustomIcon {
         return out
     }
 
+    /** What happened to the home-screen icon when a photo was saved. */
+    enum class PinResult {
+        /** It was already there; its picture was changed in place. */
+        Updated,
+        /** The launcher was asked to add it. Whether it did is known only later. */
+        Requested,
+        /** This launcher cannot take icons from apps at all. */
+        Unsupported,
+    }
+
+    /** Whether the photo icon is on the home screen right now. */
+    fun isPinned(context: Context): Boolean = runCatching {
+        ShortcutManagerCompat.getShortcuts(context, ShortcutManagerCompat.FLAG_MATCH_PINNED)
+            .any { it.id == SHORTCUT_ID && it.isEnabled }
+    }.getOrDefault(false)
+
     /**
-     * Saves the icon and puts it on the home screen. If it is already there,
-     * its image is replaced in place; otherwise the launcher asks where to put
-     * it. Returns false when the launcher cannot pin shortcuts at all.
+     * Saves the icon, makes it Mero's logo, and puts it on the home screen: in
+     * place if it is already there, otherwise by asking the launcher to add it.
      */
-    fun apply(context: Context, source: Bitmap, icon: Bitmap, framing: Framing): Boolean {
+    fun apply(context: Context, source: Bitmap, icon: Bitmap, framing: Framing): PinResult {
         prefs(context).edit()
             .putFloat("scale", framing.scale).putFloat("x", framing.x).putFloat("y", framing.y)
             .apply()
@@ -167,9 +182,13 @@ object CustomIcon {
         }
         val pinned = ShortcutManagerCompat.getShortcuts(context, ShortcutManagerCompat.FLAG_MATCH_PINNED)
             .any { it.id == SHORTCUT_ID }
-        if (pinned) return ShortcutManagerCompat.updateShortcuts(context, listOf(shortcut))
-        if (!ShortcutManagerCompat.isRequestPinShortcutSupported(context)) return false
-        return ShortcutManagerCompat.requestPinShortcut(context, shortcut, null)
+        if (pinned && ShortcutManagerCompat.updateShortcuts(context, listOf(shortcut))) return PinResult.Updated
+        if (!ShortcutManagerCompat.isRequestPinShortcutSupported(context)) return PinResult.Unsupported
+        return if (ShortcutManagerCompat.requestPinShortcut(context, shortcut, null)) {
+            PinResult.Requested
+        } else {
+            PinResult.Unsupported
+        }
     }
 
     /**

@@ -127,7 +127,7 @@ All processing happens inside Mero, so it sounds the same on every phone.
 
 - Twelve accent colours, or **Material You** colours from your wallpaper (Android 12+)
 - System, light or dark theme, plus **pure black** for AMOLED screens
-- **Six app icons** — Classic, Midnight, Paper, Coral, Ocean, Mint — or **your own photo**, framed like a profile picture
+- **Six app icons** — Classic, Midnight, Paper, Coral, Ocean, Mint — or **your own photo**, framed like a profile picture, which becomes both Mero's home-screen icon and its logo inside the app
 - **Song reminders** — an occasional, quiet nudge about a favourite you haven't played lately. *Now and then* by default; *Daily* or *Off* in Settings
 
 ### Reliability
@@ -241,8 +241,10 @@ in [`docs/`](docs).
   OnePlus can be aggressive about it. Mero asks to be exempt from battery
   optimisation; on these phones, also allow **Autostart** / **Background activity**
   for Mero in the phone's own settings.
-- **A photo icon is a home-screen shortcut.** Android doesn't let apps change their
-  app-drawer icon to a picture, so the drawer keeps one of the six built-in icons.
+- **A photo icon goes on the home screen, not in the app drawer.** Android doesn't
+  let apps change their app-drawer icon to a picture, so the drawer keeps one of
+  the six built-in icons. Xiaomi, Oppo, Vivo and Realme phones also need **Home
+  screen shortcuts** allowed for Mero; Mero says so when it's blocked.
 - **A car can't be told apart from earbuds automatically** — both connect the same
   way over Bluetooth. Pin the Car profile in the equalizer instead.
 - **Not every song has lyrics.** No free lyrics service covers everything; search
