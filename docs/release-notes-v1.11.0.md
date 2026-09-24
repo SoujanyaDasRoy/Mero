@@ -38,11 +38,7 @@ Your music in the car: **Recently played, Liked songs, Playlists, On this phone 
 The first button under the controls on Now Playing shows where your music is going — *This phone*, your earbuds, a speaker — and tapping it lets you switch.
 
 ### 🎨 Your icon, your way
-**Settings › App icon** has six colours: Classic, Midnight, Paper, Coral, Ocean and Mint.
-
-Or tap **Photo** to use any picture of your own. Frame it like a profile picture, tap **Use as icon**, and it becomes **Mero's icon on your home screen** and **the logo inside the app**.
-
-> On Xiaomi, Redmi, POCO, Oppo, Vivo and Realme phones, allow **Home screen shortcuts** for Mero first (Mero's app settings › Permissions). Mero tells you if your phone blocked it and takes you to the right screen. The app drawer always keeps one of the six built-in icons, because Android doesn't let any app put a photo there.
+**Settings › App icon** has six colours: Classic, Midnight, Paper, Coral, Ocean and Mint. Or tap **Photo** to use any picture: frame it like a profile picture and it goes on your home screen. It also replaces the logo at the top of Home.
 
 ### 🎤 Lyrics that keep time
 - **Many more songs have lyrics.** Mero now looks harder, and falls back to YouTube Music's own lyrics when it has to.
@@ -53,10 +49,7 @@ Or tap **Photo** to use any picture of your own. Frame it like a profile picture
 - Wrong lyrics? Tap **Wrong lyrics?** and search with your own words.
 
 ### 🔎 A better search
-- **Search by lyrics.** Type a line you remember, like *"tera mera rishta hai kaisa"* or *"is this the real life"*, and the song comes up
-- **Search by voice.** Tap the 🎤 in the search bar and say a song, an artist or a line of the lyrics
-- **Results never run out.** Keep scrolling and more songs keep coming, and once the exact matches end, songs like them follow
-- **Recent searches show the songs themselves.** Tap the search bar and the songs, albums and artists you opened before are there with their covers, one tap to play again
+- **Your recent searches** are there before you type
 - **Suggestions** appear as you type, one tap to use
 - **Podcast categories**, all as tidy pills
 - If there's no connection, it says so plainly and offers **Try again**
@@ -66,16 +59,6 @@ Or tap **Photo** to use any picture of your own. Frame it like a profile picture
 - **On the album cover in Now Playing:** swipe left or right to change song, double-tap to like ❤️
 - **In the queue:** swipe a song away to remove it
 - **On Home:** pull down to refresh
-
-### 🧠 A queue that knows your taste
-Tap a song in search, or ask for one by voice, and what plays next is **music like that song**, not the other search results. Mero picks from YouTube's similar songs using what you like:
-
-- **Songs you've liked** and **artists you like or play a lot** come first
-- **Songs you just heard** wait a while before coming round again
-- **Songs you skip** (moving on within the first 30 seconds) sink, and ones you keep skipping stop appearing
-- **Variety:** never more than two songs in a row by the same artist
-
-It all stays on your phone and gets better the more you listen. Albums and playlists still play in their own order.
 
 ### 💛 Friendly reminders
 Now and then, Mero gently reminds you of a song you love that you haven't played in a while. Tap it and it plays. It's quiet (no sound, no pop-up) and only in the daytime.

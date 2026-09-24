@@ -80,10 +80,13 @@ never asks anyone to sign in.
 Mero has no account, so recommendations come from the only record there is — what
 you've played on this phone. Nothing leaves the device.
 
+- **Moods** — Romance, Chill, Party, Workout, Focus, Sad, Devotional, Retro; one tap starts a mix picked to your taste
+- **Made for you** — a mix for each artist you love
 - **Jump back in** — what you played last
 - **On repeat** — what you keep coming back to
 - **More like…** — songs similar to ones you play
 - **A shelf for each artist** you play most
+- Shelves ordered by what you listen to, each song shown once, and your own music visible even offline
 - Pull down to refresh
 
 ### Lyrics
@@ -144,9 +147,10 @@ All processing happens inside Mero, so it sounds the same on every phone.
 
 ### Updates
 
-Mero isn't on the Play Store, so it checks GitHub for new versions itself. When one
-is out, a banner appears on Home and a notification arrives once: tap
-**Download**, then **Install**. Your library, playlists and downloads are kept. The
+Mero isn't on the Play Store, so it checks GitHub for new versions itself, when it
+opens and twice a day in the background. When one is out, a banner appears on
+Home and a notification arrives once; tap **Update** to go straight to it, then
+**Download** and **Install**. Your library, playlists and downloads are kept. The
 download is remembered across restarts, and a file that won't install can be
 discarded.
 
