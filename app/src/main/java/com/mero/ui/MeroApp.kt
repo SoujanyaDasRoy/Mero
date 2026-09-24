@@ -655,7 +655,7 @@ private fun MeroContent(
         if (seed in radioRequests) return
         radioRequests = radioRequests + seed
         scope.launch {
-            container.radioRepository.radioFor(seed).onSuccess { more ->
+            container.radioRepository.radioFor(seed, library.taste()).onSuccess { more ->
                 // Radio only excludes its own seed, so across refills it will
                 // hand back tracks already sitting in the timeline — including
                 // the one now playing, which then showed up under "next up" as
@@ -943,6 +943,31 @@ private fun MeroContent(
         scope.launch { library.setQueue(queue) }
     }
 
+    /**
+     * One song and then music like it, picked for this listener's taste.
+     *
+     * For a song tapped on its own — a search result, a lyric match — where
+     * "the rest of the list" is other search results, which after a lyric or
+     * artist search are anything but similar. Albums, playlists and your own
+     * lists still play in their own order through [playFrom].
+     */
+    fun playWithSimilar(song: Song, source: String) {
+        playFrom(song, listOf(song), source)
+        if (!song.isYouTube) return
+        radioRequests = radioRequests + song.id
+        scope.launch {
+            val similar = container.radioRepository.radioFor(song.id, library.taste()).getOrNull().orEmpty()
+            val controller = connection.controller ?: return@launch
+            // Only if that song is still the one playing: a second tap while
+            // this was loading has started something else.
+            if (controller.currentMediaItem?.mediaId != song.id || similar.isEmpty()) return@launch
+            songsById = songsById + similar.associateBy { it.id }
+            connection.addToQueue(similar)
+            queue = queue + similar
+            library.setQueue(queue)
+        }
+    }
+
     // "Play next" with nothing loaded used to drop the song into the empty
     // player as a paused current track while saying it "plays next" — which it
     // never would on its own. With nothing to come after, play it now.
@@ -953,7 +978,7 @@ private fun MeroContent(
             return
         }
         if ((connection.controller?.mediaItemCount ?: 0) == 0) {
-            playFrom(song, listOf(song))
+            playWithSimilar(song, playSource)
             say("Playing " + song.title)
         } else {
             connection.playNextInQueue(song)
@@ -1446,7 +1471,7 @@ private fun MeroContent(
                             rememberSearch(query)
                             when (item.type) {
                                 SearchResultType.Song -> item.song?.let { song ->
-                                    playFrom(song, results.mapNotNull { it.song }, "Search")
+                                    playWithSimilar(song, "Search")
                                 }
                                 SearchResultType.Artist ->
                                     navController.navigate(ArtistRoute(item.browseId ?: item.id)) {
@@ -2248,7 +2273,7 @@ private fun MeroContent(
                 },
                 onStartRadio = {
                     scope.launch {
-                        container.radioRepository.radioFor(song.id)
+                        container.radioRepository.radioFor(song.id, library.taste())
                             .onSuccess { playFrom(song, listOf(song) + it, "Radio") }
                     }
                 },

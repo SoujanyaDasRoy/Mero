@@ -1,5 +1,6 @@
 package com.mero.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -33,6 +34,8 @@ data class SongEntity(
     val downloadedAt: Long? = null,
     /** Local file or podcast enclosure; null for a YouTube track. See Song.sourceUri. */
     val sourceUri: String? = null,
+    /** Times moved on from in its first seconds: the clearest "not this". */
+    @ColumnInfo(defaultValue = "0") val skipCount: Int = 0,
 )
 
 /** Persisted playback queue; `position` is the order within it. */
@@ -143,6 +146,12 @@ interface MeroDao {
 
     @Query("UPDATE songs SET lastPlayedAt = :at, playCount = playCount + 1 WHERE id = :id")
     suspend fun markPlayed(id: String, at: Long)
+
+    @Query("UPDATE songs SET skipCount = skipCount + 1 WHERE id = :id")
+    suspend fun markSkipped(id: String)
+
+    @Query("SELECT * FROM songs WHERE skipCount > 0")
+    suspend fun skipped(): List<SongEntity>
 
     /* ------------------------------ queue ------------------------------ */
 
@@ -325,11 +334,25 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         PlaylistSongEntity::class,
         SmartPlaylistEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class MeroDatabase : RoomDatabase() {
     abstract fun dao(): MeroDao
+}
+
+/** Skips, so the queue can learn what this listener moves on from. */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE songs ADD COLUMN skipCount INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/** Songs that are not YouTube tracks: files from the phone, podcast episodes. */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE songs ADD COLUMN sourceUri TEXT")
+    }
 }
 
 /**
@@ -338,13 +361,6 @@ abstract class MeroDatabase : RoomDatabase() {
  * Both nullable with no default: an existing playlist has neither, and null is
  * what "borrow the first track's cover" already means everywhere it is read.
  */
-/** Songs that are not YouTube tracks: files from the phone, podcast episodes. */
-val MIGRATION_5_6 = object : Migration(5, 6) {
-    override fun migrate(db: SupportSQLiteDatabase) {
-        db.execSQL("ALTER TABLE songs ADD COLUMN sourceUri TEXT")
-    }
-}
-
 val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE playlists ADD COLUMN coverUri TEXT")

@@ -16,8 +16,11 @@ import com.zionhuang.innertube.models.WatchEndpoint
  */
 class RadioRepository {
 
-    /** Tracks to continue with after [videoId], excluding the seed itself. */
-    suspend fun radioFor(videoId: String): Result<List<Song>> = runCatchingCancellable {
+    /**
+     * Tracks to continue with after [videoId], excluding the seed itself:
+     * YouTube's similar songs, reordered for [taste] (see rankForTaste).
+     */
+    suspend fun radioFor(videoId: String, taste: Taste = Taste.None): Result<List<Song>> = runCatchingCancellable {
         // YouTube has no "more like this" for a podcast episode or a file on
         // the phone. An empty answer lets infinite playback simply stop there.
         if (!com.mero.domain.isYouTubeId(videoId)) return@runCatchingCancellable emptyList()
@@ -25,5 +28,8 @@ class RadioRepository {
             .items
             .filter { it.id.isNotBlank() && it.id != videoId }
             .map { it.toDomain() }
+            // YouTube's list continues into its automix, which repeats songs.
+            .distinctBy { it.id }
+            .let { rankForTaste(it, taste) }
     }
 }

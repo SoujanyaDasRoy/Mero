@@ -39,6 +39,7 @@ never asks anyone to sign in.
 
 - Streams from YouTube Music, with lock-screen, notification, headset and Bluetooth controls
 - A queue you can reorder, shuffle and repeat, with **Play next** and **Add to queue** on every song
+- **A queue that learns your taste** — tap a song and what follows is music like it, chosen by what you like, play often and skip. Nothing leaves your phone
 - **Keeps playing** with similar songs when the queue runs out — or pauses after an hour idle, your choice
 - Playback speed from 0.75× to 2×
 - **Choose where it plays** — the output button on Now Playing shows your phone, earbuds or speaker, and switches between them

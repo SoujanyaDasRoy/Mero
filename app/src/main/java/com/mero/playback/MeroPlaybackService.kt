@@ -54,6 +54,7 @@ class MeroPlaybackService : MediaLibraryService() {
     private lateinit var library: LibraryRepository
     private lateinit var settings: SettingsStore
     private lateinit var search: com.mero.data.SearchRepository
+    private lateinit var radio: com.mero.data.RadioRepository
 
     /**
      * The car's last search. A tap on a result arrives later as a bare id, and
@@ -70,6 +71,7 @@ class MeroPlaybackService : MediaLibraryService() {
         library = container.libraryRepository
         settings = container.settings
         search = container.searchRepository
+        radio = container.radioRepository
 
         val player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(
@@ -158,6 +160,26 @@ class MeroPlaybackService : MediaLibraryService() {
                 // A repeat of the same track is a new listen.
                 counted = null
                 saveResumePoint(player)
+            }
+
+            /**
+             * A skip: moving on from a song that had started playing but was
+             * less than half a minute in. The clearest "not this" there is,
+             * and what the queue learns from (see Taste). Going back to the
+             * previous song is not a skip; a song that never started (still
+             * loading) is not rejected, just slow.
+             */
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int,
+            ) {
+                if (reason != Player.DISCONTINUITY_REASON_SEEK) return
+                if (oldPosition.mediaItemIndex == newPosition.mediaItemIndex) return
+                if (oldPosition.positionMs !in SKIP_MIN_MS until SKIP_WINDOW_MS) return
+                if (!player.shuffleModeEnabled && newPosition.mediaItemIndex < oldPosition.mediaItemIndex) return
+                val item = oldPosition.mediaItem ?: return
+                serviceScope.launch { library.onSkipped(songFrom(item)) }
             }
         })
 
@@ -339,7 +361,19 @@ class MeroPlaybackService : MediaLibraryService() {
             }
             val (parent, songId) = parsed
             return serviceScope.future {
-                val list = songsIn(parent!!)
+                // A search result in the car: that song, then music like it,
+                // the same as tapping a search result on the phone.
+                if (CarBrowseTree.searchQueryOf(parent!!) != null) {
+                    val picked = songsIn(parent).firstOrNull { it.id == songId }
+                        ?: error("That song is no longer in the results")
+                    val similar = radio.radioFor(picked.id, library.taste()).getOrNull().orEmpty()
+                    return@future MediaSession.MediaItemsWithStartPosition(
+                        (listOf(picked) + similar).map(::mediaItemFor),
+                        0,
+                        startPositionMs,
+                    )
+                }
+                val list = songsIn(parent)
                 val at = list.indexOfFirst { it.id == songId }
                 if (at < 0) error("That song is no longer in this list")
                 MediaSession.MediaItemsWithStartPosition(list.map(::mediaItemFor), at, startPositionMs)
@@ -385,8 +419,12 @@ class MeroPlaybackService : MediaLibraryService() {
             return MediaSession.MediaItemsWithStartPosition(liked.map(::mediaItemFor), 0, C.TIME_UNSET)
         }
         val songs = carSearch(query).getOrThrow()
-        if (songs.isEmpty()) error("Nothing found for " + query)
-        return MediaSession.MediaItemsWithStartPosition(songs.map(::mediaItemFor), 0, C.TIME_UNSET)
+        val first = songs.firstOrNull() ?: error("Nothing found for " + query)
+        // "Play Kesariya" means Kesariya and then music like it, not eighty
+        // search results for the word. Search results only if radio fails.
+        val similar = radio.radioFor(first.id, library.taste()).getOrNull().orEmpty()
+        val queue = listOf(first) + similar.ifEmpty { songs.drop(1) }
+        return MediaSession.MediaItemsWithStartPosition(queue.map(::mediaItemFor), 0, C.TIME_UNSET)
     }
 
     private suspend fun songsIn(parentId: String): List<Song> {
@@ -486,3 +524,9 @@ private const val SEARCH_SUPPORTED = "android.media.browse.SEARCH_SUPPORTED"
 
 /** Settings > Audio > "Resume after other audio"; the key the UI's toggle map uses. */
 const val RESUME_AFTER_TOGGLE = "resumeafter"
+
+/** A move-on within this much of a song's start counts as a skip... */
+private const val SKIP_WINDOW_MS = 30_000L
+
+/** ...once it has actually played this much; before that it was still loading. */
+private const val SKIP_MIN_MS = 1_000L

@@ -67,6 +67,16 @@ Or tap **Photo** to use any picture of your own. Frame it like a profile picture
 - **In the queue:** swipe a song away to remove it
 - **On Home:** pull down to refresh
 
+### 🧠 A queue that knows your taste
+Tap a song in search, or ask for one by voice, and what plays next is **music like that song**, not the other search results. Mero picks from YouTube's similar songs using what you like:
+
+- **Songs you've liked** and **artists you like or play a lot** come first
+- **Songs you just heard** wait a while before coming round again
+- **Songs you skip** (moving on within the first 30 seconds) sink, and ones you keep skipping stop appearing
+- **Variety:** never more than two songs in a row by the same artist
+
+It all stays on your phone and gets better the more you listen. Albums and playlists still play in their own order.
+
 ### 💛 Friendly reminders
 Now and then, Mero gently reminds you of a song you love that you haven't played in a while. Tap it and it plays. It's quiet (no sound, no pop-up) and only in the daytime.
 

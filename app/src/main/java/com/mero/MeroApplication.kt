@@ -64,7 +64,7 @@ class AppContainer(context: Context) {
             context.applicationContext,
             MeroDatabase::class.java,
             "mero.db",
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, com.mero.data.db.MIGRATION_6_7)
             .build()
     }
 

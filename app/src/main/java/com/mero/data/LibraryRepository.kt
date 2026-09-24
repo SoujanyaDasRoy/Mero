@@ -10,6 +10,7 @@ import com.mero.data.db.QueueEntity
 import com.mero.data.db.SongEntity
 import com.mero.domain.Song
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private fun SongEntity.toDomain() = Song(
@@ -79,6 +80,35 @@ class LibraryRepository(private val dao: MeroDao) {
     suspend fun onPlayed(song: Song) {
         ensure(song)
         dao.markPlayed(song.id, System.currentTimeMillis())
+    }
+
+    suspend fun onSkipped(song: Song) {
+        ensure(song)
+        dao.markSkipped(song.id)
+    }
+
+    /**
+     * Everything the queue needs to know about this listener's taste: likes,
+     * the artists behind likes and plays, what was heard lately, and skips.
+     */
+    suspend fun taste(): Taste {
+        val liked = liked.first()
+        val played = mostPlayed.first()
+        val skipped = dao.skipped()
+        val affinity = HashMap<String, Int>()
+        liked.forEach { affinity.merge(primaryArtist(it), 2, Int::plus) }
+        // Each of the 50 most-played songs counts once for its artist, so an
+        // artist is favoured for range rather than one song on repeat.
+        played.forEach { affinity.merge(primaryArtist(it), 1, Int::plus) }
+        val artistSkips = HashMap<String, Int>()
+        skipped.forEach { artistSkips.merge(primaryArtist(it.toDomain()), it.skipCount, Int::plus) }
+        return Taste(
+            likedIds = liked.mapTo(HashSet()) { it.id },
+            artistAffinity = affinity,
+            recentIds = recentlyPlayed.first().take(RECENT_WINDOW).mapTo(HashSet()) { it.id },
+            skips = skipped.associate { it.id to it.skipCount },
+            artistSkips = artistSkips,
+        )
     }
 
     suspend fun toggleLiked(song: Song): Boolean {
@@ -183,3 +213,6 @@ class LibraryRepository(private val dao: MeroDao) {
         )
     }
 }
+
+/** Songs heard this recently are kept back from the queue for a while. */
+private const val RECENT_WINDOW = 25
