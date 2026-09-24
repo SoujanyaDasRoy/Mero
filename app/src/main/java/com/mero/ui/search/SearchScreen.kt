@@ -53,6 +53,12 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.mero.domain.SearchResultType
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
@@ -96,7 +102,8 @@ fun SearchScreen(
     onResultClick: (SearchItem) -> Unit,
     onSongMore: (Song) -> Unit,
     contentPadding: PaddingValues,
-    recentSearches: List<String>,
+    /** Songs, albums, artists and shows opened from search, most recent first. */
+    recentResults: List<SearchItem>,
     onClearRecent: () -> Unit,
     suggestions: List<String>,
     onPodcastCategory: (String) -> Unit,
@@ -109,6 +116,11 @@ fun SearchScreen(
     val scheme = MaterialTheme.colorScheme
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    // Tapping into the empty box is "I want to find something": that is when
+    // what was found before is most useful. Back leaves the box rather than
+    // the screen.
+    var searchFocused by remember { mutableStateOf(false) }
+    BackHandler(enabled = searchFocused && query.isEmpty()) { focusManager.clearFocus() }
 
     Column(modifier.fillMaxSize()) {
         Box(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)) {
@@ -146,7 +158,9 @@ fun SearchScreen(
                             focusManager.clearFocus()
                             onSearch()
                         }),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { searchFocused = it.isFocused },
                     )
                 }
                 if (query.isNotEmpty()) {
@@ -181,7 +195,20 @@ fun SearchScreen(
             }
         }
 
-        if (query.isBlank()) {
+        if (query.isBlank() && searchFocused && recentResults.isNotEmpty()) {
+            RecentResultsList(
+                items = recentResults,
+                nowPlayingId = nowPlayingId,
+                onClick = { item ->
+                    keyboard?.hide()
+                    focusManager.clearFocus()
+                    onResultClick(item)
+                },
+                onSongMore = onSongMore,
+                onClear = onClearRecent,
+                contentPadding = contentPadding,
+            )
+        } else if (query.isBlank()) {
             IdleSuggestions(
                 artists = suggestedArtists,
                 recentlyPlayed = recentlyPlayed,
@@ -190,9 +217,6 @@ fun SearchScreen(
                 onSongClick = onSongClick,
                 onGenreClick = onGenreClick,
                 contentPadding = contentPadding,
-                recentSearches = recentSearches,
-                onRecentClick = onQueryChange,
-                onClearRecent = onClearRecent,
                 onPodcastCategory = onPodcastCategory,
             )
         } else {
@@ -436,9 +460,6 @@ private fun IdleSuggestions(
     onSongClick: (Song) -> Unit,
     onGenreClick: (String) -> Unit,
     contentPadding: PaddingValues,
-    recentSearches: List<String>,
-    onRecentClick: (String) -> Unit,
-    onClearRecent: () -> Unit,
     onPodcastCategory: (String) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -452,18 +473,6 @@ private fun IdleSuggestions(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (recentSearches.isNotEmpty()) {
-            item(key = "recent-searches-heading", span = { GridItemSpan(maxLineSpan) }) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f)) { IdleHeading("Recent searches") }
-                    TextButton(onClick = onClearRecent) { Text("Clear") }
-                }
-            }
-            item(key = "recent-searches", span = { GridItemSpan(maxLineSpan) }) {
-                PillFlow(recentSearches, onRecentClick, leading = Icons.Rounded.History)
-            }
-        }
-
         if (artists.isNotEmpty()) {
             item(key = "artists-heading", span = { GridItemSpan(maxLineSpan) }) {
                 IdleHeading(if (recentlyPlayed.isEmpty()) "Artists" else "Artists you play")
@@ -622,5 +631,47 @@ private fun SearchFailed(message: String, onRetry: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
         )
         Button(onClick = onRetry, Modifier.padding(top = 16.dp)) { Text("Try again") }
+    }
+}
+
+/**
+ * What was opened from search before, shown as the things themselves — cover,
+ * title, artist — rather than the words typed to find them. A song plays
+ * again with one tap; an album, artist or show opens.
+ */
+@Composable
+private fun RecentResultsList(
+    items: List<SearchItem>,
+    nowPlayingId: String?,
+    onClick: (SearchItem) -> Unit,
+    onSongMore: (Song) -> Unit,
+    onClear: () -> Unit,
+    contentPadding: PaddingValues,
+) {
+    LazyColumn(contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding() + 80.dp)) {
+        item(key = "recent-heading") {
+            Row(
+                Modifier.fillMaxWidth().padding(end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) { IdleHeading("Recent searches") }
+                TextButton(onClick = onClear) { Text("Clear") }
+            }
+        }
+        items(items, key = { "recent-" + it.id }) { item ->
+            SongRow(
+                song = item.song ?: Song(id = item.id, title = item.title, artist = item.subtitle, thumbnailUrl = item.thumbnailUrl),
+                subtitle = when (item.type) {
+                    SearchResultType.Song -> item.subtitle
+                    SearchResultType.Album -> "Album · " + item.subtitle
+                    SearchResultType.Artist -> "Artist"
+                    SearchResultType.Playlist -> "Playlist · " + item.subtitle
+                    SearchResultType.Podcast -> "Podcast · " + item.subtitle
+                },
+                highlighted = nowPlayingId != null && item.song?.id == nowPlayingId,
+                onClick = { onClick(item) },
+                onMore = item.song?.let { song -> { onSongMore(song) } },
+            )
+        }
     }
 }

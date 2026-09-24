@@ -56,7 +56,7 @@ Or tap **Photo** to use any picture of your own. Frame it like a profile picture
 - **Search by lyrics.** Type a line you remember, like *"tera mera rishta hai kaisa"* or *"is this the real life"*, and the song comes up
 - **Search by voice.** Tap the 🎤 in the search bar and say a song, an artist or a line of the lyrics
 - **Results never run out.** Keep scrolling and more songs keep coming, and once the exact matches end, songs like them follow
-- **Your recent searches** are there before you type
+- **Recent searches show the songs themselves.** Tap the search bar and the songs, albums and artists you opened before are there with their covers, one tap to play again
 - **Suggestions** appear as you type, one tap to use
 - **Podcast categories**, all as tidy pills
 - If there's no connection, it says so plainly and offers **Try again**

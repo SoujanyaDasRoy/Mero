@@ -434,11 +434,11 @@ private fun MeroContent(
 
     var query by remember { mutableStateOf("") }
     var searchTab by remember { mutableStateOf("Songs") }
-    val recentStore = remember { com.mero.ui.search.RecentSearches(context) }
-    var recentSearches by remember { mutableStateOf(recentStore.load()) }
-    fun rememberSearch(q: String) {
-        recentSearches = com.mero.ui.search.withRecent(recentSearches, q)
-        recentStore.save(recentSearches)
+    val recentStore = remember { com.mero.ui.search.RecentResults(context) }
+    var recentResults by remember { mutableStateOf(recentStore.load()) }
+    fun rememberResult(item: SearchItem) {
+        recentResults = com.mero.ui.search.withRecentResult(recentResults, item)
+        recentStore.save(recentResults)
     }
 
     /**
@@ -1440,7 +1440,6 @@ private fun MeroContent(
                         if (!heard.isNullOrEmpty()) {
                             query = heard
                             lastSearchAt = System.currentTimeMillis()
-                            rememberSearch(heard)
                         }
                     }
 
@@ -1455,7 +1454,7 @@ private fun MeroContent(
                             query = it
                             lastSearchAt = System.currentTimeMillis()
                         },
-                        onSearch = { rememberSearch(query) },
+                        onSearch = {},
                         selectedTab = searchTab,
                         onTabChange = { searchTab = it },
                         results = results,
@@ -1466,9 +1465,9 @@ private fun MeroContent(
                         onLoadMore = { loadMoreResults() },
                         nowPlayingId = current?.id,
                         onResultClick = { item ->
-                            // A tapped result is the surest sign the query was
-                            // the one they meant, not a half-typed stop on the way.
-                            rememberSearch(query)
+                            // What was opened is what is worth finding again, shown
+                            // as itself next time the search box is tapped.
+                            rememberResult(item)
                             when (item.type) {
                                 SearchResultType.Song -> item.song?.let { song ->
                                     playWithSimilar(song, "Search")
@@ -1513,9 +1512,9 @@ private fun MeroContent(
                         },
                         onSongMore = { menuSong = it },
                         contentPadding = contentPadding,
-                        recentSearches = recentSearches,
+                        recentResults = recentResults,
                         onClearRecent = {
-                            recentSearches = emptyList()
+                            recentResults = emptyList()
                             recentStore.save(emptyList())
                         },
                         suggestions = suggestions,

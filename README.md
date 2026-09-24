@@ -63,7 +63,7 @@ never asks anyone to sign in.
 - **Find a song from its lyrics** — type or say any line you remember
 - **Voice search** — tap the microphone and say a song, an artist or a lyric
 - **Endless results** — scroll as far as you like; when the exact matches end, songs like them keep coming
-- Suggestions while you type, and your recent searches before you do
+- Suggestions while you type; tap the empty search bar to see the **songs, albums and artists you opened before**, with their covers, ready to play again
 - Before you type: the artists you play, what you were last listening to, podcast categories and genre tiles
 - Albums, playlists and artists **open** to their track list — nothing starts playing until you choose
 - A clear message and **Try again** when there's no connection
