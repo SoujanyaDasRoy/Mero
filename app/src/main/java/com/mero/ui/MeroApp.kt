@@ -677,7 +677,8 @@ private fun MeroContent(
         if (seed in radioRequests) return
         radioRequests = radioRequests + seed
         scope.launch {
-            container.radioRepository.radioFor(seed, library.taste()).onSuccess { more ->
+            // A week's memory: infinite playback follows what is being played now.
+            container.radioRepository.radioFor(seed, library.taste(tauDays = 7.0)).onSuccess { more ->
                 // Radio only excludes its own seed, so across refills it will
                 // hand back tracks already sitting in the timeline — including
                 // the one now playing, which then showed up under "next up" as

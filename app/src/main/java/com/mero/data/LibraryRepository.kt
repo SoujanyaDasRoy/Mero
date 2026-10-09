@@ -90,8 +90,10 @@ class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boole
     /**
      * Everything the queue needs to know about this listener's taste: likes,
      * the artists behind likes and plays, what was heard lately, and skips.
+     * [tauDays] is how fast unheard songs fade as seeds: short for "what I am into
+     * this week" (infinite playback), long for a mix. The 1.13 ranker ignores it.
      */
-    suspend fun taste(): Taste {
+    suspend fun taste(tauDays: Double = 45.0): Taste {
         val liked = liked.first()
         val played = mostPlayed.first()
         val skipped = dao.skipped()
@@ -110,7 +112,7 @@ class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boole
             skips = skipped.associate { it.id to it.skipCount },
             artistSkips = artistSkips,
             seeds = felt.map { SongStats(it.toDomain(), it.liked, it.playCount, it.lastPlayedAt, it.skipCount) }.let { stats ->
-                if (useV2()) tasteSeeds(stats, System.currentTimeMillis()) else tasteSeedsLegacy(stats, System.currentTimeMillis())
+                if (useV2()) tasteSeeds(stats, System.currentTimeMillis(), tauDays = tauDays) else tasteSeedsLegacy(stats, System.currentTimeMillis())
             },
             plays = felt.associate { it.id to it.playCount },
             lastPlayedAt = felt.mapNotNull { e -> e.lastPlayedAt?.let { e.id to it } }.toMap(),
