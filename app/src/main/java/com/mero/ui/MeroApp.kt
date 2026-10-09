@@ -1021,6 +1021,28 @@ private fun MeroContent(
     LaunchedEffect(opened, connection.controller != null) {
         val uri = opened ?: return@LaunchedEffect
         if (connection.controller == null) return@LaunchedEffect
+        // A YouTube or YouTube Music link, often one shared from Mero itself.
+        if (uri.scheme == "http" || uri.scheme == "https") {
+            val link = com.mero.data.parseYouTubeLink(uri.toString())
+            if (link == null) {
+                say("Mero can't open that link")
+            } else {
+                container.searchRepository.resolveLink(link).fold(
+                    onSuccess = { songs ->
+                        val first = songs.firstOrNull()
+                        when {
+                            first == null -> say("Nothing playable at that link")
+                            // A song: it, then music like it. A playlist: in its own order.
+                            link.videoId != null -> { playWithSimilar(first, "Shared link"); expanded = true }
+                            else -> { playFrom(first, songs, "Shared playlist"); expanded = true }
+                        }
+                    },
+                    onFailure = { say("Couldn't open that link. Check your connection and try again.") },
+                )
+            }
+            onOpenedHandled()
+            return@LaunchedEffect
+        }
         val song = com.mero.data.LocalAudio.songFrom(context, uri)
         if (com.mero.data.LocalAudio.isKept(context, uri)) library.saveSongs(listOf(song))
         songsById = songsById + (song.id to song)

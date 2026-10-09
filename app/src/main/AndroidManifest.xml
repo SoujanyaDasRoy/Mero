@@ -68,6 +68,32 @@
                 <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <!-- YouTube and YouTube Music links, so a song or playlist shared from
+                 Mero (or anywhere) can open here. Not verified app links: Android
+                 lists Mero beside YouTube and YouTube Music and the person picks
+                 once ("Always"), or turns Mero on under Open by default in the
+                 app's settings. Only watch, playlist and shorts addresses, never
+                 the whole of youtube.com. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="music.youtube.com" />
+                <data android:host="www.youtube.com" />
+                <data android:host="youtube.com" />
+                <data android:host="m.youtube.com" />
+                <data android:pathPrefix="/watch" />
+                <data android:pathPrefix="/playlist" />
+                <data android:pathPrefix="/shorts" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="youtu.be" />
+            </intent-filter>
         </activity>
 
         <!-- One launcher entry per app icon; exactly one is enabled at a time
