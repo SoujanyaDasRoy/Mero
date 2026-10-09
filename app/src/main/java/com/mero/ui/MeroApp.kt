@@ -32,6 +32,8 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
+import com.mero.ui.components.BottomScrim
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -1246,7 +1248,11 @@ private fun MeroContent(
     // Scaffold measures the bottom bar and pads the NavHost by it, so the
     // mini-player lives in that slot rather than being positioned by hand — the
     // player still sits outside the NavHost, which is the actual constraint.
-    val contentPadding = PaddingValues(bottom = 0.dp)
+    // The tab bar and mini player float over the screens; every screen already pads the bottom of
+    // its list by contentPadding, so the last row can scroll clear of them.
+    val overlayDensity = androidx.compose.ui.platform.LocalDensity.current
+    var overlayHeight by remember { mutableStateOf(0.dp) }
+    val contentPadding = PaddingValues(bottom = overlayHeight)
 
     Box(
         Modifier
@@ -1280,9 +1286,925 @@ private fun MeroContent(
         ) {
 
         Scaffold(
-            snackbarHost = { SnackbarHost(snackbars) },
-            bottomBar = {
-                Column {
+        ) { _ ->
+
+            Box(Modifier.fillMaxSize()) {
+                NavHost(
+                    navController = navController,
+                    startDestination = Home,
+                    modifier = Modifier
+                        .fillMaxSize(),
+                ) {
+                    composable<Home> {
+                        // Genre shelves ordered by the artists this listener likes
+                        // and plays; mixes from the same history.
+                        val affinity = remember(mostPlayed, likedSongs) {
+                            HashMap<String, Int>().apply {
+                                likedSongs.forEach { merge(com.mero.data.primaryArtist(it), 2, Int::plus) }
+                                mostPlayed.forEach { merge(com.mero.data.primaryArtist(it), 1, Int::plus) }
+                            }
+                        }
+                        val mixes = remember(mostPlayed, likedSongs) {
+                            val byArtist = com.mero.data.mixSeeds(mostPlayed + likedSongs)
+                            // "Your Mix" first: made from everything this listener loves, not one artist.
+                            listOfNotNull(byArtist.firstOrNull()?.let { com.mero.data.MixSeed(com.mero.data.YOUR_MIX, it.seed) }) + byArtist
+                        }
+                        HomeScreen(
+                            sections = personalSections + com.mero.data.rankShelvesByTaste(homeSections, affinity),
+                            mixes = mixes,
+                            onMix = { mix ->
+                                if (mix.artist != com.mero.data.YOUR_MIX) {
+                                    playWithSimilar(mix.seed, mix.artist + " Mix")
+                                } else {
+                                    scope.launch {
+                                        val songs = container.radioRepository.mixFor(library.taste()).getOrNull().orEmpty()
+                                        val first = songs.firstOrNull()
+                                        if (first == null) say("Play and like a few songs first, so Mero learns what you enjoy") else playFrom(first, songs, "Your Mix")
+                                    }
+                                }
+                            },
+                            onMood = { mood ->
+                                say("Starting a " + mood.label.lowercase() + " mix")
+                                scope.launch {
+                                    container.searchRepository.search(mood.query).fold(
+                                        onSuccess = { found ->
+                                            val ranked = com.mero.data.rankForTaste(found, library.taste())
+                                                .map { it.copy(origin = com.mero.domain.Origin.MIX) }
+                                            ranked.firstOrNull()?.let { playFrom(it, ranked, mood.label) }
+                                                ?: say("Couldn't find " + mood.label.lowercase() + " songs right now")
+                                        },
+                                        onFailure = { say("Couldn't reach YouTube. Check your connection and try again.") },
+                                    )
+                                }
+                            },
+                            loading = homeLoading,
+                            error = homeError,
+                            onRetry = { loadHome() },
+                            onLoadMore = { loadMoreHome() },
+                            loadingMore = homeLoadingMore,
+                            onSongClick = { song, context -> playFrom(song, context, "Home") },
+                            displayName = displayName,
+                            recentlyPlayed = recentlyPlayed,
+                            updateAvailableVersion = (updateState as? UpdateState.Available)
+                                ?.release?.versionName,
+                            onUpdateClick = { openTab(SettingsRoute) },
+                            contentPadding = contentPadding,
+                            customLogo = customLogo,
+                        )
+                    }
+
+                    composable<SearchRoute> {
+                        // Checked on arrival rather than on a timer, so nothing is
+                        // ever cleared out from under someone who is looking at it.
+                        LaunchedEffect(Unit) {
+                            val idle = System.currentTimeMillis() - lastSearchAt
+                            if (query.isNotBlank() && idle > SEARCH_FORGET_MS) query = ""
+                        }
+
+                        var results by remember { mutableStateOf<List<SearchItem>>(emptyList()) }
+                        var continuationToken by remember { mutableStateOf<String?>(null) }
+                        // Songs whose radio has already been added after YouTube's
+                        // own pages ran out (see nextRadioSeed).
+                        var radioSeeds by remember { mutableStateOf(emptySet<String>()) }
+                        var isSearching by remember { mutableStateOf(false) }
+                        var isLoadingMore by remember { mutableStateOf(false) }
+                        var searchError by remember { mutableStateOf<String?>(null) }
+                        var searchAttempt by remember { mutableStateOf(0) }
+                        var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+
+                        LaunchedEffect(query) {
+                            val trimmed = query.trim()
+                            if (trimmed.length < 2) {
+                                suggestions = emptyList()
+                                return@LaunchedEffect
+                            }
+                            delay(150)
+                            container.searchRepository.suggest(trimmed).onSuccess { s ->
+                                suggestions = s.queries
+                                    .filterNot { it.equals(trimmed, ignoreCase = true) }
+                                    .take(6)
+                            }
+                        }
+
+                        // Active live search as the user writes ("since writing")
+                        LaunchedEffect(query, searchTab, searchAttempt) {
+                            val trimmed = query.trim()
+                            radioSeeds = emptySet()
+                            if (trimmed.isBlank()) {
+                                results = emptyList()
+                                continuationToken = null
+                                isSearching = false
+                                searchError = null
+                                return@LaunchedEffect
+                            }
+                            // Short enough to feel live from the first letter,
+                            // long enough that holding a key down does not fire a
+                            // request per character.
+                            delay(120)
+                            isSearching = true
+                            if (searchTab == "Podcasts") {
+                                // Apple's directory, not YouTube: one page, no
+                                // continuation, and a show rather than a track.
+                                container.podcastRepository.search(trimmed).fold(
+                                    onSuccess = {
+                                        results = it
+                                        continuationToken = null
+                                        searchError = null
+                                    },
+                                    onFailure = { e -> searchError = searchFailureText(e) },
+                                )
+                                isSearching = false
+                                return@LaunchedEffect
+                            }
+                            // A pasted YouTube address plays what it points at, even
+                            // when YouTube Music has no song entry for it.
+                            val link = com.mero.data.parseYouTubeLink(trimmed)
+                            if (link != null) {
+                                container.searchRepository.resolveLink(link).fold(
+                                    onSuccess = { songs ->
+                                        results = songs.map {
+                                            SearchItem(
+                                                id = it.id,
+                                                title = it.title,
+                                                subtitle = listOf(it.artist, it.durationSec.takeIf { d -> d > 0 }?.asClock())
+                                                    .filterNotNull().filter { t -> t.isNotBlank() }.joinToString(" · "),
+                                                thumbnailUrl = it.thumbnailUrl,
+                                                type = SearchResultType.Song,
+                                                song = it,
+                                            )
+                                        }
+                                        continuationToken = null
+                                        searchError = if (songs.isEmpty()) "Nothing playable at that link" else null
+                                        songs.firstOrNull()?.let(::warmForPlayback)
+                                    },
+                                    onFailure = { searchError = "Couldn't open that link. Check it and your connection, then try again." },
+                                )
+                                isSearching = false
+                                return@LaunchedEffect
+                            }
+                            container.searchRepository.searchItemsPage(
+                                trimmed,
+                                when (searchTab) {
+                                    "Albums" -> SearchResultType.Album
+                                    "Artists" -> SearchResultType.Artist
+                                    "Playlists" -> SearchResultType.Playlist
+                                    else -> SearchResultType.Song
+                                },
+                            ).fold(
+                                onSuccess = { page ->
+                                    results = page.items
+                                    continuationToken = page.continuation
+                                    searchError = null
+                                    isSearching = false
+                                    page.items.firstOrNull()?.song?.let(::warmForPlayback)
+                                },
+                                onFailure = { e ->
+                                    searchError = searchFailureText(e)
+                                    isSearching = false
+                                },
+                            )
+                        }
+
+                        fun loadMoreResults() {
+                            val trimmed = query.trim()
+                            val tab = searchTab
+                            if (trimmed.isBlank() || isLoadingMore || isSearching) return
+                            // A page that arrives after the search changed belongs to
+                            // the old search; appending it mixed two searches together.
+                            fun stillCurrent() = query.trim() == trimmed && searchTab == tab
+                            val token = continuationToken
+                            if (token == null) {
+                                // YouTube's pages are done. Songs keep going with what
+                                // is like the results, one result's radio at a time.
+                                if (tab != "Songs") return
+                                isLoadingMore = true
+                                scope.launch {
+                                    var tries = 0
+                                    while (tries++ < 4 && stillCurrent()) {
+                                        val seed = com.mero.ui.search.nextRadioSeed(results, radioSeeds) ?: break
+                                        radioSeeds = radioSeeds + seed.id
+                                        val more = container.radioRepository.radioFor(seed.id).getOrNull().orEmpty()
+                                        if (!stillCurrent()) break
+                                        val (merged, added) = com.mero.ui.search.appendSongs(results, more)
+                                        results = merged
+                                        // A radio of songs already shown adds nothing;
+                                        // try the next result rather than stop.
+                                        if (added > 0) break
+                                    }
+                                    isLoadingMore = false
+                                }
+                                return
+                            }
+                            isLoadingMore = true
+                            scope.launch {
+                                container.searchRepository.searchItemsPage(
+                                    trimmed,
+                                    when (searchTab) {
+                                        "Albums" -> SearchResultType.Album
+                                        "Artists" -> SearchResultType.Artist
+                                        "Playlists" -> SearchResultType.Playlist
+                                        else -> SearchResultType.Song
+                                    },
+                                    continuation = token,
+                                ).fold(
+                                    onSuccess = { page ->
+                                        if (stillCurrent()) {
+                                            val existingIds = results.map { it.id }.toSet()
+                                            val newItems = page.items.filter { it.id !in existingIds }
+                                            results = results + newItems
+                                            continuationToken = page.continuation
+                                        }
+                                        isLoadingMore = false
+                                    },
+                                    onFailure = {
+                                        isLoadingMore = false
+                                    },
+                                )
+                            }
+                        }
+
+                        // Speech-to-text from whatever recogniser the phone has; a
+                        // song, an artist or a line of lyrics all work, because the
+                        // search behind it already matches lyrics.
+                        val voiceIntent = remember {
+                            Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                                .putExtra(
+                                    android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                    android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                                )
+                                .putExtra(
+                                    android.speech.RecognizerIntent.EXTRA_PROMPT,
+                                    "Say a song, an artist or a line of the lyrics",
+                                )
+                        }
+                        val canListen = remember { voiceIntent.resolveActivity(context.packageManager) != null }
+                        val voiceLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.StartActivityForResult(),
+                        ) { result ->
+                            val heard = result.data
+                                ?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)
+                                ?.firstOrNull()
+                                ?.trim()
+                            if (!heard.isNullOrEmpty()) {
+                                query = heard
+                                lastSearchAt = System.currentTimeMillis()
+                            }
+                        }
+
+                        SearchScreen(
+                            genres = genreCards,
+                            suggestedArtists = suggestedArtists,
+                            recentlyPlayed = recentlyPlayed,
+                            onSongClick = { song -> playFrom(song, recentlyPlayed, "Search") },
+                            onGenreClick = { genre -> query = genre },
+                            query = query,
+                            onQueryChange = {
+                                query = it
+                                lastSearchAt = System.currentTimeMillis()
+                            },
+                            onSearch = {},
+                            selectedTab = searchTab,
+                            onTabChange = { searchTab = it },
+                            results = results,
+                            isSearching = isSearching,
+                            isLoadingMore = isLoadingMore,
+                            hasMoreResults = continuationToken != null ||
+                                (searchTab == "Songs" && com.mero.ui.search.nextRadioSeed(results, radioSeeds) != null),
+                            onLoadMore = { loadMoreResults() },
+                            nowPlayingId = current?.id,
+                            onResultClick = { item ->
+                                // What was opened is what is worth finding again, shown
+                                // as itself next time the search box is tapped.
+                                rememberResult(item)
+                                when (item.type) {
+                                    SearchResultType.Song -> item.song?.let { song ->
+                                        playWithSimilar(song, "Search")
+                                    }
+                                    SearchResultType.Artist ->
+                                        navController.navigate(ArtistRoute(item.browseId ?: item.id)) {
+                                            launchSingleTop = true
+                                        }
+                                    // Opened, not played. Half the reason to tap an
+                                    // album is that you want a particular track on
+                                    // it, and starting at one takes that away.
+                                    SearchResultType.Album -> navController.navigate(
+                                        CollectionRoute(
+                                            browseId = item.browseId ?: item.id,
+                                            title = item.title,
+                                            subtitle = item.subtitle,
+                                            artworkUrl = item.thumbnailUrl,
+                                            kind = "album",
+                                        ),
+                                    ) { launchSingleTop = true }
+
+                                    SearchResultType.Podcast -> navController.navigate(
+                                        CollectionRoute(
+                                            browseId = item.browseId ?: item.id,
+                                            title = item.title,
+                                            subtitle = item.subtitle,
+                                            artworkUrl = item.thumbnailUrl,
+                                            kind = "podcast",
+                                        ),
+                                    ) { launchSingleTop = true }
+
+                                    SearchResultType.Playlist -> navController.navigate(
+                                        CollectionRoute(
+                                            browseId = item.browseId ?: item.id,
+                                            title = item.title,
+                                            subtitle = item.subtitle,
+                                            artworkUrl = item.thumbnailUrl,
+                                            kind = "playlist",
+                                        ),
+                                    ) { launchSingleTop = true }
+                                }
+                            },
+                            onSongMore = { menuSong = it },
+                            contentPadding = contentPadding,
+                            recentResults = recentResults,
+                            onClearRecent = {
+                                recentResults = emptyList()
+                                recentStore.save(emptyList())
+                            },
+                            suggestions = suggestions,
+                            onPodcastCategory = { category ->
+                                searchTab = "Podcasts"
+                                query = category
+                                lastSearchAt = System.currentTimeMillis()
+                            },
+                            error = searchError,
+                            onRetry = { searchAttempt++ },
+                            onVoice = if (canListen) {
+                                { runCatching { voiceLauncher.launch(voiceIntent) } }
+                            } else {
+                                null
+                            },
+                        )
+                    }
+
+                    composable<AddSongsRoute> { entry ->
+                        val route = entry.toRoute<AddSongsRoute>()
+                        val meta by library.playlist(route.playlistId).collectAsStateWithLifecycle(null)
+                        val inPlaylist by library.playlistSongs(route.playlistId)
+                            .collectAsStateWithLifecycle(emptyList())
+                        var addQuery by remember { mutableStateOf("") }
+                        var addResults by remember { mutableStateOf(emptyList<Song>()) }
+                        var addSearching by remember { mutableStateOf(false) }
+
+                        LaunchedEffect(addQuery) {
+                            val q = addQuery.trim()
+                            if (q.isEmpty()) {
+                                addResults = emptyList()
+                                return@LaunchedEffect
+                            }
+                            delay(200)
+                            addSearching = true
+                            container.searchRepository.search(q).onSuccess { addResults = it }
+                            addSearching = false
+                        }
+
+                        AddSongsScreen(
+                            playlistName = meta?.name ?: "this playlist",
+                            query = addQuery,
+                            onQueryChange = { addQuery = it },
+                            results = addResults,
+                            suggestions = recentlyPlayed.take(30),
+                            searching = addSearching,
+                            alreadyIn = inPlaylist.mapTo(HashSet()) { it.id },
+                            onAdd = { song ->
+                                songsById = songsById + (song.id to song)
+                                scope.launch { library.addToPlaylist(route.playlistId, song) }
+                            },
+                            onAddFromPhone = { pickFromPhone(route.playlistId) },
+                            onBack = { navController.popBackStack() },
+                            contentPadding = contentPadding,
+                        )
+                    }
+
+                    composable<CollectionRoute> { entry ->
+                        val route = entry.toRoute<CollectionRoute>()
+                        var tracks by remember(route.browseId) { mutableStateOf(emptyList<Song>()) }
+                        var tracksLoading by remember(route.browseId) { mutableStateOf(true) }
+                        var tracksError by remember(route.browseId) { mutableStateOf<String?>(null) }
+
+                        /** Episode dates, for the row subtitle. Empty for albums and playlists. */
+                        var published by remember(route.browseId) { mutableStateOf(emptyMap<String, Long>()) }
+
+                        suspend fun fetch() {
+                            tracksLoading = true
+                            val repo = container.artistRepository
+                            val result = when (route.kind) {
+                                "playlist" -> repo.playlistSongs(route.browseId)
+                                "podcast" -> container.podcastRepository.episodes(route.browseId).map { eps ->
+                                    published = eps.mapNotNull { e -> e.publishedAt?.let { e.song.id to it } }.toMap()
+                                    eps.map { it.song }
+                                }
+                                else -> repo.albumSongs(route.browseId)
+                            }
+                            result.fold(
+                                onSuccess = {
+                                    tracks = it
+                                    tracksError = null
+                                    songsById = songsById + it.associateBy { song -> song.id }
+                                },
+                                onFailure = { tracksError = it.message ?: it.toString() },
+                            )
+                            tracksLoading = false
+                        }
+                        LaunchedEffect(route.browseId) { fetch() }
+
+                        CollectionScreen(
+                            title = route.title,
+                            subtitle = listOfNotNull(
+                                route.subtitle.takeIf { it.isNotBlank() },
+                                tracks.size.takeIf { it > 0 }?.let {
+                                    val noun = if (route.kind == "podcast") "episode" else "song"
+                                    "$it $noun" + if (it == 1) "" else "s"
+                                },
+                            ).joinToString(" · "),
+                            // The tracks carry the album's own art, so prefer it:
+                            // a cover URL squeezed through a navigation argument
+                            // has to survive being encoded into a route path, and
+                            // an empty square is the visible cost when it does not.
+                            artworkUrl = tracks.firstOrNull()?.thumbnailUrl ?: route.artworkUrl,
+                            songs = tracks,
+                            loading = tracksLoading,
+                            error = tracksError,
+                            nowPlayingId = current?.id,
+                            onPlayFrom = { song -> playFrom(song, tracks, route.title) },
+                            onPlayAll = {
+                                tracks.firstOrNull()?.let { playFrom(it, tracks, route.title) }
+                            },
+                            onShuffle = {
+                                val shuffled = tracks.shuffled()
+                                shuffled.firstOrNull()?.let { playFrom(it, shuffled, route.title) }
+                            },
+                            onSongMore = { menuSong = it },
+                            numbered = route.kind != "podcast",
+                            rowSubtitle = if (route.kind == "podcast") {
+                                { song -> episodeLine(published[song.id], song.durationSec) }
+                            } else {
+                                { song -> song.artist }
+                            },
+                            onRetry = { scope.launch { fetch() } },
+                            onBack = { navController.popBackStack() },
+                            contentPadding = contentPadding,
+                        )
+                    }
+
+                    composable<ArtistRoute> { entry ->
+                        val route = entry.toRoute<ArtistRoute>()
+                        var artistData by remember(route.artistId) { mutableStateOf<com.mero.domain.ArtistPageData?>(null) }
+                        var artistLoading by remember(route.artistId) { mutableStateOf(true) }
+                        var artistError by remember(route.artistId) { mutableStateOf<String?>(null) }
+                        LaunchedEffect(route.artistId) {
+                            artistLoading = true
+                            container.artistRepository.artist(route.artistId).fold(
+                                onSuccess = { artistData = it; artistError = null },
+                                onFailure = { artistError = it.message ?: it.toString() },
+                            )
+                            artistLoading = false
+                        }
+                        ArtistScreen(
+                            data = artistData,
+                            loading = artistLoading,
+                            error = artistError,
+                            onBack = { navController.popBackStack() },
+                            // Same rule as search: opened, not played.
+                            onPlaylistClick = { playlist ->
+                                navController.navigate(
+                                    CollectionRoute(
+                                        browseId = playlist.browseId,
+                                        title = playlist.title,
+                                        subtitle = artistData?.name.orEmpty(),
+                                        artworkUrl = playlist.thumbnailUrl,
+                                        kind = "playlist",
+                                    ),
+                                ) { launchSingleTop = true }
+                            },
+                            onAlbumClick = { album ->
+                                navController.navigate(
+                                    CollectionRoute(
+                                        browseId = album.browseId,
+                                        title = album.title,
+                                        subtitle = listOfNotNull(
+                                            artistData?.name?.takeIf { it.isNotBlank() },
+                                            album.year?.toString(),
+                                        ).joinToString(" · "),
+                                        artworkUrl = album.thumbnailUrl,
+                                        kind = "album",
+                                    ),
+                                ) { launchSingleTop = true }
+                            },
+                            onSongClick = { song -> playFrom(song, artistData?.songs.orEmpty(), "Artist") },
+                            onSongMore = { menuSong = it },
+                            contentPadding = contentPadding,
+                        )
+                    }
+
+                    composable<Library> {
+                        LibraryScreen(
+                            selectedTab = libraryTab,
+                            onTabChange = { libraryTab = it },
+                            liked = likedSongs,
+                            recentlyPlayed = recentlyPlayed,
+                            mostPlayed = mostPlayed,
+                            downloads = downloadedSongs,
+                            onDevice = onDeviceSongs,
+                            onAddFromPhone = { pickFromPhone(null) },
+                            playlists = playlists,
+                            smartPlaylists = smartPlaylists,
+                            onOpenPlaylist = { navController.navigate(PlaylistRoute(it)) },
+                            onOpenSmartPlaylist = { navController.navigate(SmartPlaylistRoute(it)) },
+                            onCreatePlaylist = { name -> scope.launch { library.createPlaylist(name) } },
+                            onCreateSmartPlaylist = { name, rule, minPlays, artist ->
+                                scope.launch { library.createSmartPlaylist(name, rule, minPlays, artist) }
+                            },
+                            onSongMore = { menuSong = it },
+                            nowPlayingId = current?.id,
+                            onSongClick = { song -> playFrom(song, librarySongs, libraryTab) },
+                            onSettingsClick = { openTab(SettingsRoute) },
+                            onBrowse = { openTab(SearchRoute) },
+                            contentPadding = contentPadding,
+                        )
+                    }
+
+                    composable<Equalizer> {
+                        // The analyser only runs its FFT while this screen is up.
+                        val spectrum = audioEffects.spectrum
+                        DisposableEffect(Unit) {
+                            spectrum.listening = true
+                            onDispose { spectrum.listening = false }
+                        }
+                        val levels by spectrum.bands.collectAsStateWithLifecycle()
+                        // Bass band drives the haptics; the analyser is already
+                        // producing it, so this costs nothing extra.
+                        LaunchedEffect(levels) {
+                            container.beatHaptics.onLowBandLevel(
+                                levels.getOrElse(1) { 0f },
+                                android.os.SystemClock.elapsedRealtime(),
+                            )
+                        }
+                        val responseDb = remember(bands) {
+                            com.mero.playback.equalizerResponseDb(bands, sampleRate = 48_000)
+                        }
+                        EqualizerScreen(
+                            spectrumLevels = levels,
+                            responseDb = responseDb,
+                            outputRoute = outputRoute,
+                            detectedRoute = container.outputRoute.detected,
+                            routeOverride = routeOverride,
+                            onRouteOverrideChange = { picked ->
+                                routeOverride = picked
+                                container.settings.putString(
+                                    SettingsStore.ROUTE_OVERRIDE,
+                                    picked?.name.orEmpty(),
+                                )
+                            },
+                            crossfeed = crossfeed,
+                            onCrossfeedChange = {
+                                crossfeed = it
+                                audioEffects.setCrossfeed(it)
+                                container.settings.putFloat("crossfeed", it)
+                            },
+                            speed = playbackSpeed,
+                            onSpeedChange = {
+                                playbackSpeed = it
+                                connection.controller?.setPlaybackSpeed(it)
+                                container.settings.putFloat(SettingsStore.PLAYBACK_SPEED, it)
+                            },
+                            hapticIntensity = hapticIntensity,
+                            onHapticIntensityChange = {
+                                hapticIntensity = it
+                                container.beatHaptics.setIntensity(it)
+                                container.settings.putFloat("haptics", it)
+                            },
+                            enabled = eqEnabled,
+                            onEnabledChange = { eqEnabled = it; audioEffects.setEnabled(it) },
+                            preset = preset,
+                            onPresetChange = { name ->
+                                preset = name
+                                // A preset sets gains and leaves the frequencies
+                                // and widths a listener may have moved.
+                                bands = com.mero.playback.applyGains(
+                                    bands,
+                                    EqPresets.presets.getValue(name),
+                                )
+                                audioEffects.setBands(bands)
+                                saveEq()
+                            },
+                            bands = bands,
+                            selectedBand = selectedBand,
+                            onSelectBand = { selectedBand = it },
+                            onResetBands = {
+                                bands = com.mero.playback.defaultBands()
+                                preset = "Flat"
+                                audioEffects.setBands(bands)
+                                saveEq()
+                            },
+                            onBandChange = { index, band ->
+                                bands = bands.toMutableList().also { it[index] = band }
+                                preset = "Custom"
+                                audioEffects.setBand(index, band)
+                                saveEq()
+                            },
+                            preamp = preamp,
+                            onPreampChange = { preamp = it; audioEffects.setPreamp(it); saveEq() },
+                            toggles = toggles,
+                            onToggle = { key, value ->
+                                onToggle(key, value)
+                                when (key) {
+                                    "norm" -> audioEffects.setNormalization(value)
+                                }
+                            },
+                            onBack = { leaveEqualizer() },
+                            contentPadding = contentPadding,
+                        )
+                        // The system back gesture never reaches the screen's own
+                        // back arrow, and without this it popped to whatever browse
+                        // screen was underneath — so opening the equalizer from a
+                        // playing track and pressing back landed on Home.
+                        BackHandler(enabled = cameFromPlayer) { leaveEqualizer() }
+                    }
+
+                    composable<PlaylistRoute> { entry ->
+                        val route: PlaylistRoute = entry.toRoute()
+                        val meta by library.playlist(route.playlistId)
+                            .collectAsStateWithLifecycle(null)
+                        val songs by library.playlistSongs(route.playlistId)
+                            .collectAsStateWithLifecycle(emptyList())
+
+                        PlaylistDetailScreen(
+                            name = meta?.name ?: "Playlist",
+                            description = meta?.description,
+                            coverUri = meta?.coverUri,
+                            songs = songs,
+                            nowPlayingId = current?.id,
+                            onBack = { navController.popBackStack() },
+                            onPlay = { song -> playFrom(song, songs, meta?.name ?: "Playlist") },
+                            onPlayAll = {
+                                songs.firstOrNull()?.let {
+                                    playFrom(it, songs, meta?.name ?: "Playlist")
+                                }
+                            },
+                            onShuffle = {
+                                val shuffledQueue = songs.shuffled()
+                                shuffledQueue.firstOrNull()?.let {
+                                    shuffle = true
+                                    playFrom(it, shuffledQueue, meta?.name ?: "Playlist")
+                                }
+                            },
+                            onRemove = { song ->
+                                scope.launch { library.removeFromPlaylist(route.playlistId, song.id) }
+                            },
+                            onSongMore = { menuSong = it },
+                            onRename = { name ->
+                                scope.launch { library.renamePlaylist(route.playlistId, name) }
+                            },
+                            onDescriptionChange = { text ->
+                                scope.launch { library.setPlaylistDescription(route.playlistId, text) }
+                            },
+                            onPickCover = { coverTarget = route.playlistId; coverPicker.launch("image/*") },
+                            onAddSongs = {
+                                navController.navigate(AddSongsRoute(route.playlistId)) { launchSingleTop = true }
+                            },
+                            onClearCover = {
+                                scope.launch { library.setPlaylistCover(route.playlistId, null) }
+                            },
+                            onDelete = {
+                                scope.launch { library.deletePlaylist(route.playlistId) }
+                                navController.popBackStack()
+                            },
+                            onShare = {
+                                val shared = com.mero.ui.playlist.sharePlaylistFile(
+                                    context,
+                                    meta?.name ?: "Playlist",
+                                    meta?.description,
+                                    songs,
+                                )
+                                if (!shared) say("There are no songs here to share")
+                            },
+                            contentPadding = contentPadding,
+                        )
+                    }
+
+                    composable<SmartPlaylistRoute> { entry ->
+                        val route: SmartPlaylistRoute = entry.toRoute()
+                        val summary = smartPlaylists.firstOrNull { it.id == route.playlistId }
+                        val songs by if (summary == null) {
+                            kotlinx.coroutines.flow.flowOf(emptyList())
+                        } else {
+                            library.smartPlaylistSongs(summary)
+                        }.collectAsStateWithLifecycle(emptyList())
+
+                        PlaylistDetailScreen(
+                            name = summary?.name ?: "Smart playlist",
+                            // A smart playlist is defined by its rule, so there is
+                            // nothing here for a person to name or illustrate.
+                            description = null,
+                            coverUri = null,
+                            songs = songs,
+                            nowPlayingId = current?.id,
+                            onBack = { navController.popBackStack() },
+                            onPlay = { song -> playFrom(song, songs, summary?.name ?: "Smart playlist") },
+                            onPlayAll = { songs.firstOrNull()?.let { playFrom(it, songs, summary?.name ?: "Smart playlist") } },
+                            onShuffle = {
+                                val shuffled = songs.shuffled()
+                                shuffled.firstOrNull()?.let { playFrom(it, shuffled, summary?.name ?: "Smart playlist") }
+                            },
+                            onRemove = {},
+                            onSongMore = { menuSong = it },
+                            onRename = {},
+                            onDescriptionChange = {},
+                            onPickCover = {},
+                            onClearCover = {},
+                            onAddSongs = null,
+                            onDelete = {
+                                scope.launch { library.deleteSmartPlaylist(route.playlistId) }
+                                navController.popBackStack()
+                            },
+                            contentPadding = contentPadding,
+                        )
+                    }
+
+                    composable<ImportRoute> {
+                        ImportScreen(
+                            source = importSource,
+                            onSourceChange = { importSource = it; importStatus = null },
+                            url = importUrl,
+                            onUrlChange = { importUrl = it },
+                            clientId = spotifyId,
+                            onClientIdChange = {
+                                spotifyId = it
+                                spotifyPrefs.edit().putString("id", it).apply()
+                            },
+                            clientSecret = spotifySecret,
+                            onClientSecretChange = {
+                                spotifySecret = it
+                                spotifyPrefs.edit().putString("secret", it).apply()
+                            },
+                            busy = importBusy,
+                            status = importStatus,
+                            onImport = {
+                                importBusy = true
+                                importStatus = "Reading the playlist..."
+                                scope.launch {
+                                    val result = if (importSource == "YouTube") {
+                                        container.importRepository.importYouTube(importUrl)
+                                    } else {
+                                        container.importRepository.importSpotify(
+                                            importUrl,
+                                            spotifyId,
+                                            spotifySecret,
+                                        ) { done, total ->
+                                            importStatus = "Matching track $done of $total..."
+                                        }
+                                    }
+                                    importBusy = false
+                                    result.fold(
+                                        onSuccess = { imported ->
+                                            val id = library.createPlaylist(imported.name)
+                                            library.addToPlaylist(id, imported.songs)
+                                            importStatus = buildString {
+                                                append("Imported ")
+                                                append(imported.songs.size)
+                                                append(" tracks into \"")
+                                                append(imported.name)
+                                                append("\".")
+                                                if (imported.unmatched.isNotEmpty()) {
+                                                    append(NL)
+                                                    append(NL)
+                                                    append("Could not find on YouTube:")
+                                                    append(NL)
+                                                    append(imported.unmatched.joinToString(NL))
+                                                }
+                                            }
+                                            importUrl = ""
+                                        },
+                                        onFailure = { importStatus = it.message ?: it.toString() },
+                                    )
+                                }
+                            },
+                            onBack = { navController.popBackStack() },
+                            contentPadding = contentPadding,
+                        )
+                    }
+
+                    composable<SettingsRoute> {
+                        SettingsScreen(
+                            accent = accent,
+                            onAccentChange = onAccentChange,
+                            themeMode = themeMode,
+                            onThemeModeChange = onThemeModeChange,
+                            darkInEffect = darkInEffect,
+                            displayName = displayName,
+                            onEditName = onEditName,
+                            downloadFolderLabel = downloadFolderLabel(downloadFolderUri),
+                            downloadFolderError = folderError,
+                            toggles = toggles,
+                            onToggle = onToggle,
+                            onEqualizerClick = {
+                                // Reached from Settings, so back belongs to Settings.
+                                // Clearing the flag matters because leaving the
+                                // equalizer any other way than back leaves it set.
+                                cameFromPlayer = false
+                                navController.navigate(Equalizer)
+                            },
+                            onImportClick = { navController.navigate(ImportRoute) },
+                            onSleepTimerClick = { overlay = "sleep" },
+                            sleepSummary = when {
+                                sleepRemaining != null -> "Active"
+                                sleepAfterTrack -> "Stops at end of track"
+                                else -> "Off"
+                            },
+                            onClearCache = {
+                                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    // Through the owning caches, not the filesystem:
+                                    // both keep an index that a directory delete
+                                    // leaves pointing at files that no longer exist.
+                                    coil3.SingletonImageLoader.get(context).diskCache?.clear()
+                                    com.mero.playback.MediaCache.clearStreaming()
+                                }
+                            },
+                            onClearDownloads = {
+                                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    container.libraryRepository.clearDownloadedMarkers()
+                                    com.mero.playback.MediaCache.clearExportedDownloads(
+                                        context,
+                                        downloadFolderUris,
+                                    )
+                                    com.mero.playback.MediaCache.clearDownloads()
+                                }
+                            },
+                            onChooseDownloadFolder = { folderPicker.launch(MUSIC_FOLDER_URI) },
+                            downloadFolderSelected = downloadFolderUri != null,
+                            streamCodec = streamCodec,
+                            onStreamCodecChange = {
+                                streamCodec = it
+                                qualityPrefs.edit().putString("stream", it.name).apply()
+                                container.streamRepository.setCodecPreference(it)
+                            },
+                            downloadCodec = downloadCodec,
+                            onDownloadCodecChange = {
+                                downloadCodec = it
+                                qualityPrefs.edit().putString("download", it.name).apply()
+                            },
+                            batteryUnrestricted = batteryUnrestricted,
+                            reminderFrequency = reminderFrequency,
+                            onReminderFrequencyChange = {
+                                reminderFrequency = it
+                                container.settings.putString(SettingsStore.REMINDERS, it.name)
+                                if (it != com.mero.data.ReminderFrequency.Off &&
+                                    android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU
+                                ) {
+                                    notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                            },
+                            onBatterySettingsClick = { requestBatteryExemption() },
+                            playerVariant = playerVariant,
+                            onPlayerVariantChange = {
+                                playerVariant = it
+                                container.settings.putString(SettingsStore.PLAYER_VARIANT, it.name)
+                            },
+                            onBack = { navController.popBackStack() },
+                            contentPadding = contentPadding,
+                            appVersion = updates.installedVersion,
+                            updateState = updateState,
+                            onSourceClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, android.net.Uri.parse(MERO_SOURCE_URL))
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    )
+                                }
+                            },
+                            onCheckUpdates = { scope.launch { updates.check(manual = true) } },
+                            onDownloadUpdate = {
+                                (updateState as? UpdateState.Available)?.let { available ->
+                                    scope.launch { updates.download(available.release) }
+                                }
+                            },
+                            onInstallUpdate = {
+                                (updateState as? UpdateState.Downloaded)?.let { updates.install(it.uri) }
+                            },
+                            onDiscardDownload = { updates.discardDownload() },
+                        )
+                    }
+                }
+
+            // Floats over the content: nothing is painted behind the bar except a fade from the
+            // content into the page colour (BottomScrim), the way Bhagavatam does it.
+            val scrimHeight by androidx.compose.animation.core.animateDpAsState(
+                if (current != null && !expanded) 200.dp else 130.dp,
+                androidx.compose.animation.core.tween(200),
+                label = "scrim",
+            )
+            BottomScrim(Modifier.align(Alignment.BottomCenter), height = scrimHeight)
+            Column(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .onSizeChanged { overlayHeight = with(overlayDensity) { it.height.toDp() } },
+            ) {
+
                     val song = current
                     if (song != null && !expanded) {
                         MiniPlayer(
@@ -1403,911 +2325,11 @@ private fun MeroContent(
                         }
                     }
                     }
-                }
-            },
-        ) { scaffoldPadding ->
-
-            NavHost(
-                navController = navController,
-                startDestination = Home,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = scaffoldPadding.calculateBottomPadding()),
-            ) {
-                composable<Home> {
-                    // Genre shelves ordered by the artists this listener likes
-                    // and plays; mixes from the same history.
-                    val affinity = remember(mostPlayed, likedSongs) {
-                        HashMap<String, Int>().apply {
-                            likedSongs.forEach { merge(com.mero.data.primaryArtist(it), 2, Int::plus) }
-                            mostPlayed.forEach { merge(com.mero.data.primaryArtist(it), 1, Int::plus) }
-                        }
-                    }
-                    val mixes = remember(mostPlayed, likedSongs) {
-                        val byArtist = com.mero.data.mixSeeds(mostPlayed + likedSongs)
-                        // "Your Mix" first: made from everything this listener loves, not one artist.
-                        listOfNotNull(byArtist.firstOrNull()?.let { com.mero.data.MixSeed(com.mero.data.YOUR_MIX, it.seed) }) + byArtist
-                    }
-                    HomeScreen(
-                        sections = personalSections + com.mero.data.rankShelvesByTaste(homeSections, affinity),
-                        mixes = mixes,
-                        onMix = { mix ->
-                            if (mix.artist != com.mero.data.YOUR_MIX) {
-                                playWithSimilar(mix.seed, mix.artist + " Mix")
-                            } else {
-                                scope.launch {
-                                    val songs = container.radioRepository.mixFor(library.taste()).getOrNull().orEmpty()
-                                    val first = songs.firstOrNull()
-                                    if (first == null) say("Play and like a few songs first, so Mero learns what you enjoy") else playFrom(first, songs, "Your Mix")
-                                }
-                            }
-                        },
-                        onMood = { mood ->
-                            say("Starting a " + mood.label.lowercase() + " mix")
-                            scope.launch {
-                                container.searchRepository.search(mood.query).fold(
-                                    onSuccess = { found ->
-                                        val ranked = com.mero.data.rankForTaste(found, library.taste())
-                                            .map { it.copy(origin = com.mero.domain.Origin.MIX) }
-                                        ranked.firstOrNull()?.let { playFrom(it, ranked, mood.label) }
-                                            ?: say("Couldn't find " + mood.label.lowercase() + " songs right now")
-                                    },
-                                    onFailure = { say("Couldn't reach YouTube. Check your connection and try again.") },
-                                )
-                            }
-                        },
-                        loading = homeLoading,
-                        error = homeError,
-                        onRetry = { loadHome() },
-                        onLoadMore = { loadMoreHome() },
-                        loadingMore = homeLoadingMore,
-                        onSongClick = { song, context -> playFrom(song, context, "Home") },
-                        displayName = displayName,
-                        recentlyPlayed = recentlyPlayed,
-                        updateAvailableVersion = (updateState as? UpdateState.Available)
-                            ?.release?.versionName,
-                        onUpdateClick = { openTab(SettingsRoute) },
-                        contentPadding = contentPadding,
-                        customLogo = customLogo,
-                    )
-                }
-
-                composable<SearchRoute> {
-                    // Checked on arrival rather than on a timer, so nothing is
-                    // ever cleared out from under someone who is looking at it.
-                    LaunchedEffect(Unit) {
-                        val idle = System.currentTimeMillis() - lastSearchAt
-                        if (query.isNotBlank() && idle > SEARCH_FORGET_MS) query = ""
-                    }
-
-                    var results by remember { mutableStateOf<List<SearchItem>>(emptyList()) }
-                    var continuationToken by remember { mutableStateOf<String?>(null) }
-                    // Songs whose radio has already been added after YouTube's
-                    // own pages ran out (see nextRadioSeed).
-                    var radioSeeds by remember { mutableStateOf(emptySet<String>()) }
-                    var isSearching by remember { mutableStateOf(false) }
-                    var isLoadingMore by remember { mutableStateOf(false) }
-                    var searchError by remember { mutableStateOf<String?>(null) }
-                    var searchAttempt by remember { mutableStateOf(0) }
-                    var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
-
-                    LaunchedEffect(query) {
-                        val trimmed = query.trim()
-                        if (trimmed.length < 2) {
-                            suggestions = emptyList()
-                            return@LaunchedEffect
-                        }
-                        delay(150)
-                        container.searchRepository.suggest(trimmed).onSuccess { s ->
-                            suggestions = s.queries
-                                .filterNot { it.equals(trimmed, ignoreCase = true) }
-                                .take(6)
-                        }
-                    }
-
-                    // Active live search as the user writes ("since writing")
-                    LaunchedEffect(query, searchTab, searchAttempt) {
-                        val trimmed = query.trim()
-                        radioSeeds = emptySet()
-                        if (trimmed.isBlank()) {
-                            results = emptyList()
-                            continuationToken = null
-                            isSearching = false
-                            searchError = null
-                            return@LaunchedEffect
-                        }
-                        // Short enough to feel live from the first letter,
-                        // long enough that holding a key down does not fire a
-                        // request per character.
-                        delay(120)
-                        isSearching = true
-                        if (searchTab == "Podcasts") {
-                            // Apple's directory, not YouTube: one page, no
-                            // continuation, and a show rather than a track.
-                            container.podcastRepository.search(trimmed).fold(
-                                onSuccess = {
-                                    results = it
-                                    continuationToken = null
-                                    searchError = null
-                                },
-                                onFailure = { e -> searchError = searchFailureText(e) },
-                            )
-                            isSearching = false
-                            return@LaunchedEffect
-                        }
-                        // A pasted YouTube address plays what it points at, even
-                        // when YouTube Music has no song entry for it.
-                        val link = com.mero.data.parseYouTubeLink(trimmed)
-                        if (link != null) {
-                            container.searchRepository.resolveLink(link).fold(
-                                onSuccess = { songs ->
-                                    results = songs.map {
-                                        SearchItem(
-                                            id = it.id,
-                                            title = it.title,
-                                            subtitle = listOf(it.artist, it.durationSec.takeIf { d -> d > 0 }?.asClock())
-                                                .filterNotNull().filter { t -> t.isNotBlank() }.joinToString(" · "),
-                                            thumbnailUrl = it.thumbnailUrl,
-                                            type = SearchResultType.Song,
-                                            song = it,
-                                        )
-                                    }
-                                    continuationToken = null
-                                    searchError = if (songs.isEmpty()) "Nothing playable at that link" else null
-                                    songs.firstOrNull()?.let(::warmForPlayback)
-                                },
-                                onFailure = { searchError = "Couldn't open that link. Check it and your connection, then try again." },
-                            )
-                            isSearching = false
-                            return@LaunchedEffect
-                        }
-                        container.searchRepository.searchItemsPage(
-                            trimmed,
-                            when (searchTab) {
-                                "Albums" -> SearchResultType.Album
-                                "Artists" -> SearchResultType.Artist
-                                "Playlists" -> SearchResultType.Playlist
-                                else -> SearchResultType.Song
-                            },
-                        ).fold(
-                            onSuccess = { page ->
-                                results = page.items
-                                continuationToken = page.continuation
-                                searchError = null
-                                isSearching = false
-                                page.items.firstOrNull()?.song?.let(::warmForPlayback)
-                            },
-                            onFailure = { e ->
-                                searchError = searchFailureText(e)
-                                isSearching = false
-                            },
-                        )
-                    }
-
-                    fun loadMoreResults() {
-                        val trimmed = query.trim()
-                        val tab = searchTab
-                        if (trimmed.isBlank() || isLoadingMore || isSearching) return
-                        // A page that arrives after the search changed belongs to
-                        // the old search; appending it mixed two searches together.
-                        fun stillCurrent() = query.trim() == trimmed && searchTab == tab
-                        val token = continuationToken
-                        if (token == null) {
-                            // YouTube's pages are done. Songs keep going with what
-                            // is like the results, one result's radio at a time.
-                            if (tab != "Songs") return
-                            isLoadingMore = true
-                            scope.launch {
-                                var tries = 0
-                                while (tries++ < 4 && stillCurrent()) {
-                                    val seed = com.mero.ui.search.nextRadioSeed(results, radioSeeds) ?: break
-                                    radioSeeds = radioSeeds + seed.id
-                                    val more = container.radioRepository.radioFor(seed.id).getOrNull().orEmpty()
-                                    if (!stillCurrent()) break
-                                    val (merged, added) = com.mero.ui.search.appendSongs(results, more)
-                                    results = merged
-                                    // A radio of songs already shown adds nothing;
-                                    // try the next result rather than stop.
-                                    if (added > 0) break
-                                }
-                                isLoadingMore = false
-                            }
-                            return
-                        }
-                        isLoadingMore = true
-                        scope.launch {
-                            container.searchRepository.searchItemsPage(
-                                trimmed,
-                                when (searchTab) {
-                                    "Albums" -> SearchResultType.Album
-                                    "Artists" -> SearchResultType.Artist
-                                    "Playlists" -> SearchResultType.Playlist
-                                    else -> SearchResultType.Song
-                                },
-                                continuation = token,
-                            ).fold(
-                                onSuccess = { page ->
-                                    if (stillCurrent()) {
-                                        val existingIds = results.map { it.id }.toSet()
-                                        val newItems = page.items.filter { it.id !in existingIds }
-                                        results = results + newItems
-                                        continuationToken = page.continuation
-                                    }
-                                    isLoadingMore = false
-                                },
-                                onFailure = {
-                                    isLoadingMore = false
-                                },
-                            )
-                        }
-                    }
-
-                    // Speech-to-text from whatever recogniser the phone has; a
-                    // song, an artist or a line of lyrics all work, because the
-                    // search behind it already matches lyrics.
-                    val voiceIntent = remember {
-                        Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                            .putExtra(
-                                android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                                android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
-                            )
-                            .putExtra(
-                                android.speech.RecognizerIntent.EXTRA_PROMPT,
-                                "Say a song, an artist or a line of the lyrics",
-                            )
-                    }
-                    val canListen = remember { voiceIntent.resolveActivity(context.packageManager) != null }
-                    val voiceLauncher = rememberLauncherForActivityResult(
-                        ActivityResultContracts.StartActivityForResult(),
-                    ) { result ->
-                        val heard = result.data
-                            ?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)
-                            ?.firstOrNull()
-                            ?.trim()
-                        if (!heard.isNullOrEmpty()) {
-                            query = heard
-                            lastSearchAt = System.currentTimeMillis()
-                        }
-                    }
-
-                    SearchScreen(
-                        genres = genreCards,
-                        suggestedArtists = suggestedArtists,
-                        recentlyPlayed = recentlyPlayed,
-                        onSongClick = { song -> playFrom(song, recentlyPlayed, "Search") },
-                        onGenreClick = { genre -> query = genre },
-                        query = query,
-                        onQueryChange = {
-                            query = it
-                            lastSearchAt = System.currentTimeMillis()
-                        },
-                        onSearch = {},
-                        selectedTab = searchTab,
-                        onTabChange = { searchTab = it },
-                        results = results,
-                        isSearching = isSearching,
-                        isLoadingMore = isLoadingMore,
-                        hasMoreResults = continuationToken != null ||
-                            (searchTab == "Songs" && com.mero.ui.search.nextRadioSeed(results, radioSeeds) != null),
-                        onLoadMore = { loadMoreResults() },
-                        nowPlayingId = current?.id,
-                        onResultClick = { item ->
-                            // What was opened is what is worth finding again, shown
-                            // as itself next time the search box is tapped.
-                            rememberResult(item)
-                            when (item.type) {
-                                SearchResultType.Song -> item.song?.let { song ->
-                                    playWithSimilar(song, "Search")
-                                }
-                                SearchResultType.Artist ->
-                                    navController.navigate(ArtistRoute(item.browseId ?: item.id)) {
-                                        launchSingleTop = true
-                                    }
-                                // Opened, not played. Half the reason to tap an
-                                // album is that you want a particular track on
-                                // it, and starting at one takes that away.
-                                SearchResultType.Album -> navController.navigate(
-                                    CollectionRoute(
-                                        browseId = item.browseId ?: item.id,
-                                        title = item.title,
-                                        subtitle = item.subtitle,
-                                        artworkUrl = item.thumbnailUrl,
-                                        kind = "album",
-                                    ),
-                                ) { launchSingleTop = true }
-
-                                SearchResultType.Podcast -> navController.navigate(
-                                    CollectionRoute(
-                                        browseId = item.browseId ?: item.id,
-                                        title = item.title,
-                                        subtitle = item.subtitle,
-                                        artworkUrl = item.thumbnailUrl,
-                                        kind = "podcast",
-                                    ),
-                                ) { launchSingleTop = true }
-
-                                SearchResultType.Playlist -> navController.navigate(
-                                    CollectionRoute(
-                                        browseId = item.browseId ?: item.id,
-                                        title = item.title,
-                                        subtitle = item.subtitle,
-                                        artworkUrl = item.thumbnailUrl,
-                                        kind = "playlist",
-                                    ),
-                                ) { launchSingleTop = true }
-                            }
-                        },
-                        onSongMore = { menuSong = it },
-                        contentPadding = contentPadding,
-                        recentResults = recentResults,
-                        onClearRecent = {
-                            recentResults = emptyList()
-                            recentStore.save(emptyList())
-                        },
-                        suggestions = suggestions,
-                        onPodcastCategory = { category ->
-                            searchTab = "Podcasts"
-                            query = category
-                            lastSearchAt = System.currentTimeMillis()
-                        },
-                        error = searchError,
-                        onRetry = { searchAttempt++ },
-                        onVoice = if (canListen) {
-                            { runCatching { voiceLauncher.launch(voiceIntent) } }
-                        } else {
-                            null
-                        },
-                    )
-                }
-
-                composable<AddSongsRoute> { entry ->
-                    val route = entry.toRoute<AddSongsRoute>()
-                    val meta by library.playlist(route.playlistId).collectAsStateWithLifecycle(null)
-                    val inPlaylist by library.playlistSongs(route.playlistId)
-                        .collectAsStateWithLifecycle(emptyList())
-                    var addQuery by remember { mutableStateOf("") }
-                    var addResults by remember { mutableStateOf(emptyList<Song>()) }
-                    var addSearching by remember { mutableStateOf(false) }
-
-                    LaunchedEffect(addQuery) {
-                        val q = addQuery.trim()
-                        if (q.isEmpty()) {
-                            addResults = emptyList()
-                            return@LaunchedEffect
-                        }
-                        delay(200)
-                        addSearching = true
-                        container.searchRepository.search(q).onSuccess { addResults = it }
-                        addSearching = false
-                    }
-
-                    AddSongsScreen(
-                        playlistName = meta?.name ?: "this playlist",
-                        query = addQuery,
-                        onQueryChange = { addQuery = it },
-                        results = addResults,
-                        suggestions = recentlyPlayed.take(30),
-                        searching = addSearching,
-                        alreadyIn = inPlaylist.mapTo(HashSet()) { it.id },
-                        onAdd = { song ->
-                            songsById = songsById + (song.id to song)
-                            scope.launch { library.addToPlaylist(route.playlistId, song) }
-                        },
-                        onAddFromPhone = { pickFromPhone(route.playlistId) },
-                        onBack = { navController.popBackStack() },
-                        contentPadding = contentPadding,
-                    )
-                }
-
-                composable<CollectionRoute> { entry ->
-                    val route = entry.toRoute<CollectionRoute>()
-                    var tracks by remember(route.browseId) { mutableStateOf(emptyList<Song>()) }
-                    var tracksLoading by remember(route.browseId) { mutableStateOf(true) }
-                    var tracksError by remember(route.browseId) { mutableStateOf<String?>(null) }
-
-                    /** Episode dates, for the row subtitle. Empty for albums and playlists. */
-                    var published by remember(route.browseId) { mutableStateOf(emptyMap<String, Long>()) }
-
-                    suspend fun fetch() {
-                        tracksLoading = true
-                        val repo = container.artistRepository
-                        val result = when (route.kind) {
-                            "playlist" -> repo.playlistSongs(route.browseId)
-                            "podcast" -> container.podcastRepository.episodes(route.browseId).map { eps ->
-                                published = eps.mapNotNull { e -> e.publishedAt?.let { e.song.id to it } }.toMap()
-                                eps.map { it.song }
-                            }
-                            else -> repo.albumSongs(route.browseId)
-                        }
-                        result.fold(
-                            onSuccess = {
-                                tracks = it
-                                tracksError = null
-                                songsById = songsById + it.associateBy { song -> song.id }
-                            },
-                            onFailure = { tracksError = it.message ?: it.toString() },
-                        )
-                        tracksLoading = false
-                    }
-                    LaunchedEffect(route.browseId) { fetch() }
-
-                    CollectionScreen(
-                        title = route.title,
-                        subtitle = listOfNotNull(
-                            route.subtitle.takeIf { it.isNotBlank() },
-                            tracks.size.takeIf { it > 0 }?.let {
-                                val noun = if (route.kind == "podcast") "episode" else "song"
-                                "$it $noun" + if (it == 1) "" else "s"
-                            },
-                        ).joinToString(" · "),
-                        // The tracks carry the album's own art, so prefer it:
-                        // a cover URL squeezed through a navigation argument
-                        // has to survive being encoded into a route path, and
-                        // an empty square is the visible cost when it does not.
-                        artworkUrl = tracks.firstOrNull()?.thumbnailUrl ?: route.artworkUrl,
-                        songs = tracks,
-                        loading = tracksLoading,
-                        error = tracksError,
-                        nowPlayingId = current?.id,
-                        onPlayFrom = { song -> playFrom(song, tracks, route.title) },
-                        onPlayAll = {
-                            tracks.firstOrNull()?.let { playFrom(it, tracks, route.title) }
-                        },
-                        onShuffle = {
-                            val shuffled = tracks.shuffled()
-                            shuffled.firstOrNull()?.let { playFrom(it, shuffled, route.title) }
-                        },
-                        onSongMore = { menuSong = it },
-                        numbered = route.kind != "podcast",
-                        rowSubtitle = if (route.kind == "podcast") {
-                            { song -> episodeLine(published[song.id], song.durationSec) }
-                        } else {
-                            { song -> song.artist }
-                        },
-                        onRetry = { scope.launch { fetch() } },
-                        onBack = { navController.popBackStack() },
-                        contentPadding = contentPadding,
-                    )
-                }
-
-                composable<ArtistRoute> { entry ->
-                    val route = entry.toRoute<ArtistRoute>()
-                    var artistData by remember(route.artistId) { mutableStateOf<com.mero.domain.ArtistPageData?>(null) }
-                    var artistLoading by remember(route.artistId) { mutableStateOf(true) }
-                    var artistError by remember(route.artistId) { mutableStateOf<String?>(null) }
-                    LaunchedEffect(route.artistId) {
-                        artistLoading = true
-                        container.artistRepository.artist(route.artistId).fold(
-                            onSuccess = { artistData = it; artistError = null },
-                            onFailure = { artistError = it.message ?: it.toString() },
-                        )
-                        artistLoading = false
-                    }
-                    ArtistScreen(
-                        data = artistData,
-                        loading = artistLoading,
-                        error = artistError,
-                        onBack = { navController.popBackStack() },
-                        // Same rule as search: opened, not played.
-                        onPlaylistClick = { playlist ->
-                            navController.navigate(
-                                CollectionRoute(
-                                    browseId = playlist.browseId,
-                                    title = playlist.title,
-                                    subtitle = artistData?.name.orEmpty(),
-                                    artworkUrl = playlist.thumbnailUrl,
-                                    kind = "playlist",
-                                ),
-                            ) { launchSingleTop = true }
-                        },
-                        onAlbumClick = { album ->
-                            navController.navigate(
-                                CollectionRoute(
-                                    browseId = album.browseId,
-                                    title = album.title,
-                                    subtitle = listOfNotNull(
-                                        artistData?.name?.takeIf { it.isNotBlank() },
-                                        album.year?.toString(),
-                                    ).joinToString(" · "),
-                                    artworkUrl = album.thumbnailUrl,
-                                    kind = "album",
-                                ),
-                            ) { launchSingleTop = true }
-                        },
-                        onSongClick = { song -> playFrom(song, artistData?.songs.orEmpty(), "Artist") },
-                        onSongMore = { menuSong = it },
-                        contentPadding = contentPadding,
-                    )
-                }
-
-                composable<Library> {
-                    LibraryScreen(
-                        selectedTab = libraryTab,
-                        onTabChange = { libraryTab = it },
-                        liked = likedSongs,
-                        recentlyPlayed = recentlyPlayed,
-                        mostPlayed = mostPlayed,
-                        downloads = downloadedSongs,
-                        onDevice = onDeviceSongs,
-                        onAddFromPhone = { pickFromPhone(null) },
-                        playlists = playlists,
-                        smartPlaylists = smartPlaylists,
-                        onOpenPlaylist = { navController.navigate(PlaylistRoute(it)) },
-                        onOpenSmartPlaylist = { navController.navigate(SmartPlaylistRoute(it)) },
-                        onCreatePlaylist = { name -> scope.launch { library.createPlaylist(name) } },
-                        onCreateSmartPlaylist = { name, rule, minPlays, artist ->
-                            scope.launch { library.createSmartPlaylist(name, rule, minPlays, artist) }
-                        },
-                        onSongMore = { menuSong = it },
-                        nowPlayingId = current?.id,
-                        onSongClick = { song -> playFrom(song, librarySongs, libraryTab) },
-                        onSettingsClick = { openTab(SettingsRoute) },
-                        onBrowse = { openTab(SearchRoute) },
-                        contentPadding = contentPadding,
-                    )
-                }
-
-                composable<Equalizer> {
-                    // The analyser only runs its FFT while this screen is up.
-                    val spectrum = audioEffects.spectrum
-                    DisposableEffect(Unit) {
-                        spectrum.listening = true
-                        onDispose { spectrum.listening = false }
-                    }
-                    val levels by spectrum.bands.collectAsStateWithLifecycle()
-                    // Bass band drives the haptics; the analyser is already
-                    // producing it, so this costs nothing extra.
-                    LaunchedEffect(levels) {
-                        container.beatHaptics.onLowBandLevel(
-                            levels.getOrElse(1) { 0f },
-                            android.os.SystemClock.elapsedRealtime(),
-                        )
-                    }
-                    val responseDb = remember(bands) {
-                        com.mero.playback.equalizerResponseDb(bands, sampleRate = 48_000)
-                    }
-                    EqualizerScreen(
-                        spectrumLevels = levels,
-                        responseDb = responseDb,
-                        outputRoute = outputRoute,
-                        detectedRoute = container.outputRoute.detected,
-                        routeOverride = routeOverride,
-                        onRouteOverrideChange = { picked ->
-                            routeOverride = picked
-                            container.settings.putString(
-                                SettingsStore.ROUTE_OVERRIDE,
-                                picked?.name.orEmpty(),
-                            )
-                        },
-                        crossfeed = crossfeed,
-                        onCrossfeedChange = {
-                            crossfeed = it
-                            audioEffects.setCrossfeed(it)
-                            container.settings.putFloat("crossfeed", it)
-                        },
-                        speed = playbackSpeed,
-                        onSpeedChange = {
-                            playbackSpeed = it
-                            connection.controller?.setPlaybackSpeed(it)
-                            container.settings.putFloat(SettingsStore.PLAYBACK_SPEED, it)
-                        },
-                        hapticIntensity = hapticIntensity,
-                        onHapticIntensityChange = {
-                            hapticIntensity = it
-                            container.beatHaptics.setIntensity(it)
-                            container.settings.putFloat("haptics", it)
-                        },
-                        enabled = eqEnabled,
-                        onEnabledChange = { eqEnabled = it; audioEffects.setEnabled(it) },
-                        preset = preset,
-                        onPresetChange = { name ->
-                            preset = name
-                            // A preset sets gains and leaves the frequencies
-                            // and widths a listener may have moved.
-                            bands = com.mero.playback.applyGains(
-                                bands,
-                                EqPresets.presets.getValue(name),
-                            )
-                            audioEffects.setBands(bands)
-                            saveEq()
-                        },
-                        bands = bands,
-                        selectedBand = selectedBand,
-                        onSelectBand = { selectedBand = it },
-                        onResetBands = {
-                            bands = com.mero.playback.defaultBands()
-                            preset = "Flat"
-                            audioEffects.setBands(bands)
-                            saveEq()
-                        },
-                        onBandChange = { index, band ->
-                            bands = bands.toMutableList().also { it[index] = band }
-                            preset = "Custom"
-                            audioEffects.setBand(index, band)
-                            saveEq()
-                        },
-                        preamp = preamp,
-                        onPreampChange = { preamp = it; audioEffects.setPreamp(it); saveEq() },
-                        toggles = toggles,
-                        onToggle = { key, value ->
-                            onToggle(key, value)
-                            when (key) {
-                                "norm" -> audioEffects.setNormalization(value)
-                            }
-                        },
-                        onBack = { leaveEqualizer() },
-                        contentPadding = contentPadding,
-                    )
-                    // The system back gesture never reaches the screen's own
-                    // back arrow, and without this it popped to whatever browse
-                    // screen was underneath — so opening the equalizer from a
-                    // playing track and pressing back landed on Home.
-                    BackHandler(enabled = cameFromPlayer) { leaveEqualizer() }
-                }
-
-                composable<PlaylistRoute> { entry ->
-                    val route: PlaylistRoute = entry.toRoute()
-                    val meta by library.playlist(route.playlistId)
-                        .collectAsStateWithLifecycle(null)
-                    val songs by library.playlistSongs(route.playlistId)
-                        .collectAsStateWithLifecycle(emptyList())
-
-                    PlaylistDetailScreen(
-                        name = meta?.name ?: "Playlist",
-                        description = meta?.description,
-                        coverUri = meta?.coverUri,
-                        songs = songs,
-                        nowPlayingId = current?.id,
-                        onBack = { navController.popBackStack() },
-                        onPlay = { song -> playFrom(song, songs, meta?.name ?: "Playlist") },
-                        onPlayAll = {
-                            songs.firstOrNull()?.let {
-                                playFrom(it, songs, meta?.name ?: "Playlist")
-                            }
-                        },
-                        onShuffle = {
-                            val shuffledQueue = songs.shuffled()
-                            shuffledQueue.firstOrNull()?.let {
-                                shuffle = true
-                                playFrom(it, shuffledQueue, meta?.name ?: "Playlist")
-                            }
-                        },
-                        onRemove = { song ->
-                            scope.launch { library.removeFromPlaylist(route.playlistId, song.id) }
-                        },
-                        onSongMore = { menuSong = it },
-                        onRename = { name ->
-                            scope.launch { library.renamePlaylist(route.playlistId, name) }
-                        },
-                        onDescriptionChange = { text ->
-                            scope.launch { library.setPlaylistDescription(route.playlistId, text) }
-                        },
-                        onPickCover = { coverTarget = route.playlistId; coverPicker.launch("image/*") },
-                        onAddSongs = {
-                            navController.navigate(AddSongsRoute(route.playlistId)) { launchSingleTop = true }
-                        },
-                        onClearCover = {
-                            scope.launch { library.setPlaylistCover(route.playlistId, null) }
-                        },
-                        onDelete = {
-                            scope.launch { library.deletePlaylist(route.playlistId) }
-                            navController.popBackStack()
-                        },
-                        onShare = {
-                            val shared = com.mero.ui.playlist.sharePlaylistFile(
-                                context,
-                                meta?.name ?: "Playlist",
-                                meta?.description,
-                                songs,
-                            )
-                            if (!shared) say("There are no songs here to share")
-                        },
-                        contentPadding = contentPadding,
-                    )
-                }
-
-                composable<SmartPlaylistRoute> { entry ->
-                    val route: SmartPlaylistRoute = entry.toRoute()
-                    val summary = smartPlaylists.firstOrNull { it.id == route.playlistId }
-                    val songs by if (summary == null) {
-                        kotlinx.coroutines.flow.flowOf(emptyList())
-                    } else {
-                        library.smartPlaylistSongs(summary)
-                    }.collectAsStateWithLifecycle(emptyList())
-
-                    PlaylistDetailScreen(
-                        name = summary?.name ?: "Smart playlist",
-                        // A smart playlist is defined by its rule, so there is
-                        // nothing here for a person to name or illustrate.
-                        description = null,
-                        coverUri = null,
-                        songs = songs,
-                        nowPlayingId = current?.id,
-                        onBack = { navController.popBackStack() },
-                        onPlay = { song -> playFrom(song, songs, summary?.name ?: "Smart playlist") },
-                        onPlayAll = { songs.firstOrNull()?.let { playFrom(it, songs, summary?.name ?: "Smart playlist") } },
-                        onShuffle = {
-                            val shuffled = songs.shuffled()
-                            shuffled.firstOrNull()?.let { playFrom(it, shuffled, summary?.name ?: "Smart playlist") }
-                        },
-                        onRemove = {},
-                        onSongMore = { menuSong = it },
-                        onRename = {},
-                        onDescriptionChange = {},
-                        onPickCover = {},
-                        onClearCover = {},
-                        onAddSongs = null,
-                        onDelete = {
-                            scope.launch { library.deleteSmartPlaylist(route.playlistId) }
-                            navController.popBackStack()
-                        },
-                        contentPadding = contentPadding,
-                    )
-                }
-
-                composable<ImportRoute> {
-                    ImportScreen(
-                        source = importSource,
-                        onSourceChange = { importSource = it; importStatus = null },
-                        url = importUrl,
-                        onUrlChange = { importUrl = it },
-                        clientId = spotifyId,
-                        onClientIdChange = {
-                            spotifyId = it
-                            spotifyPrefs.edit().putString("id", it).apply()
-                        },
-                        clientSecret = spotifySecret,
-                        onClientSecretChange = {
-                            spotifySecret = it
-                            spotifyPrefs.edit().putString("secret", it).apply()
-                        },
-                        busy = importBusy,
-                        status = importStatus,
-                        onImport = {
-                            importBusy = true
-                            importStatus = "Reading the playlist..."
-                            scope.launch {
-                                val result = if (importSource == "YouTube") {
-                                    container.importRepository.importYouTube(importUrl)
-                                } else {
-                                    container.importRepository.importSpotify(
-                                        importUrl,
-                                        spotifyId,
-                                        spotifySecret,
-                                    ) { done, total ->
-                                        importStatus = "Matching track $done of $total..."
-                                    }
-                                }
-                                importBusy = false
-                                result.fold(
-                                    onSuccess = { imported ->
-                                        val id = library.createPlaylist(imported.name)
-                                        library.addToPlaylist(id, imported.songs)
-                                        importStatus = buildString {
-                                            append("Imported ")
-                                            append(imported.songs.size)
-                                            append(" tracks into \"")
-                                            append(imported.name)
-                                            append("\".")
-                                            if (imported.unmatched.isNotEmpty()) {
-                                                append(NL)
-                                                append(NL)
-                                                append("Could not find on YouTube:")
-                                                append(NL)
-                                                append(imported.unmatched.joinToString(NL))
-                                            }
-                                        }
-                                        importUrl = ""
-                                    },
-                                    onFailure = { importStatus = it.message ?: it.toString() },
-                                )
-                            }
-                        },
-                        onBack = { navController.popBackStack() },
-                        contentPadding = contentPadding,
-                    )
-                }
-
-                composable<SettingsRoute> {
-                    SettingsScreen(
-                        accent = accent,
-                        onAccentChange = onAccentChange,
-                        themeMode = themeMode,
-                        onThemeModeChange = onThemeModeChange,
-                        darkInEffect = darkInEffect,
-                        displayName = displayName,
-                        onEditName = onEditName,
-                        downloadFolderLabel = downloadFolderLabel(downloadFolderUri),
-                        downloadFolderError = folderError,
-                        toggles = toggles,
-                        onToggle = onToggle,
-                        onEqualizerClick = {
-                            // Reached from Settings, so back belongs to Settings.
-                            // Clearing the flag matters because leaving the
-                            // equalizer any other way than back leaves it set.
-                            cameFromPlayer = false
-                            navController.navigate(Equalizer)
-                        },
-                        onImportClick = { navController.navigate(ImportRoute) },
-                        onSleepTimerClick = { overlay = "sleep" },
-                        sleepSummary = when {
-                            sleepRemaining != null -> "Active"
-                            sleepAfterTrack -> "Stops at end of track"
-                            else -> "Off"
-                        },
-                        onClearCache = {
-                            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                // Through the owning caches, not the filesystem:
-                                // both keep an index that a directory delete
-                                // leaves pointing at files that no longer exist.
-                                coil3.SingletonImageLoader.get(context).diskCache?.clear()
-                                com.mero.playback.MediaCache.clearStreaming()
-                            }
-                        },
-                        onClearDownloads = {
-                            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                container.libraryRepository.clearDownloadedMarkers()
-                                com.mero.playback.MediaCache.clearExportedDownloads(
-                                    context,
-                                    downloadFolderUris,
-                                )
-                                com.mero.playback.MediaCache.clearDownloads()
-                            }
-                        },
-                        onChooseDownloadFolder = { folderPicker.launch(MUSIC_FOLDER_URI) },
-                        downloadFolderSelected = downloadFolderUri != null,
-                        streamCodec = streamCodec,
-                        onStreamCodecChange = {
-                            streamCodec = it
-                            qualityPrefs.edit().putString("stream", it.name).apply()
-                            container.streamRepository.setCodecPreference(it)
-                        },
-                        downloadCodec = downloadCodec,
-                        onDownloadCodecChange = {
-                            downloadCodec = it
-                            qualityPrefs.edit().putString("download", it.name).apply()
-                        },
-                        batteryUnrestricted = batteryUnrestricted,
-                        reminderFrequency = reminderFrequency,
-                        onReminderFrequencyChange = {
-                            reminderFrequency = it
-                            container.settings.putString(SettingsStore.REMINDERS, it.name)
-                            if (it != com.mero.data.ReminderFrequency.Off &&
-                                android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU
-                            ) {
-                                notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                        },
-                        onBatterySettingsClick = { requestBatteryExemption() },
-                        playerVariant = playerVariant,
-                        onPlayerVariantChange = {
-                            playerVariant = it
-                            container.settings.putString(SettingsStore.PLAYER_VARIANT, it.name)
-                        },
-                        onBack = { navController.popBackStack() },
-                        contentPadding = contentPadding,
-                        appVersion = updates.installedVersion,
-                        updateState = updateState,
-                        onSourceClick = {
-                            runCatching {
-                                context.startActivity(
-                                    Intent(Intent.ACTION_VIEW, android.net.Uri.parse(MERO_SOURCE_URL))
-                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                                )
-                            }
-                        },
-                        onCheckUpdates = { scope.launch { updates.check(manual = true) } },
-                        onDownloadUpdate = {
-                            (updateState as? UpdateState.Available)?.let { available ->
-                                scope.launch { updates.download(available.release) }
-                            }
-                        },
-                        onInstallUpdate = {
-                            (updateState as? UpdateState.Downloaded)?.let { updates.install(it.uri) }
-                        },
-                        onDiscardDownload = { updates.discardDownload() },
-                    )
-                }
+            }
+            SnackbarHost(
+                snackbars,
+                Modifier.align(Alignment.BottomCenter).padding(bottom = overlayHeight),
+            )
             }
         }
 
