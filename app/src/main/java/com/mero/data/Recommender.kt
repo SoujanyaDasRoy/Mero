@@ -25,7 +25,7 @@ private const val HOUR_MS = 3_600_000.0
  * Skips as a RATE, not a count. A favourite with 50 plays and 4 skips is fine; a song
  * started twice and skipped twice is not. The +3 is a prior so one data point proves little.
  */
-private fun skipRate(skips: Int, plays: Int): Double =
+internal fun skipRate(skips: Int, plays: Int): Double =
     (skips / (plays + 3.0)).coerceIn(0.0, 1.0)
 
 /**
@@ -71,7 +71,7 @@ fun tasteSeeds(
  * about 0.47, close to the old 0.5, so the adjustments below keep their relative size.
  */
 private const val RANK_K = 8.0
-private fun rankCredit(index: Int): Double = (RANK_K + 1.0) / (RANK_K + 1.0 + index)
+internal fun rankCredit(index: Int): Double = (RANK_K + 1.0) / (RANK_K + 1.0 + index)
 
 /**
  * Merges several "more like this" lists into one queue.
