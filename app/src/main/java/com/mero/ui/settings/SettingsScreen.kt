@@ -85,6 +85,8 @@ import com.mero.ui.components.PreferenceRow
 import com.mero.ui.player.PlayerVariant
 import com.mero.ui.theme.MeroAccent
 import com.mero.ui.theme.ThemeMode
+import androidx.compose.material.icons.rounded.Science
+import com.mero.data.SettingsStore
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Today
@@ -500,6 +502,21 @@ fun SettingsScreen(
                         } else {
                             Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
                         }
+                    }
+                }
+            }
+
+            item {
+                SettingsGroup("Experimental") {
+                    PreferenceRow(
+                        Icons.Rounded.Science,
+                        "New recommendation engine",
+                        "Learns from how you listen. Turn off to go back to the 1.13 queue",
+                    ) {
+                        Switch(
+                            checked = toggles[SettingsStore.RECOMMENDER_V2] == true,
+                            onCheckedChange = { onToggle(SettingsStore.RECOMMENDER_V2, it) },
+                        )
                     }
                 }
             }

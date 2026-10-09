@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap
  * and skips; it is applied by asking YouTube for the radios of the songs the
  * listener loves as well as the one playing, and keeping what they agree on.
  */
-class RadioRepository {
+class RadioRepository(private val useV2: () -> Boolean = { true }) {
 
     private val cache = ConcurrentHashMap<String, Pair<Long, List<Song>>>()
 
@@ -35,6 +35,9 @@ class RadioRepository {
         cache[videoId] = now to songs
         return songs
     }
+
+    private fun blend(radios: List<Pair<Double, List<Song>>>, taste: Taste, exclude: Set<String>): List<Song> =
+        if (useV2()) blendRadios(radios, taste, exclude) else blendRadiosLegacy(radios, taste, exclude)
 
     /** Radios of the listener's own favourites, weights scaled so the strongest is 1. */
     private suspend fun tasteRadios(seeds: List<Seed>): List<Pair<Double, List<Song>>> = coroutineScope {
@@ -54,12 +57,12 @@ class RadioRepository {
         if (!com.mero.domain.isYouTubeId(videoId)) return@runCatchingCancellable emptyList()
         val current = raw(videoId)
         val others = tasteRadios(taste.seeds.filter { it.song.id != videoId }.take(OTHER_SEEDS))
-        blendRadios(listOf(CURRENT_WEIGHT to current) + others, taste, exclude = setOf(videoId))
+        blend(listOf(CURRENT_WEIGHT to current) + others, taste, setOf(videoId))
     }
 
     /** A queue made only from taste: for "Your Mix", where nothing is playing yet. */
     suspend fun mixFor(taste: Taste): Result<List<Song>> = runCatchingCancellable {
-        blendRadios(tasteRadios(taste.seeds.take(MIX_SEEDS)), taste)
+        blend(tasteRadios(taste.seeds.take(MIX_SEEDS)), taste, emptySet())
     }
 
     private companion object {

@@ -39,7 +39,7 @@ private fun Song.toEntity() = SongEntity(
  * process death. Everything the UI reads is a Flow so the DB is the single
  * source of truth rather than in-memory Compose state.
  */
-class LibraryRepository(private val dao: MeroDao) {
+class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boolean = { true }) {
 
     val liked: Flow<List<Song>> = dao.likedSongs().map { rows -> rows.map { it.toDomain() } }
     val downloads: Flow<List<Song>> = dao.downloads().map { rows -> rows.map { it.toDomain() } }
@@ -109,10 +109,9 @@ class LibraryRepository(private val dao: MeroDao) {
             recentIds = recentlyPlayed.first().take(RECENT_WINDOW).mapTo(HashSet()) { it.id },
             skips = skipped.associate { it.id to it.skipCount },
             artistSkips = artistSkips,
-            seeds = tasteSeeds(
-                felt.map { SongStats(it.toDomain(), it.liked, it.playCount, it.lastPlayedAt, it.skipCount) },
-                System.currentTimeMillis(),
-            ),
+            seeds = felt.map { SongStats(it.toDomain(), it.liked, it.playCount, it.lastPlayedAt, it.skipCount) }.let { stats ->
+                if (useV2()) tasteSeeds(stats, System.currentTimeMillis()) else tasteSeedsLegacy(stats, System.currentTimeMillis())
+            },
             plays = felt.associate { it.id to it.playCount },
             lastPlayedAt = felt.mapNotNull { e -> e.lastPlayedAt?.let { e.id to it } }.toMap(),
         )

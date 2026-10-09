@@ -2615,6 +2615,8 @@ private val TOGGLE_DEFAULTS = mapOf(
     "infinite" to true, "autopause" to false,
     // On: a reel or a voice note ending the music for good was reported as a bug.
     com.mero.playback.RESUME_AFTER_TOGGLE to true,
+    // On: the new recommendation engine. Off falls back to the one shipped in 1.13.
+    SettingsStore.RECOMMENDER_V2 to true,
 )
 
 /**

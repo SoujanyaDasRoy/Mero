@@ -84,7 +84,7 @@ class AppContainer(context: Context) {
     val outputRoute: OutputRouteWatcher by lazy { OutputRouteWatcher(context.applicationContext) }
     val artistRepository: ArtistRepository by lazy { ArtistRepository() }
     val importRepository: ImportRepository by lazy { ImportRepository(searchRepository) }
-    val radioRepository: RadioRepository by lazy { RadioRepository() }
+    val radioRepository: RadioRepository by lazy { RadioRepository(settings::recommenderV2) }
     val podcastRepository: com.mero.data.PodcastRepository by lazy { com.mero.data.PodcastRepository() }
     val updateRepository: UpdateRepository by lazy {
         UpdateRepository(context.applicationContext, settings)
@@ -96,7 +96,7 @@ class AppContainer(context: Context) {
     val lyricsRepository: LyricsRepository by lazy { LyricsRepository() }
 
     val sleepTimer: SleepTimer by lazy { SleepTimer() }
-    val libraryRepository: LibraryRepository by lazy { LibraryRepository(database.dao()) }
+    val libraryRepository: LibraryRepository by lazy { LibraryRepository(database.dao(), settings::recommenderV2) }
 
     val ytDlpApi: YtDlpPlayerApi by lazy { YtDlpPlayerApi(context.applicationContext) }
 

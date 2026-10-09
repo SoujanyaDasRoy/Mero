@@ -76,7 +76,13 @@ class SettingsStore(context: Context) {
 
     fun putToggle(key: String, value: Boolean) = putBoolean("toggle_$key", value)
 
+    /** Whether to rank with the new engine rather than the 1.13 one. */
+    fun recommenderV2(): Boolean = boolean("toggle_$RECOMMENDER_V2", true)
+
     companion object {
+        /** Toggle key (stored as toggle_recommender_v2): the new recommendation engine, on by default. */
+        const val RECOMMENDER_V2 = "recommender_v2"
+
         const val ACCENT = "accent"
         const val THEME_MODE = "theme_mode"
 
