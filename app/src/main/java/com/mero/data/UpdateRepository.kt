@@ -286,7 +286,7 @@ class UpdateRepository(
             )
             val headline = updateHeadline(release.notes)
             val notification = Notification.Builder(context, UPDATE_CHANNEL)
-                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setSmallIcon(com.mero.R.drawable.ic_stat_mero)
                 .setContentTitle("Mero " + release.versionName + " is here 🎉")
                 .setContentText(headline ?: "Tap to update. Your music and playlists stay as they are.")
                 .setStyle(

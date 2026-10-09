@@ -192,7 +192,7 @@ class SongReminderWorker(context: Context, params: WorkerParameters) : Coroutine
             )
             val (title, body) = reminderText(song, index)
             val notification = NotificationCompat.Builder(context, CHANNEL)
-                .setSmallIcon(android.R.drawable.ic_media_play)
+                .setSmallIcon(com.mero.R.drawable.ic_stat_mero)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setLargeIcon(art)

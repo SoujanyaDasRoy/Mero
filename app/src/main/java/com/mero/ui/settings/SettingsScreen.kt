@@ -85,6 +85,14 @@ import com.mero.ui.components.PreferenceRow
 import com.mero.ui.player.PlayerVariant
 import com.mero.ui.theme.MeroAccent
 import com.mero.ui.theme.ThemeMode
+import androidx.compose.material.icons.rounded.NotificationsOff
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Today
+import androidx.compose.material.icons.rounded.BrightnessAuto
+import androidx.compose.material.icons.rounded.LightMode
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 
 /**
  * Settings as a stack of cards rather than one unbroken list.
@@ -233,6 +241,13 @@ fun SettingsScreen(
                         options = com.mero.data.ReminderFrequency.entries,
                         selected = reminderFrequency,
                         label = { it.label },
+                        icon = {
+                            when (it) {
+                                com.mero.data.ReminderFrequency.Off -> Icons.Rounded.NotificationsOff
+                                com.mero.data.ReminderFrequency.Sometimes -> Icons.Rounded.Schedule
+                                com.mero.data.ReminderFrequency.Daily -> Icons.Rounded.Today
+                            }
+                        },
                         onSelect = onReminderFrequencyChange,
                     )
                 }
@@ -264,6 +279,13 @@ fun SettingsScreen(
                         options = ThemeMode.entries,
                         selected = themeMode,
                         label = { it.label },
+                        icon = {
+                            when (it) {
+                                ThemeMode.System -> Icons.Rounded.BrightnessAuto
+                                ThemeMode.Light -> Icons.Rounded.LightMode
+                                ThemeMode.Dark -> Icons.Rounded.DarkMode
+                            }
+                        },
                         onSelect = onThemeModeChange,
                     )
                     PreferenceRow(
@@ -318,7 +340,7 @@ fun SettingsScreen(
                         "App icon",
                         "Switches when you leave Mero. Music keeps playing; a Mero icon on the home screen may need adding again.",
                     )
-                    AppIconPicker()
+                    AppIconPicker(onAccentChange)
                 }
             }
 
@@ -423,6 +445,7 @@ fun SettingsScreen(
                             onCheckedChange = { onToggle("wifi", it) },
                         )
                     }
+                    BackupRows()
                 }
             }
 
@@ -754,46 +777,65 @@ private fun megabytes(bytes: Long): String =
     if (bytes <= 0) "download" else (bytes / 1_000_000).toString() + " MB"
 
 /**
- * A row of mutually exclusive options that looks like one control.
- *
- * Three separate chips read as three independent things that happen to be
- * near each other. A segment bar reads as one setting with a position, which
- * is what a theme choice is.
+ * A row of mutually exclusive options that looks like one control: a track with
+ * a highlighted thumb that slides to the chosen option, each option an icon over
+ * its name.
  */
 @Composable
 private fun <T> SegmentedChoice(
     options: List<T>,
     selected: T,
     label: (T) -> String,
+    icon: (T) -> androidx.compose.ui.graphics.vector.ImageVector,
     onSelect: (T) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    Row(
+    val gap = 4.dp
+    androidx.compose.foundation.layout.BoxWithConstraints(
         Modifier
             .padding(start = 54.dp, end = 16.dp, bottom = 14.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(22.dp))
             .background(scheme.surfaceContainerHighest)
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+            .padding(4.dp),
     ) {
-        options.forEach { option ->
-            val isSelected = option == selected
-            Box(
-                Modifier
-                    .weight(1f)
-                    .height(36.dp)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(if (isSelected) scheme.primary else Color.Transparent)
-                    .clickable { onSelect(option) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label(option),
-                    fontSize = 13.sp,
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                    color = if (isSelected) scheme.onPrimary else scheme.onSurfaceVariant,
-                )
+        val segment = (maxWidth - gap * (options.size - 1)) / options.size
+        val offset by androidx.compose.animation.core.animateDpAsState(
+            (segment + gap) * options.indexOf(selected).coerceAtLeast(0),
+            androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 500f),
+            label = "segment",
+        )
+        Box(
+            Modifier
+                .offset(x = offset)
+                .width(segment)
+                .height(58.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(scheme.primaryContainer),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+            options.forEach { option ->
+                val isSelected = option == selected
+                val tint = if (isSelected) scheme.onPrimaryContainer else scheme.onSurfaceVariant
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .height(58.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .selectable(isSelected, role = androidx.compose.ui.semantics.Role.RadioButton) { onSelect(option) },
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(icon(option), null, Modifier.size(20.dp), tint = tint)
+                    Text(
+                        label(option),
+                        Modifier.padding(top = 3.dp),
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                        color = tint,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }

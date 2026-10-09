@@ -12,6 +12,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
@@ -65,6 +66,7 @@ class MeroPlaybackService : MediaLibraryService() {
     private var recovery: PlaybackRecovery? = null
     private var resumeAfter: ResumeAfterInterruption? = null
 
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
         val container = (application as MeroApplication).container
@@ -201,6 +203,12 @@ class MeroPlaybackService : MediaLibraryService() {
                 ),
             )
             .build()
+
+        // The playback notification's status-bar icon is Mero's mark, not
+        // Media3's generic one.
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider(this).apply { setSmallIcon(com.mero.R.drawable.ic_stat_mero) },
+        )
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession

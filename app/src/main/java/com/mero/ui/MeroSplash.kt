@@ -27,7 +27,8 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.mero.R
+import androidx.compose.ui.platform.LocalContext
+import com.mero.ui.settings.AppIcon
 
 /**
  * Mero's own splash, shown after the system one hands over. The system splash
@@ -36,6 +37,8 @@ import com.mero.R
  */
 @Composable
 fun MeroSplash(onFinished: () -> Unit) {
+    val context = LocalContext.current
+    val icon = remember { AppIcon.chosen(context) }
     val scale = remember { Animatable(0.72f) }
     val fade = remember { Animatable(0f) }
     val wordmark = remember { Animatable(0f) }
@@ -62,15 +65,15 @@ fun MeroSplash(onFinished: () -> Unit) {
                 .size(132.dp)
                 .scale(scale.value)
                 .clip(RoundedCornerShape(30.dp))
-                .background(colorResource(R.color.mero_yellow)),
+                .background(colorResource(icon.background)),
             contentAlignment = Alignment.Center,
         ) {
+            // The icon's own foreground, scaled the way a launcher shows it, so
+            // the splash is whichever icon is on the home screen.
             Image(
-                painter = painterResource(R.drawable.mero_logo),
+                painter = painterResource(icon.art),
                 contentDescription = "Mero",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .scale(0.78f),
+                modifier = Modifier.fillMaxSize().scale(1.5f),
             )
         }
         Text(

@@ -18,6 +18,8 @@ data class Taste(
     val skips: Map<String, Int> = emptyMap(),
     /** Primary artist (lowercase) to total skips of their songs. */
     val artistSkips: Map<String, Int> = emptyMap(),
+    /** The songs that best stand for this taste: what recommendations grow from. */
+    val seeds: List<Seed> = emptyList(),
 ) {
     companion object {
         val None = Taste()
@@ -60,7 +62,7 @@ fun rankForTaste(candidates: List<Song>, taste: Taste): List<Song> {
 }
 
 /** Moves a third song in a row by one artist behind the next different one. */
-private fun spreadArtists(songs: MutableList<Song>): List<Song> {
+internal fun spreadArtists(songs: MutableList<Song>): List<Song> {
     val out = ArrayList<Song>(songs.size)
     val waiting = ArrayDeque(songs)
     while (waiting.isNotEmpty()) {

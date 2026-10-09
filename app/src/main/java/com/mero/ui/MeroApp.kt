@@ -32,6 +32,17 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -77,6 +88,7 @@ import com.mero.playback.OutputRoute
 import com.mero.data.titleCase
 import com.mero.domain.RepeatMode
 import com.mero.domain.SearchItem
+import com.mero.domain.asClock
 import com.mero.domain.SearchResultType
 import com.mero.domain.Song
 import com.mero.playback.MediaCache
@@ -1230,7 +1242,18 @@ private fun MeroContent(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         )
                     }
-                    NavigationBar {
+                    // A floating pill rather than a full-width bar: the chosen tab
+                    // sits in its own highlighted capsule.
+                    Row(
+                        Modifier
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .fillMaxWidth()
+                            .shadow(6.dp, RoundedCornerShape(32.dp))
+                            .clip(RoundedCornerShape(32.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .padding(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         val items = listOf(
                             NavItem("Home", Icons.Rounded.Home, Icons.Outlined.Home, Home, Home::class),
                             NavItem("Search", Icons.Rounded.Search, Icons.Rounded.Search, SearchRoute, SearchRoute::class),
@@ -1240,27 +1263,46 @@ private fun MeroContent(
                         items.forEach { item ->
                             val selected =
                                 destination?.hierarchy?.any { it.hasRoute(item.routeClass) } == true
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = {
-                                    // Re-tapping the current tab shouldn't rebuild it.
-                                    if (selected) return@NavigationBarItem
-                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    navController.navigate(item.route) {
-                                        popUpTo(Home) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                },
-                                icon = {
-                                    Icon(
-                                        if (selected) item.selectedIcon else item.icon,
-                                        contentDescription = item.label,
-                                    )
-                                },
-                                label = { Text(item.label) },
-                                alwaysShowLabel = true,
+                            val pill by androidx.compose.animation.animateColorAsState(
+                                if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                label = "navPill",
                             )
+                            val tint = if (selected) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                            Column(
+                                Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(26.dp))
+                                    .background(pill)
+                                    .selectable(selected, role = androidx.compose.ui.semantics.Role.Tab) {
+                                        // Re-tapping the current tab shouldn't rebuild it.
+                                        if (selected) return@selectable
+                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        navController.navigate(item.route) {
+                                            popUpTo(Home) { saveState = true }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    }
+                                    .padding(vertical = 9.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Icon(
+                                    if (selected) item.selectedIcon else item.icon,
+                                    contentDescription = null,
+                                    tint = tint,
+                                )
+                                Text(
+                                    item.label,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                    color = tint,
+                                    maxLines = 1,
+                                )
+                            }
                         }
                     }
                 }
@@ -1284,12 +1326,24 @@ private fun MeroContent(
                         }
                     }
                     val mixes = remember(mostPlayed, likedSongs) {
-                        com.mero.data.mixSeeds(mostPlayed + likedSongs)
+                        val byArtist = com.mero.data.mixSeeds(mostPlayed + likedSongs)
+                        // "Your Mix" first: made from everything this listener loves, not one artist.
+                        listOfNotNull(byArtist.firstOrNull()?.let { com.mero.data.MixSeed(com.mero.data.YOUR_MIX, it.seed) }) + byArtist
                     }
                     HomeScreen(
                         sections = personalSections + com.mero.data.rankShelvesByTaste(homeSections, affinity),
                         mixes = mixes,
-                        onMix = { mix -> playWithSimilar(mix.seed, mix.artist + " Mix") },
+                        onMix = { mix ->
+                            if (mix.artist != com.mero.data.YOUR_MIX) {
+                                playWithSimilar(mix.seed, mix.artist + " Mix")
+                            } else {
+                                scope.launch {
+                                    val songs = container.radioRepository.mixFor(library.taste()).getOrNull().orEmpty()
+                                    val first = songs.firstOrNull()
+                                    if (first == null) say("Play and like a few songs first, so Mero learns what you enjoy") else playFrom(first, songs, "Your Mix")
+                                }
+                            }
+                        },
                         onMood = { mood ->
                             say("Starting a " + mood.label.lowercase() + " mix")
                             scope.launch {
@@ -1378,6 +1432,32 @@ private fun MeroContent(
                                     searchError = null
                                 },
                                 onFailure = { e -> searchError = searchFailureText(e) },
+                            )
+                            isSearching = false
+                            return@LaunchedEffect
+                        }
+                        // A pasted YouTube address plays what it points at, even
+                        // when YouTube Music has no song entry for it.
+                        val link = com.mero.data.parseYouTubeLink(trimmed)
+                        if (link != null) {
+                            container.searchRepository.resolveLink(link).fold(
+                                onSuccess = { songs ->
+                                    results = songs.map {
+                                        SearchItem(
+                                            id = it.id,
+                                            title = it.title,
+                                            subtitle = listOf(it.artist, it.durationSec.takeIf { d -> d > 0 }?.asClock())
+                                                .filterNotNull().filter { t -> t.isNotBlank() }.joinToString(" · "),
+                                            thumbnailUrl = it.thumbnailUrl,
+                                            type = SearchResultType.Song,
+                                            song = it,
+                                        )
+                                    }
+                                    continuationToken = null
+                                    searchError = if (songs.isEmpty()) "Nothing playable at that link" else null
+                                    songs.firstOrNull()?.let(::warmForPlayback)
+                                },
+                                onFailure = { searchError = "Couldn't open that link. Check it and your connection, then try again." },
                             )
                             isSearching = false
                             return@LaunchedEffect

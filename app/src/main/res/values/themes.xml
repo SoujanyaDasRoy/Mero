@@ -11,8 +11,10 @@
     <!-- Shown by the system before the first frame, so there is no white flash
          between the launcher and Mero's own animated splash. -->
     <style name="Theme.Mero.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/mero_yellow</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <!-- No animated icon: from Android 12 the system then draws the icon of
+             the launcher entry that was tapped, so the splash follows the
+             chosen app icon. -->
+        <item name="windowSplashScreenBackground">#141218</item>
         <item name="postSplashScreenTheme">@style/Theme.Mero</item>
     </style>
 </resources>

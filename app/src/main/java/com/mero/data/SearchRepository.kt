@@ -49,6 +49,30 @@ class SearchRepository(
         return runCatchingCancellable { api.searchSongs(query.trim()) }
     }
 
+    /**
+     * The songs behind a pasted YouTube address. A search only ever finds what
+     * YouTube Music lists as a song; a link reaches anything YouTube can play
+     * (live recordings, fan uploads, a video's audio), so when YouTube Music
+     * has no entry for it the video's own title and channel stand in.
+     */
+    suspend fun resolveLink(link: YouTubeLink): Result<List<Song>> = runCatchingCancellable {
+        val id = link.videoId
+        if (id == null) {
+            return@runCatchingCancellable YouTube.queue(playlistId = link.playlistId).getOrThrow().map { it.toDomain() }
+        }
+        YouTube.queue(listOf(id)).getOrNull()?.firstOrNull()?.let { return@runCatchingCancellable listOf(it.toDomain()) }
+        val details = YouTube.player(id).getOrThrow().videoDetails ?: error("That video can't be played")
+        listOf(
+            Song(
+                id = details.videoId,
+                title = details.title,
+                artist = details.author.removeSuffix(" - Topic"),
+                durationSec = details.lengthSeconds.toIntOrNull() ?: 0,
+                thumbnailUrl = details.thumbnail.thumbnails.lastOrNull()?.url?.atArtworkSize(),
+            ),
+        )
+    }
+
     suspend fun searchItemsPage(
         query: String,
         type: SearchResultType,
@@ -64,7 +88,17 @@ class SearchRepository(
             } else {
                 YouTube.searchContinuation(continuation).getOrThrow()
             }
-            val items = page.items.mapNotNull { it.toSearchItem() }
+            var items = page.items.mapNotNull { it.toSearchItem() }
+            // Few catalogue songs usually means what was typed is a video's
+            // name (a live recording, a fan upload) rather than a song's, so
+            // the video results are added behind them.
+            if (type == SearchResultType.Song && continuation.isNullOrBlank() && items.size < MIN_SONGS_BEFORE_VIDEOS) {
+                val videos = runCatchingCancellable {
+                    YouTube.search(query.trim(), YouTube.SearchFilter.FILTER_VIDEO).getOrThrow()
+                }.getOrNull()?.items?.mapNotNull { it.toSearchItem() }.orEmpty()
+                val have = items.mapTo(HashSet()) { it.id }
+                items = items + videos.filter { it.type == SearchResultType.Song && it.id !in have }
+            }
             SearchResultPage(
                 items = items,
                 continuation = page.continuation,
@@ -114,6 +148,8 @@ class SearchRepository(
         return runCatchingCancellable { suggestApi.suggest(query.trim()) }
     }
 }
+
+private const val MIN_SONGS_BEFORE_VIDEOS = 8
 
 private fun SearchResultType.filter() = when (this) {
     SearchResultType.Song -> YouTube.SearchFilter.FILTER_SONG

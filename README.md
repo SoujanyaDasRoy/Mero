@@ -134,7 +134,10 @@ All processing happens inside Mero, so it sounds the same on every phone.
 
 - Twelve accent colours, or **Material You** colours from your wallpaper (Android 12+)
 - System, light or dark theme, plus **pure black** for AMOLED screens
-- **Six app icons** — Classic, Midnight, Paper, Coral, Ocean, Mint — or **your own photo**, framed like a profile picture, which becomes both Mero's home-screen icon and its logo inside the app
+- **Ten app icons** — the master logo (Classic) and nine single-colour versions: Honey, Blush, Forest, Sage, Sky, Lilac, Cocoa, Gilded and Ink — or **your own photo**, framed like a profile picture, which becomes both Mero's home-screen icon and its logo inside the app
+- **Recommendations that learn your taste** — the queue after a song blends music like it with music like what you love and play lately; *Your Mix* on Home is built from taste alone. All on the phone
+- **Paste a YouTube link** into search and it plays, catalogue or not
+- **Back up and restore** your library, playlists and settings to one file (Settings → Library)
 - **Song reminders** — an occasional, quiet nudge about a favourite you haven't played lately. *Now and then* by default; *Daily* or *Off* in Settings
 
 ### Reliability
@@ -251,7 +254,7 @@ in [`docs/`](docs).
   for Mero in the phone's own settings.
 - **A photo icon goes on the home screen, not in the app drawer.** Android doesn't
   let apps change their app-drawer icon to a picture, so the drawer keeps one of
-  the six built-in icons. Xiaomi, Oppo, Vivo and Realme phones also need **Home
+  the ten built-in icons. Xiaomi, Oppo, Vivo and Realme phones also need **Home
   screen shortcuts** allowed for Mero; Mero says so when it's blocked.
 - **A car can't be told apart from earbuds automatically** — both connect the same
   way over Bluetooth. Pin the Car profile in the equalizer instead.

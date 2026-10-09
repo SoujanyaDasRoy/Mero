@@ -68,6 +68,15 @@ class AppContainer(context: Context) {
             .build()
     }
 
+    /** Folds the write-ahead log into the database file, so copying the one file copies everything. */
+    fun checkpointDatabase() {
+        database.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(TRUNCATE)").close()
+    }
+
+    fun databaseVersion(): Int = database.openHelper.readableDatabase.version
+
+    fun closeDatabase() = database.close()
+
     val searchRepository: SearchRepository by lazy { SearchRepository(InnerTubeSearchApi) }
     val homeRepository: HomeRepository by lazy { HomeRepository() }
     val settings: SettingsStore by lazy { SettingsStore(context.applicationContext) }

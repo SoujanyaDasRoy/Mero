@@ -131,6 +131,10 @@ interface MeroDao {
     @Query("UPDATE songs SET downloadedAt = NULL WHERE downloadedAt IS NOT NULL")
     suspend fun clearDownloadedMarkers()
 
+    /** Everything the listener has shown a feeling about, for building taste. */
+    @Query("SELECT * FROM songs WHERE liked = 1 OR playCount > 0")
+    suspend fun tasteSongs(): List<SongEntity>
+
     @Query("SELECT * FROM songs WHERE playCount > 0 ORDER BY playCount DESC LIMIT 50")
     fun mostPlayed(): Flow<List<SongEntity>>
 

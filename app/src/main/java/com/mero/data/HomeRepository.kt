@@ -235,6 +235,9 @@ fun rankShelvesByTaste(sections: List<HomeSection>, artistAffinity: Map<String, 
         .map { it.value }
 }
 
+/** Stands in for the artist on the one mix that is built from taste rather than from an artist. */
+const val YOUR_MIX = "Your"
+
 /** A "Made for you" mix: one artist this listener loves, and where to start. */
 data class MixSeed(val artist: String, val seed: Song)
 

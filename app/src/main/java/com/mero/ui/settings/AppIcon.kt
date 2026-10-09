@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.annotation.ColorRes
+import androidx.annotation.DrawableRes
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
@@ -42,7 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -53,20 +55,41 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mero.R
+import com.mero.ui.theme.MeroAccent
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.rounded.Check
 
 /**
  * The home-screen icons someone can pick from. Each is an `activity-alias` in
- * the manifest carrying the LAUNCHER filter; exactly one is enabled. Colours
- * here only draw the preview — the real icon is the alias's adaptive icon, and
- * the two are kept in step by `values/colors.xml`.
+ * the manifest carrying the LAUNCHER filter; exactly one is enabled.
+ *
+ * [background] and [art] are the very resources that alias's adaptive icon is
+ * built from, so the picker shows exactly what the launcher will. Classic is
+ * the master logo; the other nine are single-colour versions of it.
  */
-enum class AppIcon(val alias: String, val label: String, val background: Color, val mark: Color) {
-    Classic("IconClassic", "Classic", Color(0xFFFED703), Color(0xFF151515)),
-    Midnight("IconMidnight", "Midnight", Color(0xFF151515), Color(0xFFFED703)),
-    Paper("IconPaper", "Paper", Color(0xFFF4EFE6), Color(0xFF151515)),
-    Coral("IconCoral", "Coral", Color(0xFFFF6B57), Color.White),
-    Ocean("IconOcean", "Ocean", Color(0xFF1F4FD6), Color.White),
-    Mint("IconMint", "Mint", Color(0xFF8FE3BD), Color(0xFF151515)),
+enum class AppIcon(
+    val alias: String,
+    val label: String,
+    @ColorRes val background: Int,
+    @DrawableRes val art: Int,
+    /** Picking the icon moves the app's accent here too; the swatches can still override it. */
+    val accent: MeroAccent,
+) {
+    Classic("IconClassic", "Classic", R.color.mero_lavender, R.mipmap.ic_launcher_foreground, MeroAccent.Violet),
+    Honey("IconHoney", "Honey", R.color.icon_honey_bg, R.drawable.ic_launcher_fg_honey, MeroAccent.Peach),
+    Blush("IconBlush", "Blush", R.color.icon_blush_bg, R.drawable.ic_launcher_fg_blush, MeroAccent.Rose),
+    Forest("IconForest", "Forest", R.color.icon_forest_bg, R.drawable.ic_launcher_fg_forest, MeroAccent.Green),
+    Sage("IconSage", "Sage", R.color.icon_sage_bg, R.drawable.ic_launcher_fg_sage, MeroAccent.Lime),
+    Sky("IconSky", "Sky", R.color.icon_sky_bg, R.drawable.ic_launcher_fg_sky, MeroAccent.Sky),
+    Lilac("IconLilac", "Lilac", R.color.icon_lilac_bg, R.drawable.ic_launcher_fg_lilac, MeroAccent.Orchid),
+    Cocoa("IconCocoa", "Cocoa", R.color.icon_cocoa_bg, R.drawable.ic_launcher_fg_cocoa, MeroAccent.Sand),
+    Gilded("IconGilded", "Gilded", R.color.icon_gilded_bg, R.drawable.ic_launcher_fg_gilded, MeroAccent.Amber),
+    Ink("IconInk", "Ink", R.color.icon_ink_bg, R.drawable.ic_launcher_fg_ink, MeroAccent.Blue),
     ;
 
     fun component(context: Context) = ComponentName(context.packageName, "com.mero." + alias)
@@ -74,6 +97,17 @@ enum class AppIcon(val alias: String, val label: String, val background: Color, 
     companion object {
         private const val PREFS = "app_icon"
         private const val PENDING = "pending"
+
+        /**
+         * Icons that used to be offered and are not any more (an earlier set of
+         * recolours). Their manifest aliases stay: whoever picked one has it
+         * enabled and Classic disabled, and removing the alias would leave
+         * Mero with no launcher entry at all.
+         */
+        private val RETIRED = listOf("IconMidnight", "IconPaper", "IconCoral", "IconOcean", "IconMint")
+
+        private fun retiredComponent(context: Context, alias: String) =
+            ComponentName(context.packageName, "com.mero." + alias)
 
         private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -89,9 +123,21 @@ enum class AppIcon(val alias: String, val label: String, val background: Color, 
         }
 
         fun applyPending(context: Context) {
-            val icon = pending(context) ?: return
-            prefs(context).edit().remove(PENDING).apply()
-            if (icon != current(context)) apply(context, icon)
+            val icon = pending(context)
+            if (icon != null) {
+                prefs(context).edit().remove(PENDING).apply()
+                if (icon != current(context)) apply(context, icon)
+                return
+            }
+            // Someone whose icon has been retired: move them to Classic. Done
+            // here, once Mero is in the background, for the same reason a pick
+            // is: disabling the entry the running task came from closes it.
+            val pm = context.packageManager
+            val stranded = RETIRED.any {
+                pm.getComponentEnabledSetting(retiredComponent(context, it)) ==
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            }
+            if (stranded) apply(context, Classic)
         }
 
         /** Whichever alias is enabled now, falling back to the manifest default. */
@@ -123,9 +169,10 @@ enum class AppIcon(val alias: String, val label: String, val background: Color, 
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                 PackageManager.DONT_KILL_APP,
             )
-            entries.filter { it != icon }.forEach {
+            (entries.filter { it != icon }.map { it.component(context) } +
+                RETIRED.map { retiredComponent(context, it) }).forEach {
                 pm.setComponentEnabledSetting(
-                    it.component(context),
+                    it,
                     PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                     PackageManager.DONT_KILL_APP,
                 )
@@ -134,75 +181,159 @@ enum class AppIcon(val alias: String, val label: String, val background: Color, 
     }
 }
 
-/** A tile per icon, drawn the way the launcher will draw it. */
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * A preview of what is picked, then a grid of every icon drawn the way the
+ * launcher will draw it. Picking one also moves the accent colour and the
+ * splash screen to match.
+ */
 @Composable
-internal fun AppIconPicker() {
+internal fun AppIconPicker(onAccentChange: (MeroAccent) -> Unit) {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
     var chosen by remember { mutableStateOf(AppIcon.chosen(context)) }
 
-    FlowRow(
-        Modifier.padding(start = 54.dp, end = 16.dp, bottom = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        AppIcon.entries.forEach { icon ->
-            val selected = icon == chosen
-            Column(
-                Modifier
-                    .width(60.dp)
-                    .semantics {
-                        this.selected = selected
-                        contentDescription = icon.label + " icon"
-                    }
-                    .clickable(role = Role.RadioButton) {
-                        if (!selected) {
-                            AppIcon.choose(context, icon)
-                            chosen = icon
-                        }
-                    },
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Box(
-                    Modifier
-                        .size(56.dp)
-                        .border(2.dp, if (selected) scheme.primary else Color.Transparent, RoundedCornerShape(18.dp))
-                        .padding(4.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(icon.background)
-                        // Paper is nearly the colour of the card behind it.
-                        .border(1.dp, scheme.outlineVariant, RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    // The foreground carries the adaptive-icon safe zone as
-                    // padding; scaled up it matches what launchers show.
-                    Image(
-                        painterResource(R.mipmap.ic_launcher_foreground),
-                        null,
-                        Modifier.fillMaxSize().scale(1.5f),
-                        colorFilter = ColorFilter.tint(icon.mark),
+    Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(scheme.surfaceContainerHigh)
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconArt(chosen, Modifier.size(72.dp), RoundedCornerShape(22.dp))
+            Column(Modifier.padding(start = 16.dp)) {
+                Text(chosen.label, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = scheme.onSurface)
+                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(chosen.accent.swatch))
+                    Text(
+                        "Splash and " + chosen.accent.label + " accent follow it",
+                        Modifier.padding(start = 8.dp),
+                        fontSize = 13.sp,
+                        color = scheme.onSurfaceVariant,
                     )
                 }
-                Text(
-                    icon.label,
-                    Modifier.padding(top = 6.dp),
-                    fontSize = 12.sp,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (selected) scheme.primary else scheme.onSurfaceVariant,
-                )
             }
         }
-        CustomIconTile()
+        // Rows of four, built by hand: FlowRow + weight + aspectRatio measured
+        // every tile at full width.
+        Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            (AppIcon.entries + null).chunked(4).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    row.forEach { icon ->
+                        if (icon == null) {
+                            CustomIconTile(Modifier.weight(1f))
+                            return@forEach
+                        }
+                        val selected = icon == chosen
+                        IconTile(
+                            Modifier.weight(1f),
+                            icon.label,
+                            selected,
+                            icon.label + " icon",
+                            Role.RadioButton,
+                            colorResource(icon.background),
+                            onClick = {
+                                if (!selected) {
+                                    AppIcon.choose(context, icon)
+                                    chosen = icon
+                                    onAccentChange(icon.accent)
+                                }
+                            },
+                        ) {
+                            Image(painterResource(icon.art), null, Modifier.fillMaxSize().scale(1.5f))
+                        }
+                    }
+                    repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
+}
+
+/** The icon on its own background; the foreground's safe-zone margin is scaled away to match a launcher. */
+@Composable
+internal fun IconArt(icon: AppIcon, modifier: Modifier, shape: RoundedCornerShape) {
+    Box(
+        modifier
+            .clip(shape)
+            .background(colorResource(icon.background))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(painterResource(icon.art), null, Modifier.fillMaxSize().scale(1.5f))
+    }
+}
+
+/** One cell of the grid: art, a selected ring with a tick, and a label. */
+@Composable
+private fun IconTile(
+    modifier: Modifier,
+    label: String,
+    selected: Boolean,
+    description: String,
+    role: Role?,
+    background: Color,
+    onClick: () -> Unit,
+    art: @Composable BoxScope.() -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier
+            .semantics {
+                this.selected = selected
+                contentDescription = description
+            }
+            .clickable(role = role, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(3.dp)
+                    .clip(shape)
+                    .background(background)
+                    .border(1.dp, scheme.outlineVariant, shape),
+                contentAlignment = Alignment.Center,
+                content = art,
+            )
+            if (selected) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .border(3.dp, scheme.primary, RoundedCornerShape(23.dp)),
+                )
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(scheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Rounded.Check, null, Modifier.size(15.dp), tint = scheme.onPrimary)
+                }
+            }
+        }
+        Text(
+            label,
+            Modifier.padding(top = 6.dp),
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) scheme.primary else scheme.onSurfaceVariant,
+            maxLines = 1,
+        )
     }
 }
 
 /**
- * The seventh tile: a photo of your own. Empty, it opens the photo picker;
+ * The last tile: a photo of your own. Empty, it opens the photo picker;
  * set, it opens the editor to re-frame, change or remove it.
  */
 @Composable
-private fun CustomIconTile() {
+private fun CustomIconTile(modifier: Modifier) {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
     val icon by CustomIcon.icon(context).collectAsState()
@@ -261,48 +392,31 @@ private fun CustomIconTile() {
     }
     fun pick() = picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
 
-    Column(
-        Modifier
-            .width(60.dp)
-            .semantics { contentDescription = if (icon == null) "Use your own photo as the icon" else "Edit your photo icon" }
-            .clickable {
-                val source = if (icon != null) CustomIcon.source(context) else null
-                if (source != null) {
-                    framing = CustomIcon.framing(context)
-                    editing = source
-                } else {
-                    pick()
-                }
-            },
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            Modifier
-                .size(56.dp)
-                .border(2.dp, if (icon != null) scheme.primary else Color.Transparent, RoundedCornerShape(18.dp))
-                .padding(4.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(scheme.surfaceContainerHighest)
-                .border(1.dp, scheme.outlineVariant, RoundedCornerShape(14.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            val current = icon
-            if (current != null) {
-                // The saved icon has the adaptive margin around it; scaled up,
-                // the tile shows what the launcher shows.
-                Image(current.asImageBitmap(), null, Modifier.fillMaxSize().scale(1.5f))
+    IconTile(
+        modifier,
+        "Photo",
+        icon != null,
+        if (icon == null) "Use your own photo as the icon" else "Edit your photo icon",
+        null,
+        scheme.surfaceContainerHighest,
+        onClick = {
+            val source = if (icon != null) CustomIcon.source(context) else null
+            if (source != null) {
+                framing = CustomIcon.framing(context)
+                editing = source
             } else {
-                Icon(Icons.Rounded.AddPhotoAlternate, null, tint = scheme.onSurfaceVariant)
+                pick()
             }
+        },
+    ) {
+        val current = icon
+        if (current != null) {
+            // The saved icon has the adaptive margin around it; scaled up,
+            // the tile shows what the launcher shows.
+            Image(current.asImageBitmap(), null, Modifier.fillMaxSize().scale(1.5f))
+        } else {
+            Icon(Icons.Rounded.AddPhotoAlternate, null, tint = scheme.onSurfaceVariant)
         }
-        Text(
-            "Photo",
-            Modifier.padding(top = 6.dp),
-            fontSize = 12.sp,
-            fontWeight = if (icon != null) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (icon != null) scheme.primary else scheme.onSurfaceVariant,
-            maxLines = 1,
-        )
     }
 
     editing?.let { source ->

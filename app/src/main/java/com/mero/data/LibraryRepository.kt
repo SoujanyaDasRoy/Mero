@@ -108,6 +108,10 @@ class LibraryRepository(private val dao: MeroDao) {
             recentIds = recentlyPlayed.first().take(RECENT_WINDOW).mapTo(HashSet()) { it.id },
             skips = skipped.associate { it.id to it.skipCount },
             artistSkips = artistSkips,
+            seeds = tasteSeeds(
+                dao.tasteSongs().map { SongStats(it.toDomain(), it.liked, it.playCount, it.lastPlayedAt, it.skipCount) },
+                System.currentTimeMillis(),
+            ),
         )
     }
 
