@@ -20,6 +20,10 @@ data class Taste(
     val artistSkips: Map<String, Int> = emptyMap(),
     /** The songs that best stand for this taste: what recommendations grow from. */
     val seeds: List<Seed> = emptyList(),
+    /** Song id to times it was started, skipped ones included (SongEntity.playCount). */
+    val plays: Map<String, Int> = emptyMap(),
+    /** Song id to when it last started, in epoch milliseconds. */
+    val lastPlayedAt: Map<String, Long> = emptyMap(),
 ) {
     companion object {
         val None = Taste()

@@ -102,6 +102,7 @@ class LibraryRepository(private val dao: MeroDao) {
         played.forEach { affinity.merge(primaryArtist(it), 1, Int::plus) }
         val artistSkips = HashMap<String, Int>()
         skipped.forEach { artistSkips.merge(primaryArtist(it.toDomain()), it.skipCount, Int::plus) }
+        val felt = dao.tasteSongs()
         return Taste(
             likedIds = liked.mapTo(HashSet()) { it.id },
             artistAffinity = affinity,
@@ -109,9 +110,11 @@ class LibraryRepository(private val dao: MeroDao) {
             skips = skipped.associate { it.id to it.skipCount },
             artistSkips = artistSkips,
             seeds = tasteSeeds(
-                dao.tasteSongs().map { SongStats(it.toDomain(), it.liked, it.playCount, it.lastPlayedAt, it.skipCount) },
+                felt.map { SongStats(it.toDomain(), it.liked, it.playCount, it.lastPlayedAt, it.skipCount) },
                 System.currentTimeMillis(),
             ),
+            plays = felt.associate { it.id to it.playCount },
+            lastPlayedAt = felt.mapNotNull { e -> e.lastPlayedAt?.let { e.id to it } }.toMap(),
         )
     }
 
