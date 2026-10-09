@@ -32,6 +32,12 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
@@ -1305,17 +1311,41 @@ private fun MeroContent(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         )
                     }
-                    // A floating pill rather than a full-width bar: the chosen tab
-                    // sits in its own highlighted capsule.
+                    // The tab bar from the Bhagavatam app, as it is there: a floating capsule (radius 32,
+                    // 6dp inside, at least 64dp tall, 16dp from the sides, 12dp off the bottom) with a
+                    // soft shadow in light and none in dark, a hairline border, and the active tab in a
+                    // soft accent pill with accent-coloured icon and label. Its text size stops growing at
+                    // 1.3x so a label never wraps.
+                    val scheme = MaterialTheme.colorScheme
+                    val capsule = RoundedCornerShape(32.dp)
+                    val density = androidx.compose.ui.platform.LocalDensity.current
+                    androidx.compose.runtime.CompositionLocalProvider(
+                        androidx.compose.ui.platform.LocalDensity provides
+                            androidx.compose.ui.unit.Density(density.density, density.fontScale.coerceAtMost(1.3f)),
+                    ) {
                     Row(
                         Modifier
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
                             .fillMaxWidth()
-                            .shadow(6.dp, RoundedCornerShape(32.dp))
-                            .clip(RoundedCornerShape(32.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                            .padding(6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            .heightIn(min = 64.dp)
+                            .then(
+                                if (scheme.background.luminance() > 0.5f) {
+                                    Modifier.shadow(
+                                        18.dp,
+                                        capsule,
+                                        ambientColor = Color(0x331C1A17),
+                                        spotColor = Color(0x331C1A17),
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .clip(capsule)
+                            .background(scheme.surfaceContainer)
+                            .border(1.dp, scheme.outlineVariant, capsule)
+                            .padding(6.dp)
+                            .height(androidx.compose.foundation.layout.IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         val items = listOf(
                             NavItem("Home", Icons.Rounded.Home, Icons.Outlined.Home, Home, Home::class),
@@ -1327,17 +1357,19 @@ private fun MeroContent(
                             val selected =
                                 destination?.hierarchy?.any { it.hasRoute(item.routeClass) } == true
                             val pill by androidx.compose.animation.animateColorAsState(
-                                if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                                if (selected) scheme.primaryContainer else scheme.primaryContainer.copy(alpha = 0f),
+                                androidx.compose.animation.core.tween(200),
                                 label = "navPill",
                             )
-                            val tint = if (selected) {
-                                MaterialTheme.colorScheme.onPrimaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
+                            val tint by androidx.compose.animation.animateColorAsState(
+                                if (selected) scheme.primary else scheme.onSurfaceVariant,
+                                androidx.compose.animation.core.tween(200),
+                                label = "navTint",
+                            )
                             Column(
                                 Modifier
                                     .weight(1f)
+                                    .fillMaxHeight()
                                     .clip(RoundedCornerShape(26.dp))
                                     .background(pill)
                                     .selectable(selected, role = androidx.compose.ui.semantics.Role.Tab) {
@@ -1350,23 +1382,26 @@ private fun MeroContent(
                                             restoreState = true
                                         }
                                     }
-                                    .padding(vertical = 9.dp),
+                                ,
                                 horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
                             ) {
                                 Icon(
                                     if (selected) item.selectedIcon else item.icon,
                                     contentDescription = null,
                                     tint = tint,
+                                    modifier = Modifier.size(23.dp),
                                 )
                                 Text(
                                     item.label,
                                     fontSize = 12.sp,
-                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                     color = tint,
                                     maxLines = 1,
                                 )
                             }
                         }
+                    }
                     }
                 }
             },

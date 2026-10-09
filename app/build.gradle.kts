@@ -61,8 +61,13 @@ android {
 
     buildTypes {
         release {
+            // A private app that is not on the Play Store: with no release keystore the release
+            // build is signed with this machine's debug key (the same choice as the Bhagavatam
+            // app), so the minified APK installs directly. The same key has to sign every update,
+            // so ~/.android/debug.keystore needs a backup; keystore.properties still wins if present.
             signingConfig = signingConfigs.getByName("release")
                 .takeIf { keystoreProperties.getProperty("storeFile") != null }
+                ?: signingConfigs.getByName("debug")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
