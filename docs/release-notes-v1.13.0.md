@@ -35,7 +35,7 @@ It all happens on your phone: there's no account and nothing is sent anywhere.
 Paste any YouTube or YouTube Music link into search (a video, a share link, a Short, or a playlist) and it shows up ready to play, even when it isn't in YouTube Music's song catalogue. Searching for the name of a live recording or fan upload now also brings up matching videos when there aren't many songs.
 
 ### 💾 A backup that keeps itself
-Settings → Library → **Automatic backup**: pick a folder once and Mero keeps a fresh backup of your likes, playlists, play history and settings there whenever you leave the app (at most once an hour). The file stays in that folder even if Mero is uninstalled, so a reinstalled Mero offers **Restore your library** on first launch and everything comes back. **Back up your library** (to a file of your choice) and **Restore from a backup** are there too.
+Settings → Library → **Automatic backup**: choose once where it lives, **a folder on your phone** or **a file in Google Drive**, and Mero keeps a fresh backup of your likes, playlists, play history and settings there whenever you leave the app (at most once an hour). The backup stays put even if Mero is uninstalled, so a reinstalled Mero offers **Restore your library** on first launch and everything comes back. Drive does the uploading with the account already on your phone; Mero never signs in to Google. **Back up your library** (to a file of your choice) and **Restore from a backup** are there too.
 
 ### 📤 Share a playlist
 On a playlist, tap ⋮ → **Share playlist**. It sends a small `.mero` file; your friend opens it with Mero, or goes to Settings → Library → **Import a playlist file**. It's added as a new playlist and never replaces one they have.

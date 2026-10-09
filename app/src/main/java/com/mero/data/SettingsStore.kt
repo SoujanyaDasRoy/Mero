@@ -98,8 +98,14 @@ class SettingsStore(context: Context) {
         /** Set once a fresh install has been offered a restore, taken or skipped. */
         const val ASKED_RESTORE = "asked_restore"
 
-        /** The folder (a persisted tree address) automatic backups are written to; empty means off. */
+        /**
+         * Where automatic backups go, as a persisted address; empty means off. A folder on the phone
+         * (a tree address) or one file, such as mero-backup.zip in Google Drive (see BACKUP_KIND).
+         */
         const val BACKUP_FOLDER = "backup_folder"
+
+        /** "folder" or "file": what BACKUP_FOLDER points at. */
+        const val BACKUP_KIND = "backup_kind"
         const val BACKUP_LAST = "backup_last_ms"
         const val ASKED_BATTERY = "asked_battery"
         const val LYRICS_SCALE = "lyrics_scale"

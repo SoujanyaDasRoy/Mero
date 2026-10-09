@@ -63,6 +63,7 @@ internal fun BackupRows() {
     var message by remember { mutableStateOf<String?>(null) }
     var restoring by remember { mutableStateOf<Uri?>(null) }
     var autoOptions by remember { mutableStateOf(false) }
+    var choosingPlace by remember { mutableStateOf(false) }
     // Read in composition so the automatic-backup row follows what just changed.
     var refresh by remember { mutableStateOf(0) }
 
@@ -87,8 +88,7 @@ internal fun BackupRows() {
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
             )
         }
-        settings.putString(SettingsStore.BACKUP_FOLDER, uri.toString())
-        settings.putLong(SettingsStore.BACKUP_LAST, 0)
+        AutoBackup.choose(settings, uri, AutoBackup.KIND_FOLDER)
         scope.launch {
             val ok = AutoBackup.run(context, container)
             refresh++
@@ -96,6 +96,35 @@ internal fun BackupRows() {
                 "Done. Mero keeps a backup in that folder from now on."
             } else {
                 "Couldn't write to that folder. Pick another one."
+            }
+        }
+    }
+    // One file, anywhere the system picker reaches: Google Drive is listed beside the phone. The
+    // persistable flags keep the permission to write to it again later.
+    val filePicker = rememberLauncherForActivityResult(
+        object : ActivityResultContracts.CreateDocument("application/zip") {
+            override fun createIntent(context: Context, input: String): Intent =
+                super.createIntent(context, input).addFlags(
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION,
+                )
+        },
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }
+        AutoBackup.choose(settings, uri, AutoBackup.KIND_FILE)
+        scope.launch {
+            val ok = AutoBackup.run(context, container)
+            refresh++
+            message = if (ok) {
+                "Done. Mero keeps that file up to date from now on."
+            } else {
+                "Couldn't write to that file. Pick another place."
             }
         }
     }
@@ -114,25 +143,25 @@ internal fun BackupRows() {
 
     val chevron = @Composable { Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
 
-    val folderName = refresh.let { AutoBackup.folderName(context, settings) }
+    val folderName = refresh.let { AutoBackup.placeName(context, settings) }
     val folderSet = refresh.let { AutoBackup.folder(settings) != null }
     val last = refresh.let { settings.long(SettingsStore.BACKUP_LAST, 0) }
     PreferenceRow(
         Icons.Rounded.CloudDone,
         "Automatic backup",
         when {
-            !folderSet -> "Off. Pick a folder and Mero keeps a backup there that survives a reinstall"
-            folderName == null -> "That folder can't be reached any more. Tap to pick it again"
+            !folderSet -> "Off. Keep a backup up to date on this phone or in Google Drive"
+            folderName == null -> "That place can't be reached any more. Tap to pick it again"
             last > 0 -> folderName + " · last backup " + DateUtils.getRelativeTimeSpanString(last, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
             else -> folderName + " · waiting for the first backup"
         },
-        onClick = { if (folderSet && folderName != null) autoOptions = true else folderPicker.launch(null) },
+        onClick = { if (folderSet && folderName != null) autoOptions = true else choosingPlace = true },
         trailing = chevron,
     )
     PreferenceRow(
         Icons.Rounded.Save,
         "Back up your library",
-        "Likes, playlists, history and settings in one file you keep",
+        "Save a copy now, on this phone or in Google Drive: you choose where",
         onClick = {
             save.launch("mero-backup-" + SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()) + ".zip")
         },
@@ -141,7 +170,7 @@ internal fun BackupRows() {
     PreferenceRow(
         Icons.Rounded.Restore,
         "Restore from a backup",
-        "After a reinstall or on a new phone",
+        "From this phone or Google Drive, after a reinstall or on a new phone",
         onClick = { open.launch(arrayOf("application/zip", "application/octet-stream")) },
         trailing = chevron,
     )
@@ -153,14 +182,34 @@ internal fun BackupRows() {
         trailing = chevron,
     )
 
+    if (choosingPlace) {
+        AlertDialog(
+            onDismissRequest = { choosingPlace = false },
+            title = { Text("Where should the backup live?") },
+            text = {
+                Text(
+                    "On this phone, a folder you pick (it stays if Mero is uninstalled). Or in Google Drive: " +
+                        "pick or create mero-backup.zip there and Mero keeps it up to date. Drive does the " +
+                        "uploading with the account already on your phone; Mero never signs in to Google.",
+                )
+            },
+            confirmButton = {
+                Row {
+                    TextButton(onClick = { choosingPlace = false; folderPicker.launch(null) }) { Text("A folder on this phone") }
+                    TextButton(onClick = { choosingPlace = false; filePicker.launch(AutoBackup.FILE) }) { Text("Google Drive or a file") }
+                }
+            },
+            dismissButton = { TextButton(onClick = { choosingPlace = false }) { Text("Cancel") } },
+        )
+    }
     if (autoOptions) {
         AlertDialog(
             onDismissRequest = { autoOptions = false },
             title = { Text("Automatic backup") },
             text = {
                 Text(
-                    "Mero saves your library to \"" + (folderName ?: "") + "\" when you leave the app, " +
-                        "at most once an hour. The file stays there if Mero is ever uninstalled.",
+                    "Mero saves your library to " + (folderName ?: "") + " when you leave the app, " +
+                        "at most once an hour. It stays there if Mero is ever uninstalled.",
                 )
             },
             confirmButton = {
@@ -173,13 +222,13 @@ internal fun BackupRows() {
                             message = if (ok) "Backed up." else "Couldn't write to that folder."
                         }
                     }) { Text("Back up now") }
-                    TextButton(onClick = { autoOptions = false; folderPicker.launch(null) }) { Text("Change folder") }
+                    TextButton(onClick = { autoOptions = false; choosingPlace = true }) { Text("Change place") }
                 }
             },
             dismissButton = {
                 TextButton(onClick = {
                     autoOptions = false
-                    settings.putString(SettingsStore.BACKUP_FOLDER, "")
+                    AutoBackup.turnOff(settings)
                     refresh++
                 }) { Text("Turn off") }
             },
