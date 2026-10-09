@@ -339,7 +339,7 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         SmartPlaylistEntity::class,
     ],
     version = 7,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class MeroDatabase : RoomDatabase() {
     abstract fun dao(): MeroDao

@@ -116,6 +116,11 @@ androidComponents {
     }
 }
 
+// Room writes each schema version here, so migrations can be tested against it.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     implementation(project(":innertube"))
 
