@@ -410,15 +410,17 @@ private fun MadeForYou(mixes: List<com.mero.data.MixSeed>, onMix: (com.mero.data
                             .align(Alignment.BottomStart)
                             .padding(12.dp),
                     ) {
+                        // "Your Mix" is the one built from taste, not from an artist.
+                        val yours = mix.artist == com.mero.data.YOUR_MIX
                         Text(
-                            "MIX",
+                            if (yours) "MADE FOR YOU" else "MIX",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp,
                             color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
                         )
                         Text(
-                            mix.artist,
+                            if (yours) "Your Mix" else mix.artist,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = androidx.compose.ui.graphics.Color.White,
