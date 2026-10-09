@@ -94,6 +94,13 @@ class SettingsStore(context: Context) {
 
         /** Set once the first-run name prompt has been shown, asked or skipped. */
         const val ASKED_NAME = "asked_name"
+
+        /** Set once a fresh install has been offered a restore, taken or skipped. */
+        const val ASKED_RESTORE = "asked_restore"
+
+        /** The folder (a persisted tree address) automatic backups are written to; empty means off. */
+        const val BACKUP_FOLDER = "backup_folder"
+        const val BACKUP_LAST = "backup_last_ms"
         const val ASKED_BATTERY = "asked_battery"
         const val LYRICS_SCALE = "lyrics_scale"
         const val REMINDERS = "reminders"

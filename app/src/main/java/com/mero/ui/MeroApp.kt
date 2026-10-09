@@ -88,6 +88,7 @@ import com.mero.playback.OutputRoute
 import com.mero.data.titleCase
 import com.mero.domain.RepeatMode
 import com.mero.domain.SearchItem
+import kotlinx.coroutines.flow.first
 import com.mero.domain.asClock
 import com.mero.domain.SearchResultType
 import com.mero.domain.Song
@@ -179,6 +180,7 @@ fun MeroApp(
     var themeMode by remember { mutableStateOf(readThemeMode(settings)) }
     var displayName by remember { mutableStateOf(settings.string(SettingsStore.DISPLAY_NAME, "")) }
     var askingName by remember { mutableStateOf(false) }
+    var askingRestore by remember { mutableStateOf(false) }
 
     // Resolved once, here, because three places need the answer: the theme
     // itself, the status-bar icons inside it, and the Pure black switch, which
@@ -218,9 +220,27 @@ fun MeroApp(
             // Asked once, after the splash rather than over it, and only if it
             // has never been asked before — skipping counts as an answer.
             LaunchedEffect(splashDone) {
-                if (splashDone && !settings.boolean(SettingsStore.ASKED_NAME, false)) {
+                if (!splashDone) return@LaunchedEffect
+                // A reinstall starts empty: offer the old library back before anything else.
+                val library = (appContext as MeroApplication).container.libraryRepository
+                val fresh = !settings.boolean(SettingsStore.ASKED_RESTORE, false) &&
+                    library.liked.first().isEmpty() &&
+                    library.mostPlayed.first().isEmpty() &&
+                    library.playlists.first().isEmpty()
+                if (fresh) {
+                    askingRestore = true
+                } else if (!settings.boolean(SettingsStore.ASKED_NAME, false)) {
                     askingName = true
                 }
+            }
+            if (askingRestore) {
+                com.mero.ui.settings.FirstRunRestoreDialog(
+                    onDone = {
+                        askingRestore = false
+                        settings.putBoolean(SettingsStore.ASKED_RESTORE, true)
+                        if (!settings.boolean(SettingsStore.ASKED_NAME, false)) askingName = true
+                    },
+                )
             }
             if (askingName) {
                 NameDialog(
@@ -245,7 +265,7 @@ fun MeroApp(
                 onRemindedHandled = onRemindedHandled,
                 openUpdate = openUpdate,
                 onOpenUpdateHandled = onOpenUpdateHandled,
-                nameDialogOpen = askingName || !settings.boolean(SettingsStore.ASKED_NAME, false),
+                nameDialogOpen = askingName || askingRestore || !settings.boolean(SettingsStore.ASKED_NAME, false),
                 accent = accent,
                 displayName = displayName,
                 onEditName = { askingName = true },

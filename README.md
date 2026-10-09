@@ -137,7 +137,8 @@ All processing happens inside Mero, so it sounds the same on every phone.
 - **The Mero logo, or your own photo** as the home-screen icon, framed like a profile picture; the photo becomes both Mero's icon and its logo inside the app
 - **Recommendations that learn your taste** — the queue after a song blends music like it with music like what you love and play lately; *Your Mix* on Home is built from taste alone. All on the phone
 - **Paste a YouTube link** into search and it plays, catalogue or not
-- **Back up and restore** your library, playlists and settings to one file (Settings → Library)
+- **Automatic backup** to a folder you pick (it survives a reinstall), plus manual backup and restore, in Settings → Library
+- **Share a playlist** as a `.mero` file, and open YouTube / YouTube Music links in Mero
 - **Song reminders** — an occasional, quiet nudge about a favourite you haven't played lately. *Now and then* by default; *Daily* or *Off* in Settings
 
 ### Reliability

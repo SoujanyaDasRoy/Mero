@@ -9,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.mero.ui.MeroApp
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 /**
  * Single activity. Compose and Navigation Compose assume it, and multiple
@@ -111,7 +112,14 @@ class MainActivity : ComponentActivity() {
      */
     override fun onStop() {
         super.onStop()
-        if (!isChangingConfigurations) com.mero.ui.settings.AppIcon.applyPending(this)
+        if (isChangingConfigurations) return
+        com.mero.ui.settings.AppIcon.applyPending(this)
+        // The library's automatic backup, if a folder was chosen and the last one is old enough.
+        val container = (application as MeroApplication).container
+        val context = applicationContext
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            runCatching { com.mero.data.AutoBackup.runIfDue(context, container) }
+        }
     }
 
     private fun audioFrom(intent: Intent?): Uri? =
