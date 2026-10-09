@@ -94,6 +94,17 @@
                 <data android:scheme="https" />
                 <data android:host="youtu.be" />
             </intent-filter>
+            <!-- Mero's own share links (docs/share-site). autoVerify: Android reads
+                 https://soujanyadasroy.github.io/.well-known/assetlinks.json when Mero is installed, and if it
+                 names this app and its signing certificate, a tapped link opens Mero with no prompt. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="soujanyadasroy.github.io" />
+                <data android:pathPrefix="/s" />
+            </intent-filter>
             <!-- "Share" > Mero, from YouTube Music, the browser, WhatsApp: the one route that does not
                  depend on who owns the link. The first link in the text is opened. -->
             <intent-filter>

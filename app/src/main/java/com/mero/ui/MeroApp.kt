@@ -2591,11 +2591,11 @@ private fun MeroContent(
                     }
                 },
                 onShare = {
-                    val shareText = if (song.id.matches(Regex("[A-Za-z0-9_-]{11}"))) {
-                        "${song.title} - ${song.artist}\nhttps://music.youtube.com/watch?v=${song.id}"
-                    } else {
-                        "${song.title} - ${song.artist}"
-                    }
+                    // Mero's own link: it opens Mero on a phone that has it, and YouTube Music on
+                    // any other (see ShareLink).
+                    val shareText = com.mero.data.ShareLink.song(song.id)
+                        ?.let { "${song.title} - ${song.artist}\n$it" }
+                        ?: "${song.title} - ${song.artist}"
                     context.startActivity(
                         Intent.createChooser(
                             Intent(Intent.ACTION_SEND).apply {

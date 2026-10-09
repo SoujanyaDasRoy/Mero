@@ -40,8 +40,8 @@ Settings → Library → **Automatic backup**: choose once where it lives, **a f
 ### 📤 Share a playlist
 On a playlist, tap ⋮ → **Share playlist**. It sends a small `.mero` file; your friend opens it with Mero, or goes to Settings → Library → **Import a playlist file**. It's added as a new playlist and never replaces one they have.
 
-### 🔗 Shared links open in Mero
-YouTube and YouTube Music links (song, playlist or Short) now list Mero as an app that can open them. Pick **Mero** once (and **Always** if you like) and a link a friend sends starts playing in Mero, then plays music like it. If it doesn't ask, turn Mero on under Settings → Apps → Mero → Open by default.
+### 🔗 Shared songs open in Mero
+**Share** on a song now sends a link that opens straight in Mero on a phone that has it (it plays the song, then music like it), and opens the same song in YouTube Music for anyone who doesn't have Mero. You can also use **Share → Mero** on any message or YouTube Music link to play it in Mero.
 
 ### 🟣 A new Mero logo
 Mero has a new logo: a soft purple **M** on lavender. It's the app icon, the splash screen (now the logo's own gradient across the whole screen), the logo on Home, and the little icon on Mero's notifications (playback, reminders and updates). The app's default accent colour is now violet to match.
