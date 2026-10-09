@@ -65,203 +65,72 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.rounded.Check
 
 /**
- * The home-screen icons someone can pick from. Each is an `activity-alias` in
- * the manifest carrying the LAUNCHER filter; exactly one is enabled.
+ * The home-screen icon. Mero has one logo: the `IconClassic` launcher alias, enabled.
  *
- * [background] and [art] are the very resources that alias's adaptive icon is
- * built from, so the picker shows exactly what the launcher will. Classic is
- * the master logo; the other nine are single-colour versions of it.
+ * Every other alias in the manifest is retired: earlier recolours and the ten-icon set. Whoever
+ * picked one of those has it enabled and Classic explicitly disabled, so the aliases stay and
+ * [applyPending] moves them to the logo the next time Mero is closed.
  */
-enum class AppIcon(
-    val alias: String,
-    val label: String,
-    @ColorRes val background: Int,
-    @DrawableRes val art: Int,
-    /** Picking the icon moves the app's accent here too; the swatches can still override it. */
-    val accent: MeroAccent,
-) {
-    Classic("IconClassic", "Classic", R.color.mero_lavender, R.mipmap.ic_launcher_foreground, MeroAccent.Violet),
-    Honey("IconHoney", "Honey", R.color.icon_honey_bg, R.drawable.ic_launcher_fg_honey, MeroAccent.Peach),
-    Blush("IconBlush", "Blush", R.color.icon_blush_bg, R.drawable.ic_launcher_fg_blush, MeroAccent.Rose),
-    Forest("IconForest", "Forest", R.color.icon_forest_bg, R.drawable.ic_launcher_fg_forest, MeroAccent.Green),
-    Sage("IconSage", "Sage", R.color.icon_sage_bg, R.drawable.ic_launcher_fg_sage, MeroAccent.Lime),
-    Sky("IconSky", "Sky", R.color.icon_sky_bg, R.drawable.ic_launcher_fg_sky, MeroAccent.Sky),
-    Lilac("IconLilac", "Lilac", R.color.icon_lilac_bg, R.drawable.ic_launcher_fg_lilac, MeroAccent.Orchid),
-    Cocoa("IconCocoa", "Cocoa", R.color.icon_cocoa_bg, R.drawable.ic_launcher_fg_cocoa, MeroAccent.Sand),
-    Gilded("IconGilded", "Gilded", R.color.icon_gilded_bg, R.drawable.ic_launcher_fg_gilded, MeroAccent.Amber),
-    Ink("IconInk", "Ink", R.color.icon_ink_bg, R.drawable.ic_launcher_fg_ink, MeroAccent.Blue),
-    ;
+object AppIcon {
+    private val RETIRED = listOf(
+        "IconMidnight", "IconPaper", "IconCoral", "IconOcean", "IconMint",
+        "IconHoney", "IconBlush", "IconForest", "IconSage", "IconSky",
+        "IconLilac", "IconCocoa", "IconGilded", "IconInk",
+    )
 
-    fun component(context: Context) = ComponentName(context.packageName, "com.mero." + alias)
+    private fun component(context: Context, alias: String) = ComponentName(context.packageName, "com.mero." + alias)
 
-    companion object {
-        private const val PREFS = "app_icon"
-        private const val PENDING = "pending"
-
-        /**
-         * Icons that used to be offered and are not any more (an earlier set of
-         * recolours). Their manifest aliases stay: whoever picked one has it
-         * enabled and Classic disabled, and removing the alias would leave
-         * Mero with no launcher entry at all.
-         */
-        private val RETIRED = listOf("IconMidnight", "IconPaper", "IconCoral", "IconOcean", "IconMint")
-
-        private fun retiredComponent(context: Context, alias: String) =
-            ComponentName(context.packageName, "com.mero." + alias)
-
-        private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-        private fun pending(context: Context): AppIcon? =
-            prefs(context).getString(PENDING, null)?.let { name -> entries.firstOrNull { it.name == name } }
-
-        /** What the picker shows as selected: the pick waiting to apply, else the live icon. */
-        fun chosen(context: Context): AppIcon = pending(context) ?: current(context)
-
-        /** Remembers the pick; [applyPending] switches it once Mero is in the background. */
-        fun choose(context: Context, icon: AppIcon) {
-            prefs(context).edit().putString(PENDING, icon.name).apply()
+    /**
+     * Moves anyone still on a retired icon to the logo. Done once Mero is in the background:
+     * disabling the entry the running task came from closes it.
+     *
+     * The logo is enabled before the retired ones are disabled; in the other order there is a
+     * moment with no launcher entry at all, and a crash in that moment leaves no icon to open Mero.
+     * DONT_KILL_APP keeps the process, and so playback, alive.
+     */
+    fun applyPending(context: Context) {
+        val pm = context.packageManager
+        val stranded = RETIRED.any {
+            pm.getComponentEnabledSetting(component(context, it)) == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
         }
-
-        fun applyPending(context: Context) {
-            val icon = pending(context)
-            if (icon != null) {
-                prefs(context).edit().remove(PENDING).apply()
-                if (icon != current(context)) apply(context, icon)
-                return
-            }
-            // Someone whose icon has been retired: move them to Classic. Done
-            // here, once Mero is in the background, for the same reason a pick
-            // is: disabling the entry the running task came from closes it.
-            val pm = context.packageManager
-            val stranded = RETIRED.any {
-                pm.getComponentEnabledSetting(retiredComponent(context, it)) ==
-                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-            }
-            if (stranded) apply(context, Classic)
-        }
-
-        /** Whichever alias is enabled now, falling back to the manifest default. */
-        fun current(context: Context): AppIcon {
-            val pm = context.packageManager
-            return entries.firstOrNull {
-                when (pm.getComponentEnabledSetting(it.component(context))) {
-                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
-                    PackageManager.COMPONENT_ENABLED_STATE_DEFAULT -> it == Classic
-                    else -> false
-                }
-            } ?: Classic
-        }
-
-        /**
-         * Enable the new alias before disabling the rest: in the other order
-         * there is a moment with no launcher entry at all, and a crash in that
-         * moment leaves Mero with no icon to open it from.
-         *
-         * DONT_KILL_APP keeps the process, and so playback, alive; the launcher
-         * picks the change up on its own a few seconds later. Pinned shortcuts
-         * to the old icon are removed by the launcher — unavoidable, and why
-         * the picker says so.
-         */
-        private fun apply(context: Context, icon: AppIcon) {
-            val pm = context.packageManager
+        if (!stranded) return
+        pm.setComponentEnabledSetting(
+            component(context, "IconClassic"),
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP,
+        )
+        RETIRED.forEach {
             pm.setComponentEnabledSetting(
-                icon.component(context),
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                component(context, it),
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                 PackageManager.DONT_KILL_APP,
             )
-            (entries.filter { it != icon }.map { it.component(context) } +
-                RETIRED.map { retiredComponent(context, it) }).forEach {
-                pm.setComponentEnabledSetting(
-                    it,
-                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                    PackageManager.DONT_KILL_APP,
-                )
-            }
         }
     }
 }
 
-/**
- * A preview of what is picked, then a grid of every icon drawn the way the
- * launcher will draw it. Picking one also moves the accent colour and the
- * splash screen to match.
- */
+/** The Mero logo, and the choice to use your own photo instead. */
 @Composable
-internal fun AppIconPicker(onAccentChange: (MeroAccent) -> Unit) {
+internal fun AppIconPicker() {
     val context = LocalContext.current
-    val scheme = MaterialTheme.colorScheme
-    var chosen by remember { mutableStateOf(AppIcon.chosen(context)) }
-
-    Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(scheme.surfaceContainerHigh)
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconArt(chosen, Modifier.size(72.dp), RoundedCornerShape(22.dp))
-            Column(Modifier.padding(start = 16.dp)) {
-                Text(chosen.label, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = scheme.onSurface)
-                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(10.dp).clip(CircleShape).background(chosen.accent.swatch))
-                    Text(
-                        "Splash and " + chosen.accent.label + " accent follow it",
-                        Modifier.padding(start = 8.dp),
-                        fontSize = 13.sp,
-                        color = scheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-        // Rows of four, built by hand: FlowRow + weight + aspectRatio measured
-        // every tile at full width.
-        Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            (AppIcon.entries + null).chunked(4).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    row.forEach { icon ->
-                        if (icon == null) {
-                            CustomIconTile(Modifier.weight(1f))
-                            return@forEach
-                        }
-                        val selected = icon == chosen
-                        IconTile(
-                            Modifier.weight(1f),
-                            icon.label,
-                            selected,
-                            icon.label + " icon",
-                            Role.RadioButton,
-                            colorResource(icon.background),
-                            onClick = {
-                                if (!selected) {
-                                    AppIcon.choose(context, icon)
-                                    chosen = icon
-                                    onAccentChange(icon.accent)
-                                }
-                            },
-                        ) {
-                            Image(painterResource(icon.art), null, Modifier.fillMaxSize().scale(1.5f))
-                        }
-                    }
-                    repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
-                }
-            }
-        }
-    }
-}
-
-/** The icon on its own background; the foreground's safe-zone margin is scaled away to match a launcher. */
-@Composable
-internal fun IconArt(icon: AppIcon, modifier: Modifier, shape: RoundedCornerShape) {
-    Box(
-        modifier
-            .clip(shape)
-            .background(colorResource(icon.background))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
-        contentAlignment = Alignment.Center,
+    val photo by CustomIcon.icon(context).collectAsState()
+    Row(
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Image(painterResource(icon.art), null, Modifier.fillMaxSize().scale(1.5f))
+        IconTile(
+            Modifier.weight(1f),
+            "Mero",
+            selected = photo == null,
+            description = "Mero logo",
+            role = null,
+            background = Color.Transparent,
+            onClick = {},
+        ) {
+            Image(painterResource(R.drawable.mero_logo), null, Modifier.fillMaxSize())
+        }
+        CustomIconTile(Modifier.weight(1f))
+        Spacer(Modifier.weight(2f))
     }
 }
 

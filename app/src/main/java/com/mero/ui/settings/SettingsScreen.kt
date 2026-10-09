@@ -340,9 +340,9 @@ fun SettingsScreen(
                     PreferenceRow(
                         Icons.Rounded.Apps,
                         "App icon",
-                        "Switches when you leave Mero. Music keeps playing; a Mero icon on the home screen may need adding again.",
+                        "Mero's logo, or a photo of your own as the home-screen icon",
                     )
-                    AppIconPicker(onAccentChange)
+                    AppIconPicker()
                 }
             }
 

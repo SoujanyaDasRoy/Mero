@@ -1,17 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Sampled from the master logo (mero.png). -->
-    <color name="mero_lavender">#DCCBF8</color>
-    <color name="mero_yellow">#FECB06</color>
-    <color name="mero_indigo">#3D0286</color>
-    <!-- Backgrounds of the built-in alternative icons (Settings > App icon). -->
-    <color name="icon_honey_bg">#FEF6EB</color>
-    <color name="icon_blush_bg">#FCE7E0</color>
-    <color name="icon_forest_bg">#3A4421</color>
-    <color name="icon_sage_bg">#E9EDDC</color>
-    <color name="icon_sky_bg">#DAEEF9</color>
-    <color name="icon_lilac_bg">#E3D9F2</color>
-    <color name="icon_cocoa_bg">#ECDDCA</color>
-    <color name="icon_gilded_bg">#252523</color>
-    <color name="icon_ink_bg">#F8F4EB</color>
+    <!-- Sampled from the logo (mero.png). -->
+    <color name="mero_lavender">#D6BFFC</color>
+    <color name="splash_centre">#E9DAFC</color>
+    <color name="splash_edge">#C19CFC</color>
 </resources>

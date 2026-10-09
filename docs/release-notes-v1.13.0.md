@@ -1,4 +1,4 @@
-**Mero 1.13.0: recommendations that learn your taste, YouTube links that just play, backup and restore, a new logo and ten app icons.**
+**Mero 1.13.0: recommendations that learn your taste, YouTube links that just play, backup and restore, a new logo, and a floating menu bar.**
 
 Install it over 1.12.0; your library, playlists and downloads are kept.
 
@@ -37,17 +37,10 @@ Paste any YouTube or YouTube Music link into search (a video, a share link, a Sh
 ### 💾 Back up and restore your library
 Settings → Library → **Back up your library** saves your likes, playlists, play history and settings into one file. **Restore from a backup** brings them back after a reinstall or on a new phone.
 
-### ✍️ A new Mero logo
-Mero has a new handwritten **m.** logo. It's the app icon, the splash screen, the logo on Home, and the little icon on Mero's notifications (playback, reminders and updates).
+### 🟣 A new Mero logo
+Mero has a new logo: a soft purple **M** on lavender. It's the app icon, the splash screen (now the logo's own gradient across the whole screen), the logo on Home, and the little icon on Mero's notifications (playback, reminders and updates). The app's default accent colour is now violet to match.
 
-### 🎨 Ten app icons, built in
-Settings → **App icon** now has **Classic** (the new logo) and nine one-colour versions: **Honey, Blush, Forest, Sage, Sky, Lilac, Cocoa, Gilded and Ink**. Or use **your own photo**, as before.
-
-- **The splash screen follows your icon.** Pick Gilded and Mero opens with the dark-and-gold one
-- **So does the accent colour.** Picking an icon sets a matching accent for the whole app (you can still change the accent yourself afterwards)
-- A new picker: a big preview of what you've chosen, then a grid of every icon drawn the way your home screen will show it
-- The icon changes when you leave Mero, so music keeps playing
-- **If you were using one of the five icons from earlier versions** (Midnight, Paper, Coral, Ocean, Mint), they've been replaced and Mero moves you to Classic
+Settings → **App icon** has the logo, or **your own photo**, as before. The extra coloured icons from earlier versions are gone; if you were using one, Mero moves you to the new logo the next time you close it.
 
 ### 🫧 A floating menu bar
 The bottom bar is now a floating pill, with the tab you're on in its own highlighted capsule.

@@ -5,14 +5,11 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,26 +17,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
-import com.mero.ui.settings.AppIcon
+import com.mero.R
 
 /**
- * Mero's own splash, shown after the system one hands over. The system splash
- * (Theme.Mero.Splash) only covers the cold-start gap and can't animate a raster
- * logo, so the actual motion lives here.
+ * Mero's own splash, shown after the system one hands over: the logo's lavender gradient across
+ * the whole screen with the M on it, so the two splashes read as one. The system one
+ * (Theme.Mero.Splash) only covers the cold-start gap and cannot animate a raster logo, so the
+ * motion lives here.
  */
 @Composable
 fun MeroSplash(onFinished: () -> Unit) {
-    val context = LocalContext.current
-    val icon = remember { AppIcon.chosen(context) }
-    val scale = remember { Animatable(0.72f) }
+    val scale = remember { Animatable(0.82f) }
     val fade = remember { Animatable(0f) }
     val wordmark = remember { Animatable(0f) }
 
@@ -55,34 +51,24 @@ fun MeroSplash(onFinished: () -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Brush.radialGradient(listOf(colorResource(R.color.splash_centre), colorResource(R.color.splash_edge))))
             .alpha(fade.value),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            Modifier
-                .size(132.dp)
-                .scale(scale.value)
-                .clip(RoundedCornerShape(30.dp))
-                .background(colorResource(icon.background)),
-            contentAlignment = Alignment.Center,
-        ) {
-            // The icon's own foreground, scaled the way a launcher shows it, so
-            // the splash is whichever icon is on the home screen.
-            Image(
-                painter = painterResource(icon.art),
-                contentDescription = "Mero",
-                modifier = Modifier.fillMaxSize().scale(1.5f),
-            )
-        }
+        Image(
+            painter = painterResource(R.drawable.mero_mark),
+            contentDescription = "Mero",
+            modifier = Modifier.width(190.dp).scale(scale.value),
+        )
         Text(
             "Mero",
             Modifier
-                .padding(top = 22.dp)
+                .padding(top = 20.dp)
                 .alpha(wordmark.value),
             fontSize = 26.sp,
             fontWeight = FontWeight.Medium,
+            color = Color(0xFF3A0A8C),
         )
     }
 }

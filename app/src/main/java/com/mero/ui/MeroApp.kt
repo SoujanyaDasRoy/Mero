@@ -171,8 +171,8 @@ fun MeroApp(
     val settings = remember(LocalContext.current) { SettingsStore(appContext) }
     var accent by remember {
         mutableStateOf(
-            runCatching { MeroAccent.valueOf(settings.string(SettingsStore.ACCENT, MeroAccent.Amber.name)) }
-                .getOrDefault(MeroAccent.Amber),
+            runCatching { MeroAccent.valueOf(settings.string(SettingsStore.ACCENT, MeroAccent.Violet.name)) }
+                .getOrDefault(MeroAccent.Violet),
         )
     }
     var toggles by remember { mutableStateOf(settings.toggles(TOGGLE_DEFAULTS)) }
@@ -209,7 +209,8 @@ fun MeroApp(
             Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
         ) {
-            Box(Modifier.windowInsetsPadding(WindowInsets.systemBars)) {
+            // The splash is full-bleed; everything after it sits inside the system bars.
+            Box(if (splashDone) Modifier.windowInsetsPadding(WindowInsets.systemBars) else Modifier) {
             if (!splashDone) {
                 MeroSplash(onFinished = { splashDone = true })
                 return@Box

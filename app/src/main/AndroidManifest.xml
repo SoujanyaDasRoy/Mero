@@ -86,10 +86,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
-        <!-- Retired icons (an earlier set of recolours). Offered nowhere any
-             more, but kept as launcher entries: someone who picked one has
-             that alias enabled and Classic disabled, so deleting it would
-             leave Mero without any launcher icon. They show the master icon,
+        <!-- Retired icons: the earlier recolours and the ten-icon set. Offered
+             nowhere any more, but kept as launcher entries: someone who picked
+             one has that alias enabled and Classic disabled, so deleting it
+             would leave Mero without any launcher icon. They show the Mero logo,
              and AppIcon.applyPending moves anyone still on one to Classic the
              next time Mero is closed. Do not remove these. -->
         <activity-alias
@@ -161,8 +161,8 @@
         <activity-alias
             android:name=".IconHoney"
             android:targetActivity=".MainActivity"
-            android:icon="@mipmap/ic_launcher_honey"
-            android:roundIcon="@mipmap/ic_launcher_honey"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:label="Mero"
             android:enabled="false"
             android:exported="true">
@@ -174,8 +174,8 @@
         <activity-alias
             android:name=".IconBlush"
             android:targetActivity=".MainActivity"
-            android:icon="@mipmap/ic_launcher_blush"
-            android:roundIcon="@mipmap/ic_launcher_blush"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:label="Mero"
             android:enabled="false"
             android:exported="true">
@@ -187,8 +187,8 @@
         <activity-alias
             android:name=".IconForest"
             android:targetActivity=".MainActivity"
-            android:icon="@mipmap/ic_launcher_forest"
-            android:roundIcon="@mipmap/ic_launcher_forest"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:label="Mero"
             android:enabled="false"
             android:exported="true">
@@ -200,8 +200,8 @@
         <activity-alias
             android:name=".IconSage"
             android:targetActivity=".MainActivity"
-            android:icon="@mipmap/ic_launcher_sage"
-            android:roundIcon="@mipmap/ic_launcher_sage"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:label="Mero"
             android:enabled="false"
             android:exported="true">
@@ -213,8 +213,8 @@
         <activity-alias
             android:name=".IconSky"
             android:targetActivity=".MainActivity"
-            android:icon="@mipmap/ic_launcher_sky"
-            android:roundIcon="@mipmap/ic_launcher_sky"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:label="Mero"
             android:enabled="false"
             android:exported="true">
@@ -226,8 +226,8 @@
         <activity-alias
             android:name=".IconLilac"
             android:targetActivity=".MainActivity"
-            android:icon="@mipmap/ic_launcher_lilac"
-            android:roundIcon="@mipmap/ic_launcher_lilac"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:label="Mero"
             android:enabled="false"
             android:exported="true">
@@ -239,8 +239,8 @@
         <activity-alias
             android:name=".IconCocoa"
             android:targetActivity=".MainActivity"
-            android:icon="@mipmap/ic_launcher_cocoa"
-            android:roundIcon="@mipmap/ic_launcher_cocoa"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:label="Mero"
             android:enabled="false"
             android:exported="true">
@@ -252,8 +252,8 @@
         <activity-alias
             android:name=".IconGilded"
             android:targetActivity=".MainActivity"
-            android:icon="@mipmap/ic_launcher_gilded"
-            android:roundIcon="@mipmap/ic_launcher_gilded"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:label="Mero"
             android:enabled="false"
             android:exported="true">
@@ -265,8 +265,8 @@
         <activity-alias
             android:name=".IconInk"
             android:targetActivity=".MainActivity"
-            android:icon="@mipmap/ic_launcher_ink"
-            android:roundIcon="@mipmap/ic_launcher_ink"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:label="Mero"
             android:enabled="false"
             android:exported="true">
