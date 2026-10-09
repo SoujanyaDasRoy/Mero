@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Notes
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlaylistAdd
@@ -281,6 +282,8 @@ fun PlaylistDetailScreen(
     /** Null for playlists nobody edits by hand — smart playlists fill themselves. */
     onAddSongs: (() -> Unit)?,
     onDelete: () -> Unit,
+    /** Null where sharing makes no sense: smart playlists change by themselves. */
+    onShare: (() -> Unit)? = null,
     contentPadding: PaddingValues,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -344,6 +347,13 @@ fun PlaylistDetailScreen(
                     Icon(Icons.Rounded.MoreVert, "More", tint = scheme.onSurfaceVariant)
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    if (onShare != null) {
+                        DropdownMenuItem(
+                            text = { Text("Share playlist") },
+                            leadingIcon = { Icon(Icons.Rounded.Share, null) },
+                            onClick = { menuOpen = false; onShare() },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text("Rename") },
                         leadingIcon = { Icon(Icons.Rounded.Edit, null) },

@@ -94,7 +94,37 @@
                 <data android:scheme="https" />
                 <data android:host="youtu.be" />
             </intent-filter>
+            <!-- A shared playlist file (.mero). Best effort: what an app hands over
+                 depends on the app, so Settings > Library > Import a playlist file
+                 is the way that always works. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/x-mero" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.mero" />
+            </intent-filter>
         </activity>
+
+        <!-- Lets the share sheet read the playlist file Mero just wrote, and nothing else. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- One launcher entry per app icon; exactly one is enabled at a time
              (AppIcon.kt). The names are stored by the system across updates,

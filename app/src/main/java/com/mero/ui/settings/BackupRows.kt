@@ -51,6 +51,17 @@ internal fun BackupRows() {
         }
     }
     val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> restoring = uri }
+    val importPlaylist = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val imported = com.mero.data.importPlaylistFile(context, container.libraryRepository, uri)
+            message = if (imported == null) {
+                "That isn't a Mero playlist file."
+            } else {
+                "Added \"" + imported.name + "\" with " + imported.songCount + " songs. It's under Library > Playlists."
+            }
+        }
+    }
 
     PreferenceRow(
         Icons.Rounded.Save,
@@ -65,6 +76,13 @@ internal fun BackupRows() {
         "Restore from a backup",
         "After a reinstall or on a new phone",
         onClick = { open.launch(arrayOf("application/zip", "application/octet-stream")) },
+    ) { Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+
+    PreferenceRow(
+        Icons.Rounded.Restore,
+        "Import a playlist file",
+        "A .mero file a friend sent you from their Mero",
+        onClick = { importPlaylist.launch(arrayOf("*/*")) },
     ) { Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
 
     restoring?.let { uri ->

@@ -1043,6 +1043,21 @@ private fun MeroContent(
             onOpenedHandled()
             return@LaunchedEffect
         }
+        // A playlist file sent from another Mero.
+        if (uri.lastPathSegment?.endsWith(".mero", ignoreCase = true) == true ||
+            context.contentResolver.getType(uri) == "application/x-mero"
+        ) {
+            val imported = com.mero.data.importPlaylistFile(context, library, uri)
+            say(
+                if (imported == null) {
+                    "That isn't a Mero playlist file"
+                } else {
+                    "Added \"" + imported.name + "\" with " + imported.songCount + " songs"
+                },
+            )
+            onOpenedHandled()
+            return@LaunchedEffect
+        }
         val song = com.mero.data.LocalAudio.songFrom(context, uri)
         if (com.mero.data.LocalAudio.isKept(context, uri)) library.saveSongs(listOf(song))
         songsById = songsById + (song.id to song)
@@ -2022,6 +2037,15 @@ private fun MeroContent(
                         onDelete = {
                             scope.launch { library.deletePlaylist(route.playlistId) }
                             navController.popBackStack()
+                        },
+                        onShare = {
+                            val shared = com.mero.ui.playlist.sharePlaylistFile(
+                                context,
+                                meta?.name ?: "Playlist",
+                                meta?.description,
+                                songs,
+                            )
+                            if (!shared) say("There are no songs here to share")
                         },
                         contentPadding = contentPadding,
                     )
