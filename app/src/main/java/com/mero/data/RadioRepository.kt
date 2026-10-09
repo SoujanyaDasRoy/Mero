@@ -1,5 +1,6 @@
 package com.mero.data
 
+import com.mero.domain.Origin
 import com.mero.domain.Song
 import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.models.WatchEndpoint
@@ -57,12 +58,12 @@ class RadioRepository(private val useV2: () -> Boolean = { true }) {
         if (!com.mero.domain.isYouTubeId(videoId)) return@runCatchingCancellable emptyList()
         val current = raw(videoId)
         val others = tasteRadios(taste.seeds.filter { it.song.id != videoId }.take(OTHER_SEEDS))
-        blend(listOf(CURRENT_WEIGHT to current) + others, taste, setOf(videoId))
+        blend(listOf(CURRENT_WEIGHT to current) + others, taste, setOf(videoId)).map { it.copy(origin = Origin.AUTO_QUEUE) }
     }
 
     /** A queue made only from taste: for "Your Mix", where nothing is playing yet. */
     suspend fun mixFor(taste: Taste): Result<List<Song>> = runCatchingCancellable {
-        blend(tasteRadios(taste.seeds.take(MIX_SEEDS)), taste, emptySet())
+        blend(tasteRadios(taste.seeds.take(MIX_SEEDS)), taste, emptySet()).map { it.copy(origin = Origin.MIX) }
     }
 
     private companion object {

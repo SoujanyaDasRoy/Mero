@@ -30,6 +30,9 @@ data class Taste(
     }
 }
 
+/** The id new code uses for an artist: there is no artist id on Song, so it is the name. */
+fun artistKey(song: Song): String = primaryArtist(song)
+
 /** The artist a song is filed under: the first credited, lowercased. */
 internal fun primaryArtist(song: Song): String =
     song.artist.split(",", "&", " x ", " feat", " ft.").first().trim().lowercase()

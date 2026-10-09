@@ -3,7 +3,9 @@ package com.mero.data.db
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
+import androidx.room.Embedded
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
@@ -43,6 +45,39 @@ data class SongEntity(
 data class QueueEntity(
     @PrimaryKey val songId: String,
     val position: Int,
+    /** Origin name (see com.mero.domain.Origin): who put this song in the queue. */
+    @ColumnInfo(defaultValue = "USER_CHOSE") val origin: String = "USER_CHOSE",
+)
+
+/** A queued song with the origin it was queued under. */
+data class QueuedSong(
+    @Embedded val song: SongEntity,
+    val origin: String,
+)
+
+/**
+ * One playback instance of one track: inserted when it starts, updated when it
+ * is paused, finalized when it ends or is moved on from. The raw material for
+ * learning what this listener finishes, replays and skips.
+ */
+@Entity(
+    tableName = "play_events",
+    indices = [Index("trackId"), Index("startedAtMs")],
+)
+data class PlayEventEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val trackId: String,
+    /** primaryArtist(song): the artist key used everywhere new code needs an artist id. */
+    val artistKey: String,
+    val startedAtMs: Long,
+    /** Milliseconds of the track actually heard, from position changes while playing. */
+    val listenedMs: Long,
+    val durationMs: Long,
+    val origin: String,
+    /** A replay of the track just heard, rather than a first listen. */
+    val restarted: Boolean,
+    /** False while it is still playing, or if the process died before it ended. */
+    val finalized: Boolean,
 )
 
 /**
@@ -167,12 +202,36 @@ interface MeroDao {
 
     @Query(
         """
-        SELECT s.* FROM songs s
+        SELECT s.*, q.origin AS origin FROM songs s
         INNER JOIN queue q ON q.songId = s.id
         ORDER BY q.position ASC
         """,
     )
-    fun queue(): Flow<List<SongEntity>>
+    fun queue(): Flow<List<QueuedSong>>
+
+    /* ------------------------------ play events ------------------------------ */
+
+    @Insert
+    suspend fun insertPlayEvent(event: PlayEventEntity): Long
+
+    @Query("UPDATE play_events SET listenedMs = :listenedMs, durationMs = :durationMs, finalized = :finalized WHERE id = :id")
+    suspend fun updatePlayEvent(id: Long, listenedMs: Long, durationMs: Long, finalized: Boolean)
+
+    @Query("SELECT COUNT(*) FROM play_events")
+    suspend fun playEventCount(): Int
+
+    @Query("SELECT * FROM play_events ORDER BY startedAtMs DESC, id DESC LIMIT :limit")
+    suspend fun lastPlayEvents(limit: Int): List<PlayEventEntity>
+
+    /** Anything still unfinalized when the app starts belongs to a process that died mid-track. */
+    @Query("UPDATE play_events SET finalized = 1 WHERE finalized = 0")
+    suspend fun finalizeStalePlayEvents()
+
+    @Query("DELETE FROM play_events WHERE startedAtMs < :cutoffMs")
+    suspend fun deletePlayEventsBefore(cutoffMs: Long)
+
+    @Query("DELETE FROM play_events WHERE id NOT IN (SELECT id FROM play_events ORDER BY startedAtMs DESC, id DESC LIMIT :keep)")
+    suspend fun keepNewestPlayEvents(keep: Int)
 
     @Query("DELETE FROM queue WHERE songId = :songId")
     suspend fun removeFromQueue(songId: String)
@@ -337,12 +396,42 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         PlaylistEntity::class,
         PlaylistSongEntity::class,
         SmartPlaylistEntity::class,
+        PlayEventEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class MeroDatabase : RoomDatabase() {
     abstract fun dao(): MeroDao
+}
+
+/**
+ * The listening log (play_events) and where each queued song came from.
+ *
+ * The queue's origin column defaults to USER_CHOSE, which is what every song in a
+ * queue saved before this version was: nothing then marked anything as suggested.
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE queue ADD COLUMN origin TEXT NOT NULL DEFAULT 'USER_CHOSE'")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS play_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                trackId TEXT NOT NULL,
+                artistKey TEXT NOT NULL,
+                startedAtMs INTEGER NOT NULL,
+                listenedMs INTEGER NOT NULL,
+                durationMs INTEGER NOT NULL,
+                origin TEXT NOT NULL,
+                restarted INTEGER NOT NULL,
+                finalized INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_play_events_trackId ON play_events (trackId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_play_events_startedAtMs ON play_events (startedAtMs)")
+    }
 }
 
 /** Skips, so the queue can learn what this listener moves on from. */

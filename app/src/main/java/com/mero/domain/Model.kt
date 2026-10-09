@@ -23,12 +23,30 @@ data class Song(
      * expire after six hours.
      */
     val sourceUri: String? = null,
+    /** Who put this in the queue; travels with the song so the listening log can tell a pick from a suggestion. */
+    val origin: Origin = Origin.USER_CHOSE,
 ) {
     /** A YouTube track, which the extraction, radio and lyrics paths assume. */
     val isYouTube: Boolean get() = sourceUri == null
 
     /** Something on this phone, which needs neither downloading nor streaming. */
     val isOnDevice: Boolean get() = sourceUri?.startsWith("content:") == true
+}
+
+/**
+ * Who started a play. A skip of something the listener picked says little; a skip of
+ * something Mero suggested says a lot.
+ *
+ * USER_CHOSE: the tapped song, items of a collection the listener picked (album,
+ * playlist, own queue) and anything added to the queue by hand.
+ * AUTO_QUEUE: appended by "a song, then music like it" and by infinite playback.
+ * MIX: Your Mix, the mood shelves and Home's "More like X".
+ */
+enum class Origin { USER_CHOSE, AUTO_QUEUE, MIX;
+
+    companion object {
+        fun from(name: String?): Origin = entries.firstOrNull { it.name == name } ?: USER_CHOSE
+    }
 }
 
 /**

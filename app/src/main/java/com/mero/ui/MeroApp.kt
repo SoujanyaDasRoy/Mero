@@ -951,7 +951,9 @@ private fun MeroContent(
     fun playFrom(song: Song, context: List<Song>, source: String = playSource) {
         askBatteryOnce()
         playSource = source
-        val list = if (context.any { it.id == song.id }) context else listOf(song) + context
+        // The tapped song as given: it may carry a different origin than its copy in the list.
+        val list = (if (context.any { it.id == song.id }) context else listOf(song) + context)
+            .map { if (it.id == song.id) song else it }
         songsById = songsById + list.associateBy { it.id }
         current = song
         position.intValue = 0
@@ -975,7 +977,9 @@ private fun MeroContent(
      * lists still play in their own order through [playFrom].
      */
     fun playWithSimilar(song: Song, source: String) {
-        playFrom(song, listOf(song), source)
+        // A song tapped on its own was chosen, whatever list it was shown in.
+        val picked = song.copy(origin = com.mero.domain.Origin.USER_CHOSE)
+        playFrom(picked, listOf(picked), source)
         if (!song.isYouTube) return
         radioRequests = radioRequests + song.id
         scope.launch {
@@ -1004,7 +1008,7 @@ private fun MeroContent(
             playWithSimilar(song, playSource)
             say("Playing " + song.title)
         } else {
-            connection.playNextInQueue(song)
+            connection.playNextInQueue(song.copy(origin = com.mero.domain.Origin.USER_CHOSE))
             say(song.title + " plays next")
         }
     }
@@ -1351,6 +1355,7 @@ private fun MeroContent(
                                 container.searchRepository.search(mood.query).fold(
                                     onSuccess = { found ->
                                         val ranked = com.mero.data.rankForTaste(found, library.taste())
+                                            .map { it.copy(origin = com.mero.domain.Origin.MIX) }
                                         ranked.firstOrNull()?.let { playFrom(it, ranked, mood.label) }
                                             ?: say("Couldn't find " + mood.label.lowercase() + " songs right now")
                                     },
@@ -2353,7 +2358,7 @@ private fun MeroContent(
                 liked = likedSongs.any { it.id == song.id },
                 onPlayNext = { playNext(song) },
                 onAddToQueue = {
-                    connection.addToQueue(listOf(song))
+                    connection.addToQueue(listOf(song.copy(origin = com.mero.domain.Origin.USER_CHOSE)))
                     say(song.title + " added to the queue")
                 },
                 onAddToPlaylist = { menuSong = null; addingToPlaylist = song },
@@ -2486,7 +2491,14 @@ private fun MeroContent(
                         connection.controller?.let { c ->
                             val at = (c.currentMediaItemIndex + 1 until c.mediaItemCount)
                                 .firstOrNull { c.getMediaItemAt(it).mediaId == picked.id }
-                            if (at != null) c.seekTo(at, 0L) else playFrom(picked, queue, playSource)
+                            // Picking from the queue is choosing: mark it before jumping to it.
+                            val chosen = picked.copy(origin = com.mero.domain.Origin.USER_CHOSE)
+                            if (at != null) {
+                                c.replaceMediaItem(at, com.mero.playback.mediaItemFor(chosen))
+                                c.seekTo(at, 0L)
+                            } else {
+                                playFrom(chosen, queue, playSource)
+                            }
                         }
                         overlay = null
                     },

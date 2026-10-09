@@ -135,6 +135,7 @@ class HomeRepository {
             async {
                 radio.radioFor(song.id).getOrNull()
                     ?.filter { it.id != song.id }
+                    ?.map { it.copy(origin = com.mero.domain.Origin.MIX) }
                     ?.take(15)
                     ?.takeIf { it.size >= MIN_SHELF }
                     ?.let {

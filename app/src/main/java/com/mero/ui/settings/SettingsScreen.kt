@@ -549,10 +549,17 @@ fun SettingsScreen(
                             )
                         }
                     }
+                    // Debug builds only: seven taps open the listening log.
+                    var debugTaps by remember { mutableStateOf(0) }
+                    var showEvents by remember { mutableStateOf(false) }
+                    if (showEvents) PlayEventDebugDialog(onDismiss = { showEvents = false })
                     PreferenceRow(
                         Icons.Rounded.HelpOutline,
                         "How updating works",
                         "Mero checks on its own. Tap Download, then Install.",
+                        onClick = if (com.mero.BuildConfig.DEBUG) {
+                            { if (++debugTaps >= 7) { debugTaps = 0; showEvents = true } }
+                        } else null,
                     )
                     PreferenceRow(
                         Icons.Rounded.Code,

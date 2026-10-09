@@ -1,6 +1,7 @@
 package com.mero.data
 
 import com.mero.data.db.MeroDao
+import com.mero.data.db.PlayEventEntity
 import com.mero.data.db.PlaylistEntity
 import com.mero.data.db.PlaylistSongEntity
 import com.mero.data.db.PlaylistSummary
@@ -8,6 +9,7 @@ import com.mero.data.db.SmartPlaylistEntity
 import com.mero.data.db.SmartPlaylistSummary
 import com.mero.data.db.QueueEntity
 import com.mero.data.db.SongEntity
+import com.mero.domain.Origin
 import com.mero.domain.Song
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -45,7 +47,9 @@ class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boole
     val downloads: Flow<List<Song>> = dao.downloads().map { rows -> rows.map { it.toDomain() } }
     val recentlyPlayed: Flow<List<Song>> = dao.recentlyPlayed().map { rows -> rows.map { it.toDomain() } }
     val mostPlayed: Flow<List<Song>> = dao.mostPlayed().map { rows -> rows.map { it.toDomain() } }
-    val queue: Flow<List<Song>> = dao.queue().map { rows -> rows.map { it.toDomain() } }
+    val queue: Flow<List<Song>> = dao.queue().map { rows ->
+        rows.map { it.song.toDomain().copy(origin = Origin.from(it.origin)) }
+    }
     val onDevice: Flow<List<Song>> = dao.onDevice().map { rows -> rows.map { it.toDomain() } }
 
     /**
@@ -119,6 +123,28 @@ class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boole
         )
     }
 
+    /** Where the player's listening log is written. */
+    val playEvents: PlayEventStore = object : PlayEventStore {
+        override suspend fun insert(event: PlayEventEntity): Long = dao.insertPlayEvent(event)
+
+        override suspend fun update(id: Long, listenedMs: Long, durationMs: Long, finalized: Boolean) =
+            dao.updatePlayEvent(id, listenedMs, durationMs, finalized)
+    }
+
+    /**
+     * Run once at app start: a play still unfinalized belongs to a process that died
+     * mid-track, and the log is kept to the last 180 days and 20,000 plays.
+     */
+    suspend fun tidyPlayEvents(nowMs: Long = System.currentTimeMillis()) {
+        dao.finalizeStalePlayEvents()
+        dao.deletePlayEventsBefore(nowMs - EVENT_KEEP_DAYS * 86_400_000L)
+        dao.keepNewestPlayEvents(EVENT_KEEP_ROWS)
+    }
+
+    suspend fun playEventCount(): Int = dao.playEventCount()
+
+    suspend fun lastPlayEvents(limit: Int): List<PlayEventEntity> = dao.lastPlayEvents(limit)
+
     suspend fun toggleLiked(song: Song): Boolean {
         ensure(song)
         val nowLiked = dao.song(song.id)?.liked != true
@@ -129,7 +155,7 @@ class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boole
     suspend fun setQueue(songs: List<Song>) {
         songs.forEach { ensure(it) }
         dao.clearQueue()
-        dao.addToQueue(songs.mapIndexed { index, song -> QueueEntity(song.id, index) })
+        dao.addToQueue(songs.mapIndexed { index, song -> QueueEntity(song.id, index, song.origin.name) })
     }
 
     /**
@@ -139,7 +165,7 @@ class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boole
      */
     suspend fun reorderQueue(songs: List<Song>) {
         dao.clearQueue()
-        dao.addToQueue(songs.mapIndexed { index, song -> QueueEntity(song.id, index) })
+        dao.addToQueue(songs.mapIndexed { index, song -> QueueEntity(song.id, index, song.origin.name) })
     }
 
     suspend fun removeFromQueue(songId: String) = dao.removeFromQueue(songId)
@@ -224,3 +250,5 @@ class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boole
 
 /** Songs heard this recently are kept back from the queue for a while. */
 private const val RECENT_WINDOW = 25
+private const val EVENT_KEEP_DAYS = 180L
+private const val EVENT_KEEP_ROWS = 20_000

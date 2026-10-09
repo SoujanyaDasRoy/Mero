@@ -64,7 +64,7 @@ class AppContainer(context: Context) {
             context.applicationContext,
             MeroDatabase::class.java,
             "mero.db",
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, com.mero.data.db.MIGRATION_6_7)
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, com.mero.data.db.MIGRATION_6_7, com.mero.data.db.MIGRATION_7_8)
             .build()
     }
 
@@ -205,6 +205,7 @@ class MeroApplication : Application(), SingletonImageLoader.Factory {
         // once and made the first real play slower, not faster.
         CoroutineScope(Dispatchers.IO).launch { container.ytDlpApi.prepare() }
         container.outputRoute.start()
+        CoroutineScope(Dispatchers.IO).launch { container.libraryRepository.tidyPlayEvents() }
         com.mero.data.SongReminderWorker.schedule(this)
         com.mero.data.UpdateCheckWorker.schedule(this)
     }

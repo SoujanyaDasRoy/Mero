@@ -56,6 +56,7 @@ class MeroPlaybackService : MediaLibraryService() {
     private lateinit var settings: SettingsStore
     private lateinit var search: com.mero.data.SearchRepository
     private lateinit var radio: com.mero.data.RadioRepository
+    private lateinit var events: com.mero.data.PlayEventRecorder
 
     /**
      * The car's last search. A tap on a result arrives later as a bare id, and
@@ -138,12 +139,17 @@ class MeroPlaybackService : MediaLibraryService() {
 
         // Remember where playback stopped. Without this a headset button
         // pressed the next morning would restart the queue from the top.
+        events = com.mero.data.PlayEventRecorder(
+            library.playEvents,
+            CoroutineScope(SupervisorJob() + Dispatchers.IO),
+        )
         player.addListener(object : Player.Listener {
             /** The track last counted as played, so pausing and resuming it counts once. */
             private var counted: String? = null
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (!isPlaying) {
+                    events.onPaused(player.currentPosition)
                     saveResumePoint(player)
                     return
                 }
@@ -153,6 +159,7 @@ class MeroPlaybackService : MediaLibraryService() {
                 // Recently played, Most played, the home shelves built from
                 // them — and from the resume point.
                 val item = player.currentMediaItem ?: return
+                events.onPlaying(trackOf(item), player.currentPosition)
                 if (item.mediaId == counted) return
                 counted = item.mediaId
                 serviceScope.launch { library.onPlayed(songFrom(item)) }
@@ -161,6 +168,14 @@ class MeroPlaybackService : MediaLibraryService() {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 // A repeat of the same track is a new listen.
                 counted = null
+                // The previous track's end was reported by onPositionDiscontinuity, which comes first.
+                if (mediaItem != null && player.isPlaying) {
+                    events.onPlaying(
+                        trackOf(mediaItem),
+                        player.currentPosition,
+                        restarted = reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT,
+                    )
+                }
                 saveResumePoint(player)
             }
 
@@ -176,6 +191,16 @@ class MeroPlaybackService : MediaLibraryService() {
                 newPosition: Player.PositionInfo,
                 reason: Int,
             ) {
+                val sameItem = oldPosition.mediaItem?.mediaId == newPosition.mediaItem?.mediaId &&
+                    oldPosition.mediaItemIndex == newPosition.mediaItemIndex
+                when {
+                    // Ended, skipped, or replaced by another queue (or the same song tapped again).
+                    reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION ||
+                        reason == Player.DISCONTINUITY_REASON_REMOVE || !sameItem ->
+                        events.onTrackEnded(oldPosition.positionMs, durationNow())
+                    reason == Player.DISCONTINUITY_REASON_SEEK ->
+                        events.onSeek(oldPosition.positionMs, newPosition.positionMs)
+                }
                 if (reason != Player.DISCONTINUITY_REASON_SEEK) return
                 if (oldPosition.mediaItemIndex == newPosition.mediaItemIndex) return
                 if (oldPosition.positionMs !in SKIP_MIN_MS until SKIP_WINDOW_MS) return
@@ -219,6 +244,8 @@ class MeroPlaybackService : MediaLibraryService() {
         resumeAfter?.release()
         resumeAfter = null
         mediaSession?.run {
+            events.onPaused(player.currentPosition)
+            events.close()
             saveResumePoint(player)
             player.release()
             release()
@@ -227,6 +254,14 @@ class MeroPlaybackService : MediaLibraryService() {
         serviceScope.cancel()
         super.onDestroy()
     }
+
+    /** The player's current track as the listening log knows it. */
+    private fun trackOf(item: MediaItem): com.mero.data.PlayingTrack {
+        val song = songFrom(item)
+        return com.mero.data.PlayingTrack(song.id, com.mero.data.artistKey(song), durationNow(), song.origin)
+    }
+
+    private fun durationNow(): Long = mediaSession?.player?.duration?.takeIf { it > 0 } ?: 0L
 
     private fun saveResumePoint(player: Player) {
         if (player.mediaItemCount == 0) return

@@ -6,6 +6,7 @@ import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import com.mero.data.atArtworkSize
+import com.mero.domain.Origin
 import com.mero.domain.Song
 
 private const val SCHEME = "mero"
@@ -34,7 +35,13 @@ fun mediaItemFor(song: Song): MediaItem =
                 // rebuilds songs from what it does receive. Losing it would
                 // turn a podcast episode back into a "YouTube id" on the next
                 // queue save.
-                .setExtras(Bundle().apply { song.sourceUri?.let { putString(EXTRA_SOURCE, it) } })
+                .setExtras(
+                    Bundle().apply {
+                        song.sourceUri?.let { putString(EXTRA_SOURCE, it) }
+                        // Who queued it: the listening log needs to tell a pick from a suggestion.
+                        putString(EXTRA_ORIGIN, song.origin.name)
+                    },
+                )
                 .build(),
         )
         .build()
@@ -49,10 +56,15 @@ fun songFrom(item: MediaItem): Song {
         album = meta.albumTitle?.toString().orEmpty(),
         thumbnailUrl = meta.artworkUri?.toString(),
         sourceUri = meta.extras?.getString(EXTRA_SOURCE),
+        origin = originOf(item),
     )
 }
 
+/** Who queued this item; a song queued by something that predates origins was picked. */
+fun originOf(item: MediaItem): Origin = Origin.from(item.mediaMetadata.extras?.getString(EXTRA_ORIGIN))
+
 private const val EXTRA_SOURCE = "mero.sourceUri"
+private const val EXTRA_ORIGIN = "mero.origin"
 
 fun videoIdFrom(uri: Uri): String {
     require(uri.scheme == SCHEME) { "Not a mero uri: $uri" }
