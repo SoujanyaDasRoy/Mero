@@ -94,6 +94,13 @@
                 <data android:scheme="https" />
                 <data android:host="youtu.be" />
             </intent-filter>
+            <!-- "Share" > Mero, from YouTube Music, the browser, WhatsApp: the one route that does not
+                 depend on who owns the link. The first link in the text is opened. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
             <!-- A shared playlist file (.mero). Best effort: what an app hands over
                  depends on the app, so Settings > Library > Import a playlist file
                  is the way that always works. -->

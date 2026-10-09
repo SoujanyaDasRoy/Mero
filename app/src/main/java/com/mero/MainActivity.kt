@@ -122,6 +122,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun audioFrom(intent: Intent?): Uri? =
-        intent?.takeIf { it.action == Intent.ACTION_VIEW }?.data
+    /**
+     * What Mero was asked to open: a file or link another app handed over (VIEW), or the first link in
+     * text shared to Mero (SEND). Sharing a YouTube Music link to Mero from any app is the way that
+     * always works: Android opens a tapped music.youtube.com link in YouTube Music, which owns it.
+     */
+    private fun audioFrom(intent: Intent?): Uri? = when (intent?.action) {
+        Intent.ACTION_VIEW -> intent.data
+        Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)
+            ?.let { Regex("https?://\\S+").find(it)?.value }
+            ?.let(Uri::parse)
+        else -> null
+    }
 }
