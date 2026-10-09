@@ -166,10 +166,10 @@ Get the APK from the **[latest release](../../releases/latest)**.
 
 | File | For |
 |---|---|
-| `mero-<version>-arm64-v8a-debug.apk` | **Almost every phone — take this one** |
-| `mero-<version>-armeabi-v7a-debug.apk` | Older 32-bit phones |
-| `mero-<version>-x86_64-debug.apk` | Emulators |
-| `mero-<version>-x86-debug.apk` | Old 32-bit emulators |
+| `mero-<version>-arm64-v8a.apk` | **Almost every phone — take this one** |
+| `mero-<version>-armeabi-v7a.apk` | Older 32-bit phones |
+| `mero-<version>-x86_64.apk` | Emulators |
+| `mero-<version>-x86.apk` | Old 32-bit emulators |
 
 1. Open the downloaded APK on your phone.
 2. Allow Android to install apps from wherever you opened it.

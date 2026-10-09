@@ -7,7 +7,7 @@ private val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
 private val HOSTS = setOf(
     "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com",
     "youtu.be", "www.youtu.be", "youtube-nocookie.com", "www.youtube-nocookie.com",
-    // Mero's own share links (ShareLink): https://<host>/s/?v=<id>
+    // Mero's own share links (ShareLink): https://<host>/song/?v=<id>
     ShareLink.HOST,
 )
 private val ID_IN_PATH = setOf("shorts", "embed", "live", "v")

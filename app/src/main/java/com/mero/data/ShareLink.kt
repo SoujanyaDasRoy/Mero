@@ -12,5 +12,5 @@ object ShareLink {
     private val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
 
     /** The address to share for a YouTube song, or null for something with no YouTube id (a phone file, a podcast). */
-    fun song(videoId: String): String? = videoId.takeIf { VIDEO_ID.matches(it) }?.let { "https://$HOST/s/?v=$it" }
+    fun song(videoId: String): String? = videoId.takeIf { VIDEO_ID.matches(it) }?.let { "https://$HOST/song/?v=$it" }
 }

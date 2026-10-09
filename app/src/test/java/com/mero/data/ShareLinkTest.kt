@@ -8,7 +8,7 @@ class ShareLinkTest {
     private val id = "dQw4w9WgXcQ"
 
     @Test fun `a song becomes a link on Mero's own site`() =
-        assertEquals("https://soujanyadasroy.github.io/s/?v=$id", ShareLink.song(id))
+        assertEquals("https://soujanyadasroy.github.io/song/?v=$id", ShareLink.song(id))
 
     @Test fun `things with no YouTube id have no link`() {
         assertNull(ShareLink.song("local:12"))
@@ -21,6 +21,6 @@ class ShareLinkTest {
 
     @Test fun `the site's other pages are not songs`() {
         assertNull(parseYouTubeLink("https://soujanyadasroy.github.io/"))
-        assertNull(parseYouTubeLink("https://soujanyadasroy.github.io/s/"))
+        assertNull(parseYouTubeLink("https://soujanyadasroy.github.io/song/"))
     }
 }

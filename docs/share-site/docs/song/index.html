@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A song shared from Mero</title>
+<link rel="icon" href="../logo.png">
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
+         background: radial-gradient(circle at 50% 40%, #e9dafc, #c19cfc); color: #2a0a6b;
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; text-align: center; }
+  img { width: 96px; height: 96px; border-radius: 24px; box-shadow: 0 12px 32px rgba(58, 10, 140, .25); }
+  p { margin: 12px 0; }
+  a.button { display: inline-block; padding: 12px 24px; border-radius: 28px; background: #4b1fb0; color: #fff;
+             text-decoration: none; font-weight: 600; }
+  a.plain { color: #4b1fb0; }
+</style>
+</head>
+<body>
+  <main>
+    <img src="../logo.png" alt="Mero">
+    <p id="msg">Opening the song…</p>
+    <p><a id="yt" class="button" href="#">Open in YouTube Music</a></p>
+    <p><a class="plain" href="https://github.com/SoujanyaDasRoy/Mero/releases/tag/v1.13.0">Get Mero, the free music player this was shared from</a></p>
+  </main>
+<script>
+  // A phone with Mero never loads this page: Android hands the link straight to the app.
+  // Everyone else is sent on to the same song in YouTube Music.
+  var id = new URLSearchParams(location.search).get("v") || "";
+  if (/^[A-Za-z0-9_-]{11}$/.test(id)) {
+    var url = "https://music.youtube.com/watch?v=" + id;
+    document.getElementById("yt").href = url;
+    location.replace(url);
+  } else {
+    document.getElementById("msg").textContent = "This link is missing its song.";
+    document.getElementById("yt").style.display = "none";
+  }
+</script>
+</body>
+</html>
