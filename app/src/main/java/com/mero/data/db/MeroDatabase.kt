@@ -389,6 +389,13 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+/**
+ * The schema version, in one place. Raising it needs a migration from the old version in
+ * [ALL_MIGRATIONS] and a schema file in app/schemas (the build writes it); MigrationChainTest fails
+ * if either is missing, because a database that cannot be migrated is a library wiped on update.
+ */
+const val DB_VERSION = 8
+
 @Database(
     entities = [
         SongEntity::class,
@@ -398,7 +405,7 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         SmartPlaylistEntity::class,
         PlayEventEntity::class,
     ],
-    version = 8,
+    version = DB_VERSION,
     exportSchema = true,
 )
 abstract class MeroDatabase : RoomDatabase() {
@@ -477,3 +484,14 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         )
     }
 }
+
+/** Every migration, oldest first. The database is opened with exactly these; nothing is ever dropped to fit. */
+val ALL_MIGRATIONS: Array<Migration> = arrayOf(
+    MIGRATION_1_2,
+    MIGRATION_2_3,
+    MIGRATION_3_4,
+    MIGRATION_4_5,
+    MIGRATION_5_6,
+    MIGRATION_6_7,
+    MIGRATION_7_8,
+)

@@ -60,11 +60,14 @@ import java.util.Locale
 class AppContainer(context: Context) {
 
     private val database: MeroDatabase by lazy {
+        // An older database is copied aside before Room migrates it, so a migration that goes wrong
+        // can be recovered from instead of ending in a library wiped by an update.
+        com.mero.data.db.keepCopyBeforeMigration(context.applicationContext, com.mero.data.db.DB_VERSION)
         Room.databaseBuilder(
             context.applicationContext,
             MeroDatabase::class.java,
             "mero.db",
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, com.mero.data.db.MIGRATION_6_7, com.mero.data.db.MIGRATION_7_8)
+        ).addMigrations(*com.mero.data.db.ALL_MIGRATIONS)
             .build()
     }
 

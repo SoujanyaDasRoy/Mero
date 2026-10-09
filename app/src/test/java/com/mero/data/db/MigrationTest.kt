@@ -11,6 +11,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -31,11 +32,19 @@ import java.util.zip.ZipOutputStream
  * app's own assets, which would mean shipping the schemas inside the APK.
  */
 // Pinned below targetSdk 36 for the same reason as MediaItemsTest.
-@Config(sdk = [34])
+// A plain Application: MeroApplication opens the real mero.db in the background as it starts, which these tests must own.
+@Config(sdk = [34], application = android.app.Application::class)
 @RunWith(RobolectricTestRunner::class)
 class MigrationTest {
 
     private val context: Context get() = RuntimeEnvironment.getApplication()
+
+    /** Robolectric keeps the app's database folder between tests; start each one empty. */
+    @Before
+    fun clean() {
+        listOf(DB, SOURCE, "mero.db").forEach { context.deleteDatabase(it) }
+        assertFalse("a database left over from another test", context.getDatabasePath("mero.db").exists())
+    }
 
     /** A database exactly as Room created it at [version], from app/schemas/.../[version].json. */
     private fun createFromSchema(name: String, version: Int): SupportSQLiteDatabase {
@@ -120,13 +129,12 @@ class MigrationTest {
     @Test
     fun `a backup made at schema 7 still restores, then migrates when opened`() {
         // A database exactly as Mero 1.13 left it, with a song in it.
-        createFromSchema("mero.db", 7).apply {
+        // Built under another name, because Backup.restore writes mero.db and nothing else may hold it.
+        createFromSchema(SOURCE, 7).apply {
             insertSongV7(this, "kept")
             closeCheckpointed()
         }
-        val file = context.getDatabasePath("mero.db")
-        val backup = zipOf(file.readBytes())
-        file.delete()
+        val backup = zipOf(context.getDatabasePath(SOURCE).readBytes())
 
         assertTrue(Backup.restore(context, ByteArrayInputStream(backup), currentDbVersion = 8))
 
@@ -143,14 +151,12 @@ class MigrationTest {
 
     @Test
     fun `a backup from a newer schema than the app is refused and changes nothing`() {
-        createFromSchema("mero.db", 7).closeCheckpointed()
-        val file = context.getDatabasePath("mero.db")
-        val bytes = file.readBytes()
+        createFromSchema(SOURCE, 7).closeCheckpointed()
+        val bytes = context.getDatabasePath(SOURCE).readBytes()
         bytes[63] = 9    // user_version 9, which this app does not know
-        val before = file.readBytes()
 
         assertFalse(Backup.restore(context, ByteArrayInputStream(zipOf(bytes)), currentDbVersion = 8))
-        assertTrue(before.contentEquals(file.readBytes()))
+        assertFalse("nothing was written", context.getDatabasePath("mero.db").exists())
     }
 
     private fun zipOf(db: ByteArray): ByteArray = ByteArrayOutputStream().also { out ->
@@ -163,5 +169,6 @@ class MigrationTest {
 
     private companion object {
         const val DB = "migration-test"
+        const val SOURCE = "backup-source.db"
     }
 }
