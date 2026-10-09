@@ -1,6 +1,7 @@
 package com.mero.ui.search
 
 import androidx.compose.foundation.background
+import com.mero.ui.components.clickableScaled
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -391,7 +392,7 @@ private fun GenreCard(
             .aspectRatio(1.6f)
             .clip(RoundedCornerShape(12.dp))
             .background(tint)
-            .clickable(onClick = onClick),
+            .clickableScaled(onClick = onClick),
     ) {
         Text(
             title,
@@ -486,7 +487,7 @@ private fun IdleSuggestions(
                         Column(
                             Modifier
                                 .width(96.dp)
-                                .clickable { onArtistClick(artist) },
+                                .clickableScaled { onArtistClick(artist) },
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             // Circular, the way every music app draws a person
@@ -520,7 +521,7 @@ private fun IdleSuggestions(
                         Column(
                             Modifier
                                 .width(124.dp)
-                                .clickable { onSongClick(song) },
+                                .clickableScaled { onSongClick(song) },
                         ) {
                             Artwork(song.thumbnailUrl, size = 124, radius = 14)
                             Text(
@@ -596,7 +597,7 @@ private fun SuggestionPill(label: String, leading: ImageVector = Icons.Rounded.S
             .height(36.dp)
             .clip(RoundedCornerShape(percent = 50))
             .background(scheme.surfaceContainerHigh)
-            .clickable(onClick = onClick)
+            .clickableScaled(onClick = onClick)
             .padding(start = 12.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),

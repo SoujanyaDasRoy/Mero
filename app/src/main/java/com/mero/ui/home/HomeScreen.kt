@@ -1,6 +1,8 @@
 package com.mero.ui.home
 
 import androidx.compose.animation.AnimatedVisibility
+import com.mero.ui.components.clickableScaled
+import com.mero.ui.components.reveal
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -192,7 +194,7 @@ fun HomeScreen(
             error != null && sections.isEmpty() && recentlyPlayed.isEmpty() -> Box(
                 Modifier
                     .fillMaxSize()
-                    .clickable(onClick = onRetry),
+                    .clickableScaled(onClick = onRetry),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -225,19 +227,21 @@ fun HomeScreen(
                     }
                 }
 
-                item(key = "moods") { MoodPills(onMood) }
+                item(key = "moods") { Box(Modifier.reveal("home-moods", 0)) { MoodPills(onMood) } }
 
                 if (recentlyPlayed.isNotEmpty()) {
                     item(key = "jump-back-in") {
-                        QuickPicks(
-                            songs = recentlyPlayed.take(6),
-                            onSongClick = { song -> onSongClick(song, recentlyPlayed) },
-                        )
+                        Box(Modifier.reveal("home-jump-back-in", 1)) {
+                            QuickPicks(
+                                songs = recentlyPlayed.take(6),
+                                onSongClick = { song -> onSongClick(song, recentlyPlayed) },
+                            )
+                        }
                     }
                 }
 
                 if (mixes.isNotEmpty()) {
-                    item(key = "made-for-you") { MadeForYou(mixes, onMix) }
+                    item(key = "made-for-you") { Box(Modifier.reveal("home-made-for-you", 2)) { MadeForYou(mixes, onMix) } }
                 }
 
                 if (sections.isEmpty() && loading) {
@@ -252,7 +256,7 @@ fun HomeScreen(
                             "Couldn't load more music right now. Tap to try again.",
                             Modifier
                                 .fillMaxWidth()
-                                .clickable(onClick = onRetry)
+                                .clickableScaled(onClick = onRetry)
                                 .padding(24.dp),
                             color = scheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
@@ -262,10 +266,12 @@ fun HomeScreen(
 
                 shelves.forEachIndexed { index, section ->
                     item(key = section.title) {
-                        if (index == 0) {
-                            FeatureShelf(section, onSongClick)
-                        } else {
-                            Shelf(section, onSongClick)
+                        Box(Modifier.reveal("home-shelf-" + section.title, 3 + minOf(index, 4))) {
+                            if (index == 0) {
+                                FeatureShelf(section, onSongClick)
+                            } else {
+                                Shelf(section, onSongClick)
+                            }
                         }
                     }
                 }
@@ -320,7 +326,7 @@ private fun QuickPicks(songs: List<Song>, onSongClick: (Song) -> Unit) {
                             .height(56.dp)
                             .clip(RoundedCornerShape(14.dp))
                             .background(scheme.surfaceContainerHigh)
-                            .clickable { onSongClick(song) },
+                            .clickableScaled { onSongClick(song) },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Artwork(song.thumbnailUrl, size = 56, radius = 14)
@@ -362,7 +368,7 @@ private fun MoodPills(onMood: (com.mero.data.Mood) -> Unit) {
                 Modifier
                     .clip(RoundedCornerShape(percent = 50))
                     .background(scheme.surfaceContainerHigh)
-                    .clickable { onMood(mood) }
+                    .clickableScaled { onMood(mood) }
                     .padding(horizontal = 16.dp, vertical = 9.dp),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
@@ -392,7 +398,7 @@ private fun MadeForYou(mixes: List<com.mero.data.MixSeed>, onMix: (com.mero.data
                     Modifier
                         .size(160.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .clickable { onMix(mix) },
+                        .clickableScaled { onMix(mix) },
                 ) {
                     Artwork(mix.seed.thumbnailUrl, size = 160, radius = 20)
                     Box(
@@ -450,7 +456,7 @@ private fun FeatureShelf(section: HomeSection, onSongClick: (Song, List<Song>) -
                 Column(
                     Modifier
                         .width(196.dp)
-                        .clickable { onSongClick(song, section.songs) },
+                        .clickableScaled { onSongClick(song, section.songs) },
                 ) {
                     Box {
                         Artwork(song.thumbnailUrl, size = 196, radius = 20)
@@ -508,7 +514,7 @@ private fun Shelf(section: HomeSection, onSongClick: (Song, List<Song>) -> Unit)
                 Column(
                     Modifier
                         .width(146.dp)
-                        .clickable { onSongClick(song, section.songs) },
+                        .clickableScaled { onSongClick(song, section.songs) },
                 ) {
                     Artwork(song.thumbnailUrl, size = 146, radius = 18)
                     Text(
@@ -558,7 +564,7 @@ private fun UpdateBanner(version: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
             .background(scheme.primaryContainer)
-            .clickable(onClick = onClick)
+            .clickableScaled(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -1294,6 +1294,27 @@ private fun MeroContent(
                     startDestination = Home,
                     modifier = Modifier
                         .fillMaxSize(),
+                    enterTransition = {
+                        androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(com.mero.ui.components.Motion.Page)) +
+                            androidx.compose.animation.slideInVertically(
+                                androidx.compose.animation.core.tween(
+                                    com.mero.ui.components.Motion.Page,
+                                    easing = androidx.compose.animation.core.FastOutSlowInEasing,
+                                ),
+                            ) { it / 20 }
+                    },
+                    exitTransition = {
+                        androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(com.mero.ui.components.Motion.Press))
+                    },
+                    popEnterTransition = {
+                        androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(com.mero.ui.components.Motion.Page))
+                    },
+                    popExitTransition = {
+                        androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(com.mero.ui.components.Motion.Press)) +
+                            androidx.compose.animation.slideOutVertically(
+                                androidx.compose.animation.core.tween(com.mero.ui.components.Motion.Page),
+                            ) { it / 20 }
+                    },
                 ) {
                     composable<Home> {
                         // Genre shelves ordered by the artists this listener likes
@@ -2206,7 +2227,20 @@ private fun MeroContent(
             ) {
 
                     val song = current
-                    if (song != null && !expanded) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = song != null && !expanded,
+                        enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(com.mero.ui.components.Motion.Sheet)) +
+                            androidx.compose.animation.expandVertically(
+                                androidx.compose.animation.core.tween(com.mero.ui.components.Motion.Sheet),
+                                expandFrom = Alignment.Bottom,
+                            ),
+                        exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(com.mero.ui.components.Motion.Press)) +
+                            androidx.compose.animation.shrinkVertically(
+                                androidx.compose.animation.core.tween(com.mero.ui.components.Motion.Sheet),
+                                shrinkTowards = Alignment.Bottom,
+                            ),
+                    ) {
+                    if (song != null) {
                         MiniPlayer(
                             song = song,
                             playing = playing,
@@ -2232,6 +2266,7 @@ private fun MeroContent(
                             onQueue = { overlay = "queue" },
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         )
+                    }
                     }
                     // The tab bar from the Bhagavatam app, as it is there: a floating capsule (radius 32,
                     // 6dp inside, at least 64dp tall, 16dp from the sides, 12dp off the bottom) with a

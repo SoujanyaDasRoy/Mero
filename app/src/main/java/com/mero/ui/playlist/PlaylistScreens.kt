@@ -1,6 +1,7 @@
 package com.mero.ui.playlist
 
 import androidx.compose.foundation.background
+import com.mero.ui.components.clickableScaled
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -104,7 +105,7 @@ fun PlaylistsTab(
                 Modifier
                     .fillMaxWidth()
                     .height(64.dp)
-                    .clickable { creating = true }
+                    .clickableScaled { creating = true }
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -124,7 +125,7 @@ fun PlaylistsTab(
                 Modifier
                     .fillMaxWidth()
                     .height(64.dp)
-                    .clickable { creatingSmart = true }
+                    .clickableScaled { creatingSmart = true }
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -148,7 +149,7 @@ fun PlaylistsTab(
                 Modifier
                     .fillMaxWidth()
                     .height(64.dp)
-                    .clickable { onOpenSmart(smart.id) }
+                    .clickableScaled { onOpenSmart(smart.id) }
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -179,7 +180,7 @@ fun PlaylistsTab(
                 Modifier
                     .fillMaxWidth()
                     .height(64.dp)
-                    .clickable { onOpen(playlist.id) }
+                    .clickableScaled { onOpen(playlist.id) }
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -402,7 +403,7 @@ fun PlaylistDetailScreen(
                         size = 168,
                         radius = 20,
                         icon = Icons.Rounded.QueueMusic,
-                        modifier = Modifier.clickable(onClick = onPickCover),
+                        modifier = Modifier.clickableScaled(onClick = onPickCover),
                     )
                     Text(
                         name,
@@ -424,7 +425,7 @@ fun PlaylistDetailScreen(
                             description,
                             Modifier
                                 .padding(start = 28.dp, end = 28.dp, top = 8.dp)
-                                .clickable { describing = true },
+                                .clickableScaled { describing = true },
                             fontSize = 13.sp,
                             lineHeight = 18.sp,
                             color = scheme.onSurfaceVariant,
@@ -488,7 +489,7 @@ fun PlaylistDetailScreen(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .clickable(onClick = onAddSongs)
+                            .clickableScaled(onClick = onAddSongs)
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -622,7 +623,7 @@ fun AddToPlaylistSheet(
                     Modifier
                         .fillMaxWidth()
                         .height(64.dp)
-                        .clickable { creating = true }
+                        .clickableScaled { creating = true }
                         .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -644,7 +645,7 @@ fun AddToPlaylistSheet(
                     Modifier
                         .fillMaxWidth()
                         .height(64.dp)
-                        .clickable { onAdd(playlist.id) }
+                        .clickableScaled { onAdd(playlist.id) }
                         .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),

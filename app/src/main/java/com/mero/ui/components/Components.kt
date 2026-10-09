@@ -44,6 +44,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -154,7 +156,7 @@ fun MeroChip(
                 color = if (selected) Color.Transparent else scheme.outlineVariant,
                 shape = pill,
             )
-            .clickable(onClick = onClick)
+            .clickableScaled(onClick = onClick)
             .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -211,6 +213,13 @@ fun SongGestures(
     val offset = remember { Animatable(0f) }
     val density = LocalDensity.current
     val threshold = with(density) { SWIPE_ACTION_DISTANCE.toPx() }
+    val rowSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val rowPressed by rowSource.collectIsPressedAsState()
+    val rowScale by androidx.compose.animation.core.animateFloatAsState(
+        if (rowPressed) 0.98f else 1f,
+        androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessMedium),
+        label = "rowPress",
+    )
 
     Box(
         modifier
@@ -245,7 +254,7 @@ fun SongGestures(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { translationX = offset.value }
+                .graphicsLayer { translationX = offset.value; scaleX = rowScale; scaleY = rowScale }
                 .then(
                     if (swipe == null) {
                         Modifier
@@ -277,6 +286,8 @@ fun SongGestures(
                     },
                 )
                 .combinedClickable(
+                    interactionSource = rowSource,
+                    indication = androidx.compose.foundation.LocalIndication.current,
                     onClick = onClick,
                     onLongClick = onMore?.let { more ->
                         {
@@ -360,7 +371,7 @@ fun ShortcutRow(
         modifier = Modifier
             .fillMaxWidth()
             .height(64.dp)
-            .clickable(onClick = onClick)
+            .clickableScaled(onClick = onClick)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -399,7 +410,7 @@ fun PreferenceRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 64.dp)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.clickableScaled(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
