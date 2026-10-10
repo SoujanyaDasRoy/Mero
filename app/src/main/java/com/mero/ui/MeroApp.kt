@@ -1046,9 +1046,73 @@ private fun MeroContent(
     // a cold start from the Files app gets here before the player has
     // connected, and a play command against no player is silently dropped.
     val opened = openedAudio?.collectAsStateWithLifecycle()?.value
+    var incomingPlaylist by remember { mutableStateOf<com.mero.data.PlaylistLink?>(null) }
+    incomingPlaylist?.let { link ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { incomingPlaylist = null },
+            title = { androidx.compose.material3.Text(link.name) },
+            text = {
+                androidx.compose.material3.Text(
+                    "A playlist from a friend: " + link.ids.size + (if (link.ids.size == 1) " song." else " songs."),
+                )
+            },
+            confirmButton = {
+                androidx.compose.foundation.layout.Row {
+                    androidx.compose.material3.TextButton(onClick = {
+                        incomingPlaylist = null
+                        say("Opening " + link.name)
+                        scope.launch {
+                            container.searchRepository.resolveIds(link.ids).fold(
+                                onSuccess = { songs ->
+                                    val first = songs.firstOrNull()
+                                    if (first == null) {
+                                        say("Couldn't find those songs")
+                                    } else {
+                                        playFrom(first, songs, link.name)
+                                        expanded = true
+                                    }
+                                },
+                                onFailure = { say("Couldn't open that playlist. Check your connection and try again.") },
+                            )
+                        }
+                    }) { androidx.compose.material3.Text("Play") }
+                    androidx.compose.material3.TextButton(onClick = {
+                        incomingPlaylist = null
+                        scope.launch {
+                            container.searchRepository.resolveIds(link.ids).fold(
+                                onSuccess = { songs ->
+                                    if (songs.isEmpty()) {
+                                        say("Couldn't find those songs")
+                                    } else {
+                                        val added = com.mero.data.addSharedPlaylist(
+                                            library,
+                                            com.mero.data.SharedPlaylist(link.name, null, songs),
+                                        )
+                                        say("Added \"" + added.name + "\" with " + added.songCount + " songs")
+                                    }
+                                },
+                                onFailure = { say("Couldn't open that playlist. Check your connection and try again.") },
+                            )
+                        }
+                    }) { androidx.compose.material3.Text("Add to my library") }
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { incomingPlaylist = null }) {
+                    androidx.compose.material3.Text("Not now")
+                }
+            },
+        )
+    }
     LaunchedEffect(opened, connection.controller != null) {
         val uri = opened ?: return@LaunchedEffect
         if (connection.controller == null) return@LaunchedEffect
+        // A playlist shared from Mero: ask what to do with it.
+        com.mero.data.ShareLink.parsePlaylist(uri.toString())?.let { link ->
+            incomingPlaylist = link
+            onOpenedHandled()
+            return@LaunchedEffect
+        }
         // A YouTube or YouTube Music link, often one shared from Mero itself.
         if (uri.scheme == "http" || uri.scheme == "https") {
             val link = com.mero.data.parseYouTubeLink(uri.toString())
@@ -1996,6 +2060,20 @@ private fun MeroContent(
                                 navController.popBackStack()
                             },
                             onShare = {
+                                scope.launch {
+                                    val sent = com.mero.ui.components.sharePlaylist(context, meta?.name ?: "Playlist", songs)
+                                    if (!sent) {
+                                        say(
+                                            if (songs.none { it.isYouTube }) {
+                                                "There are no songs here to share"
+                                            } else {
+                                                "Too many songs for one link. Use Share as a file."
+                                            },
+                                        )
+                                    }
+                                }
+                            },
+                            onShareFile = {
                                 val shared = com.mero.ui.playlist.sharePlaylistFile(
                                     context,
                                     meta?.name ?: "Playlist",
@@ -2591,20 +2669,9 @@ private fun MeroContent(
                     }
                 },
                 onShare = {
-                    // Mero's own link: it opens Mero on a phone that has it, and YouTube Music on
-                    // any other (see ShareLink).
-                    val shareText = com.mero.data.ShareLink.song(song.id)
-                        ?.let { "${song.title} - ${song.artist}\n$it" }
-                        ?: "${song.title} - ${song.artist}"
-                    context.startActivity(
-                        Intent.createChooser(
-                            Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, shareText)
-                            },
-                            "Share ${song.title}",
-                        ),
-                    )
+                    // A card with the cover, the name and Mero's logo, and under it Mero's own link: it
+                    // opens Mero on a phone that has it, and YouTube Music on any other (see ShareLink).
+                    scope.launch { com.mero.ui.components.shareSong(context, song) }
                 },
                 onClose = { menuSong = null },
             )

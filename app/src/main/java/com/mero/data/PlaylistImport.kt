@@ -24,17 +24,24 @@ suspend fun importPlaylistFile(context: Context, library: LibraryRepository, uri
             }
         }.getOrNull() ?: return@withContext null
         val shared = PlaylistFile.decode(text)?.takeIf { it.songs.isNotEmpty() } ?: return@withContext null
-
-        val taken = library.playlists.first().map { it.name.lowercase() }.toSet()
-        var name = shared.name
-        var n = 2
-        while (name.lowercase() in taken) name = "${shared.name} (${n++})"
-
-        val id = library.createPlaylist(name)
-        shared.description?.let { library.setPlaylistDescription(id, it) }
-        library.addToPlaylist(id, shared.songs)
-        ImportedPlaylist(name, shared.songs.size)
+        addSharedPlaylist(library, shared)
     }
+
+/**
+ * Adds [shared] as a new playlist, never over an existing one: a name that is taken becomes
+ * "Name (2)". Used for a received file and for a received link.
+ */
+suspend fun addSharedPlaylist(library: LibraryRepository, shared: SharedPlaylist): ImportedPlaylist {
+    val taken = library.playlists.first().map { it.name.lowercase() }.toSet()
+    var name = shared.name
+    var n = 2
+    while (name.lowercase() in taken) name = "${shared.name} (${n++})"
+
+    val id = library.createPlaylist(name)
+    shared.description?.let { library.setPlaylistDescription(id, it) }
+    library.addToPlaylist(id, shared.songs)
+    return ImportedPlaylist(name, shared.songs.size)
+}
 
 private fun java.io.InputStream.readNBytesCapped(limit: Int): ByteArray {
     val out = java.io.ByteArrayOutputStream()

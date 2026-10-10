@@ -138,7 +138,7 @@ All processing happens inside Mero, so it sounds the same on every phone.
 - **Recommendations that learn your taste** — the queue after a song blends music like it with music like what you love and play lately; *Your Mix* on Home is built from taste alone. All on the phone
 - **Paste a YouTube link** into search and it plays, catalogue or not
 - **Automatic backup** to a folder on the phone or a file in Google Drive (it survives a reinstall; Mero never signs in to Google), plus manual backup and restore, in Settings → Library
-- **Share a playlist** as a `.mero` file, and share songs as links that open straight in Mero (and in YouTube Music for people without it)
+- **Share songs and playlists** as a picture card with a link that opens straight in Mero (and in YouTube Music for people without it); long playlists can go as a `.mero` file
 - **Song reminders** — an occasional, quiet nudge about a favourite you haven't played lately. *Now and then* by default; *Daily* or *Off* in Settings
 
 ### Reliability

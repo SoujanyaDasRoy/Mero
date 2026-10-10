@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A playlist shared from Mero</title>
+<meta property="og:title" content="A playlist on Mero">
+<meta property="og:description" content="Open it in Mero, the free, ad-free music player for Android.">
+<meta property="og:image" content="https://soujanyadasroy.github.io/logo.png">
+<link rel="icon" href="../logo.png">
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px;
+         background: radial-gradient(circle at 50% 40%, #e9dafc, #c19cfc); color: #2a0a6b;
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; text-align: center; }
+  img { width: 96px; height: 96px; border-radius: 24px; box-shadow: 0 12px 32px rgba(58, 10, 140, .25); }
+  h1 { margin: 16px 0 4px; font-size: 26px; overflow-wrap: anywhere; }
+  p { margin: 8px 0; }
+  a.button { display: inline-block; margin-top: 8px; padding: 12px 24px; border-radius: 28px; background: #4b1fb0;
+             color: #fff; text-decoration: none; font-weight: 600; }
+  a.plain { color: #4b1fb0; }
+</style>
+</head>
+<body>
+  <main>
+    <img src="../logo.png" alt="Mero">
+    <h1 id="name">A playlist</h1>
+    <p id="count"></p>
+    <p><a id="yt" class="button" href="#">Play on YouTube</a></p>
+    <p><a class="plain" href="https://github.com/SoujanyaDasRoy/Mero/releases/tag/v1.13.0">Get Mero, the free music player this was shared from</a></p>
+  </main>
+<script>
+  // A phone with Mero never loads this page: Android hands the link straight to the app.
+  // Everyone else gets the playlist's name and a way to play it in YouTube.
+  var q = new URLSearchParams(location.search);
+  var packed = q.get("s") || "";
+  var ids = [];
+  for (var i = 0; i + 11 <= packed.length; i += 11) {
+    var id = packed.substr(i, 11);
+    if (/^[A-Za-z0-9_-]{11}$/.test(id)) ids.push(id);
+  }
+  var name = (q.get("n") || "A playlist").slice(0, 80);
+  document.getElementById("name").textContent = name;
+  document.title = name + " on Mero";
+  if (ids.length) {
+    document.getElementById("count").textContent = ids.length + (ids.length === 1 ? " song" : " songs");
+    // YouTube builds an instant playlist from up to 50 ids.
+    document.getElementById("yt").href = "https://www.youtube.com/watch_videos?video_ids=" + ids.slice(0, 50).join(",");
+  } else {
+    document.getElementById("count").textContent = "This link is missing its songs.";
+    document.getElementById("yt").style.display = "none";
+  }
+</script>
+</body>
+</html>

@@ -285,6 +285,8 @@ fun PlaylistDetailScreen(
     onDelete: () -> Unit,
     /** Null where sharing makes no sense: smart playlists change by themselves. */
     onShare: (() -> Unit)? = null,
+    /** The .mero file, for playlists too long for a link or to send to someone with Mero but no link. */
+    onShareFile: (() -> Unit)? = null,
     contentPadding: PaddingValues,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -353,6 +355,13 @@ fun PlaylistDetailScreen(
                             text = { Text("Share playlist") },
                             leadingIcon = { Icon(Icons.Rounded.Share, null) },
                             onClick = { menuOpen = false; onShare() },
+                        )
+                    }
+                    if (onShareFile != null) {
+                        DropdownMenuItem(
+                            text = { Text("Share as a file") },
+                            leadingIcon = { Icon(Icons.Rounded.Share, null) },
+                            onClick = { menuOpen = false; onShareFile() },
                         )
                     }
                     DropdownMenuItem(

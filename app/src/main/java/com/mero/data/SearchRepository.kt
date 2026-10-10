@@ -73,6 +73,18 @@ class SearchRepository(
         )
     }
 
+    /**
+     * The songs for a list of video ids, in that order (a playlist received as a link carries ids and
+     * nothing else). Ids YouTube Music has no entry for are left out.
+     */
+    suspend fun resolveIds(ids: List<String>): Result<List<Song>> = runCatchingCancellable {
+        val found = HashMap<String, Song>()
+        ids.chunked(50).forEach { chunk ->
+            YouTube.queue(chunk).getOrNull()?.forEach { found[it.id] = it.toDomain() }
+        }
+        ids.mapNotNull { found[it] }
+    }
+
     suspend fun searchItemsPage(
         query: String,
         type: SearchResultType,

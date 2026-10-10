@@ -104,6 +104,7 @@
                 <data android:scheme="https" />
                 <data android:host="soujanyadasroy.github.io" />
                 <data android:pathPrefix="/song" />
+                <data android:pathPrefix="/playlist" />
             </intent-filter>
             <!-- "Share" > Mero, from YouTube Music, the browser, WhatsApp: the one route that does not
                  depend on who owns the link. The first link in the text is opened. -->

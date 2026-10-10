@@ -36,13 +36,15 @@ What plays next is now built from **what you actually listen to**, not from song
 
 It all happens on your phone: there's no account, and nothing about what you listen to is sent anywhere. Mero also keeps a private listening log on your phone (what you play, skip and replay, for the last 6 months). For now it is only stored; it will make recommendations sharper in a later update.
 
-### 🔗 Songs you share open in Mero
-**Share** on a song now sends a link that opens straight in Mero on a phone that has it (it plays the song, then music like it), and opens the same song in YouTube Music for anyone who doesn't have Mero.
+### 🔗 Songs and playlists you share open in Mero
+**Share** on a song now sends a picture card (the cover, the name and Mero's logo) with a link under it. On a phone that has Mero, tapping the link opens straight in Mero and plays the song, then music like it. For anyone without Mero it opens the same song in YouTube Music.
 
 You can also use **Share → Mero** on any message or YouTube Music link to play it in Mero. And you can **paste any YouTube or YouTube Music link into search** (a video, a share link, a Short, a playlist) and it plays, even when it isn't in YouTube Music's song catalogue.
 
 ### 📤 Share a playlist
-On a playlist, tap ⋮ → **Share playlist**. It sends a small `.mero` file. Your friend opens it with Mero, or goes to Settings → Library → **Import a playlist file**. It's added as a new playlist and never replaces one they have.
+On a playlist, tap ⋮ → **Share playlist**. It sends a card (the covers, the name, how many songs and Mero's logo) with a link under it. Tapping the link on a phone with Mero opens Mero and asks: **Play** it, or **Add to my library** as a new playlist (it never replaces one they have). Anyone without Mero sees the playlist's name and can play it on YouTube.
+
+Very long playlists (over 150 songs) don't fit in one link: use **Share as a file** instead. Your friend opens the file with Mero, or goes to Settings → Library → **Import a playlist file**.
 
 ### 💾 A backup that keeps itself
 Settings → Library → **Automatic backup**: choose once where it lives, **a folder on your phone** or **a file in Google Drive**. Mero then keeps a fresh backup of your likes, playlists, play history and settings there whenever you leave the app (at most once an hour).
