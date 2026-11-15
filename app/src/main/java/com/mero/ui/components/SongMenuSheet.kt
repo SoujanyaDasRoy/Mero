@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Radio
+import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -66,8 +67,11 @@ fun SongMenuSheet(
     onGoToArtist: () -> Unit,
     onShare: () -> Unit,
     onClose: () -> Unit,
+    /** Set only when the menu was opened from inside a playlist; adds a row that takes the song out of it. */
+    onRemoveFromPlaylist: (() -> Unit)? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
+    HideKeyboardWhen()
 
     // Scrim plus bottom alignment: a sheet that opens from the top of the
     // screen reads as a screen, not a menu, and leaves the list it belongs to
@@ -132,6 +136,9 @@ fun SongMenuSheet(
         MenuRow(Icons.Rounded.PlaylistPlay, "Play next") { onClose(); onPlayNext() }
         MenuRow(Icons.Rounded.LibraryAdd, "Add to queue") { onClose(); onAddToQueue() }
         MenuRow(Icons.Rounded.PlaylistAdd, "Add to playlist") { onAddToPlaylist() }
+        onRemoveFromPlaylist?.let { remove ->
+            MenuRow(Icons.Rounded.RemoveCircleOutline, "Remove from this playlist") { onClose(); remove() }
+        }
         MenuRow(
             if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
             if (liked) "Remove from liked" else "Add to liked",

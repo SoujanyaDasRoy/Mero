@@ -32,6 +32,8 @@ object Backup {
             }
             add(DB, context.getDatabasePath(DB))
             PREFS.forEach { add("prefs/$it.xml", prefsFile(context, it)) }
+            PlaylistCovers.dir(context).listFiles()?.filter { PlaylistCovers.isSafeName(it.name) }
+                ?.forEach { add("covers/${it.name}", it) }
         }
     }
 
@@ -43,11 +45,15 @@ object Backup {
      */
     fun restore(context: Context, input: InputStream, currentDbVersion: Int, beforeWrite: () -> Unit = {}): Boolean {
         val entries = HashMap<String, ByteArray>()
+        val covers = HashMap<String, ByteArray>()
         ZipInputStream(input).use { zip ->
             while (true) {
                 val e = zip.nextEntry ?: break
                 if (e.name == DB || (e.name.startsWith("prefs/") && e.name.removePrefix("prefs/").removeSuffix(".xml") in PREFS)) {
                     entries[e.name] = zip.readBytes()
+                } else if (e.name.startsWith("covers/") && PlaylistCovers.isSafeName(e.name.removePrefix("covers/"))) {
+                    // Only a plain file name: an entry like "covers/../x" fails the check and is ignored.
+                    covers[e.name.removePrefix("covers/")] = zip.readBytes()
                 }
             }
         }
@@ -65,6 +71,11 @@ object Backup {
         entries.filterKeys { it != DB }.forEach { (name, bytes) ->
             prefsFile(context, name.removePrefix("prefs/").removeSuffix(".xml")).writeBytes(bytes)
         }
+        // Replace the covers wholesale: the restored database points at exactly these files.
+        val dir = PlaylistCovers.dir(context)
+        dir.listFiles()?.forEach { it.delete() }
+        if (covers.isNotEmpty()) dir.mkdirs()
+        covers.forEach { (name, bytes) -> File(dir, name).writeBytes(bytes) }
         return true
     }
 

@@ -345,6 +345,9 @@ interface MeroDao {
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_songs WHERE playlistId = :playlistId")
     suspend fun nextPositionIn(playlistId: String): Int
 
+    @Query("SELECT EXISTS(SELECT 1 FROM playlist_songs WHERE playlistId = :playlistId AND songId = :songId)")
+    suspend fun isInPlaylist(playlistId: String, songId: String): Boolean
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPlaylistSong(entry: PlaylistSongEntity)
 

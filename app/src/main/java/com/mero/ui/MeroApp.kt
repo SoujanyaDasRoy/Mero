@@ -371,15 +371,16 @@ private fun MeroContent(
         val playlistId = coverTarget ?: return@rememberLauncherForActivityResult
         coverTarget = null
         if (picked == null) return@rememberLauncherForActivityResult
-        // Persisted, or the URI stops resolving the next time the app starts
-        // and the playlist quietly loses its cover.
-        runCatching {
-            context.contentResolver.takePersistableUriPermission(
-                picked,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION,
-            )
+        // A copy in Mero's own storage, not the picker's URI: that one can lapse or point at a photo
+        // that is later deleted, and could never go into a backup or a share.
+        scope.launch {
+            val saved = withContext(Dispatchers.IO) { com.mero.data.PlaylistCovers.save(context, playlistId, picked) }
+            if (saved == null) {
+                android.widget.Toast.makeText(context, "Couldn't use that picture", android.widget.Toast.LENGTH_SHORT).show()
+            } else {
+                container.libraryRepository.setPlaylistCover(playlistId, saved)
+            }
         }
-        scope.launch { container.libraryRepository.setPlaylistCover(playlistId, picked.toString()) }
     }
     val folderPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
@@ -533,6 +534,9 @@ private fun MeroContent(
     var lyricsScale by remember { mutableStateOf(container.settings.float(SettingsStore.LYRICS_SCALE, 1f)) }
     var addingToPlaylist by remember { mutableStateOf<Song?>(null) }
     var menuSong by remember { mutableStateOf<Song?>(null) }
+    /** The playlist the open song menu was opened from, if any: it gets a "Remove from this playlist" row. */
+    var menuFrom by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(menuSong) { if (menuSong == null) menuFrom = null }
     var importSource by remember { mutableStateOf("YouTube") }
     var importUrl by remember { mutableStateOf("") }
     var importBusy by remember { mutableStateOf(false) }
@@ -547,6 +551,26 @@ private fun MeroContent(
     var spotifySecret by remember { mutableStateOf(spotifyPrefs.getString("secret", "").orEmpty()) }
     fun toast(text: String) {
         android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    fun playlistName(id: String) = playlists.firstOrNull { it.id == id }?.name ?: "playlist"
+
+    // Covers picked before 1.13.2 are the picker's URIs; take a copy of each so they survive and can be shared.
+    LaunchedEffect(playlists) {
+        playlists.filter { it.coverUri?.startsWith("content:") == true }.forEach { p ->
+            val saved = withContext(Dispatchers.IO) {
+                com.mero.data.PlaylistCovers.save(context, p.id, android.net.Uri.parse(p.coverUri))
+            }
+            if (saved != null) library.setPlaylistCover(p.id, saved)
+        }
+    }
+
+    /** Adds one song and says what happened, in Android's own small pop-up. */
+    fun addSongTo(playlistId: String, song: Song) {
+        scope.launch {
+            val name = playlistName(playlistId)
+            toast(if (library.addToPlaylist(playlistId, song)) "Added to $name" else "Already in $name")
+        }
     }
 
     /**
@@ -587,10 +611,10 @@ private fun MeroContent(
         scope.launch {
             val songs = picked.map { com.mero.data.LocalAudio.songFrom(context, it) }
             container.libraryRepository.saveSongs(songs)
-            if (target != null) container.libraryRepository.addToPlaylist(target, songs)
+            val added = if (target != null) container.libraryRepository.addToPlaylist(target, songs) else songs.size
             toast(
-                songs.size.toString() + (if (songs.size == 1) " song" else " songs") +
-                    if (target != null) " added to the playlist" else " added from your phone",
+                added.toString() + (if (added == 1) " song" else " songs") +
+                    if (target != null) " added to ${playlistName(target)}" else " added from your phone",
             )
         }
     }
@@ -1088,7 +1112,7 @@ private fun MeroContent(
                                             library,
                                             com.mero.data.SharedPlaylist(link.name, null, songs),
                                         )
-                                        say("Added \"" + added.name + "\" with " + added.songCount + " songs")
+                                        toast("Added \"" + added.name + "\" with " + added.songCount + " songs")
                                     }
                                 },
                                 onFailure = { say("Couldn't open that playlist. Check your connection and try again.") },
@@ -1757,7 +1781,7 @@ private fun MeroContent(
                             alreadyIn = inPlaylist.mapTo(HashSet()) { it.id },
                             onAdd = { song ->
                                 songsById = songsById + (song.id to song)
-                                scope.launch { library.addToPlaylist(route.playlistId, song) }
+                                addSongTo(route.playlistId, song)
                             },
                             onAddFromPhone = { pickFromPhone(route.playlistId) },
                             onBack = { navController.popBackStack() },
@@ -1900,7 +1924,12 @@ private fun MeroContent(
                             smartPlaylists = smartPlaylists,
                             onOpenPlaylist = { navController.navigate(PlaylistRoute(it)) },
                             onOpenSmartPlaylist = { navController.navigate(SmartPlaylistRoute(it)) },
-                            onCreatePlaylist = { name -> scope.launch { library.createPlaylist(name) } },
+                            onCreatePlaylist = { name ->
+                                scope.launch {
+                                    library.createPlaylist(name)
+                                    toast("Created ${name.trim()}")
+                                }
+                            },
                             onCreateSmartPlaylist = { name, rule, minPlays, artist ->
                                 scope.launch { library.createSmartPlaylist(name, rule, minPlays, artist) }
                             },
@@ -2038,10 +2067,7 @@ private fun MeroContent(
                                     playFrom(it, shuffledQueue, meta?.name ?: "Playlist")
                                 }
                             },
-                            onRemove = { song ->
-                                scope.launch { library.removeFromPlaylist(route.playlistId, song.id) }
-                            },
-                            onSongMore = { menuSong = it },
+                            onSongMore = { menuFrom = route.playlistId; menuSong = it },
                             onRename = { name ->
                                 scope.launch { library.renamePlaylist(route.playlistId, name) }
                             },
@@ -2053,34 +2079,33 @@ private fun MeroContent(
                                 navController.navigate(AddSongsRoute(route.playlistId)) { launchSingleTop = true }
                             },
                             onClearCover = {
-                                scope.launch { library.setPlaylistCover(route.playlistId, null) }
+                                scope.launch {
+                                    library.setPlaylistCover(route.playlistId, null)
+                                    withContext(Dispatchers.IO) { com.mero.data.PlaylistCovers.delete(context, route.playlistId) }
+                                }
                             },
                             onDelete = {
-                                scope.launch { library.deletePlaylist(route.playlistId) }
+                                scope.launch {
+                                    library.deletePlaylist(route.playlistId)
+                                    withContext(Dispatchers.IO) { com.mero.data.PlaylistCovers.delete(context, route.playlistId) }
+                                }
+                                toast("Playlist deleted")
                                 navController.popBackStack()
                             },
                             onShare = {
                                 scope.launch {
-                                    val sent = com.mero.ui.components.sharePlaylist(context, meta?.name ?: "Playlist", songs)
-                                    if (!sent) {
-                                        say(
-                                            if (songs.none { it.isYouTube }) {
-                                                "There are no songs here to share"
-                                            } else {
-                                                "Too many songs for one link. Use Share as a file."
-                                            },
-                                        )
+                                    val sent = com.mero.ui.components.sharePlaylist(
+                                        context,
+                                        meta?.name ?: "Playlist",
+                                        songs,
+                                        meta?.coverUri,
+                                    )
+                                    if (sent == null) {
+                                        toast("There are no songs here to share")
+                                    } else if (sent < songs.count { it.isYouTube }) {
+                                        toast("Shared the first $sent songs: a link can't hold more")
                                     }
                                 }
-                            },
-                            onShareFile = {
-                                val shared = com.mero.ui.playlist.sharePlaylistFile(
-                                    context,
-                                    meta?.name ?: "Playlist",
-                                    meta?.description,
-                                    songs,
-                                )
-                                if (!shared) say("There are no songs here to share")
                             },
                             contentPadding = contentPadding,
                         )
@@ -2110,7 +2135,6 @@ private fun MeroContent(
                                 val shuffled = songs.shuffled()
                                 shuffled.firstOrNull()?.let { playFrom(it, shuffled, summary?.name ?: "Smart playlist") }
                             },
-                            onRemove = {},
                             onSongMore = { menuSong = it },
                             onRename = {},
                             onDescriptionChange = {},
@@ -2674,6 +2698,15 @@ private fun MeroContent(
                     scope.launch { com.mero.ui.components.shareSong(context, song) }
                 },
                 onClose = { menuSong = null },
+                onRemoveFromPlaylist = menuFrom?.let { playlistId ->
+                    {
+                        val name = playlistName(playlistId)
+                        scope.launch {
+                            library.removeFromPlaylist(playlistId, song.id)
+                            toast("Removed from $name")
+                        }
+                    }
+                },
             )
         }
 
@@ -2682,13 +2715,14 @@ private fun MeroContent(
                 song = song,
                 playlists = playlists,
                 onAdd = { playlistId ->
-                    scope.launch { library.addToPlaylist(playlistId, song) }
+                    addSongTo(playlistId, song)
                     addingToPlaylist = null
                 },
                 onCreateAndAdd = { name ->
                     scope.launch {
                         val id = library.createPlaylist(name)
                         library.addToPlaylist(id, song)
+                        toast("Added to ${name.trim()}")
                     }
                     addingToPlaylist = null
                 },

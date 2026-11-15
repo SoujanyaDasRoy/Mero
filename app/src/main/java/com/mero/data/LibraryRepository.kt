@@ -225,17 +225,19 @@ class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boole
 
     suspend fun deletePlaylist(id: String) = dao.deletePlaylist(id)
 
-    /** Appends to the end. Re-adding an existing track is a no-op by primary key. */
-    suspend fun addToPlaylist(playlistId: String, song: Song) {
+    /** Appends to the end. False, and nothing changed, when the track is already in the playlist. */
+    suspend fun addToPlaylist(playlistId: String, song: Song): Boolean {
+        if (dao.isInPlaylist(playlistId, song.id)) return false
         ensure(song)
         dao.insertPlaylistSong(
             PlaylistSongEntity(playlistId, song.id, dao.nextPositionIn(playlistId)),
         )
+        return true
     }
 
-    suspend fun addToPlaylist(playlistId: String, songs: List<Song>) {
-        songs.forEach { addToPlaylist(playlistId, it) }
-    }
+    /** How many of [songs] were new to the playlist. */
+    suspend fun addToPlaylist(playlistId: String, songs: List<Song>): Int =
+        songs.count { addToPlaylist(playlistId, it) }
 
     suspend fun removeFromPlaylist(playlistId: String, songId: String) =
         dao.removeFromPlaylist(playlistId, songId)

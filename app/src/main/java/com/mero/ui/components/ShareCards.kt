@@ -26,6 +26,9 @@ import com.mero.data.ShareLink
 import com.mero.data.atArtworkSize
 import com.mero.domain.Song
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -42,11 +45,23 @@ private const val SIZE = 1080
 private const val INK = 0xFF2A0A6B.toInt()
 private const val ACCENT = 0xFF4B1FB0.toInt()
 
-private suspend fun cover(context: Context, url: String?, px: Int): Bitmap? {
-    if (url == null) return null
+/** One try at [url], twice if the first fails (a card with a blank square is worse than a short wait). */
+private suspend fun fetch(context: Context, url: String, px: Int): Bitmap? {
     val request = ImageRequest.Builder(context).data(url.atArtworkSize(px)).allowHardware(false).build()
-    return runCatching { SingletonImageLoader.get(context).execute(request).image?.toBitmap() }.getOrNull()
+    repeat(2) {
+        val bitmap = runCatching { SingletonImageLoader.get(context).execute(request).image?.toBitmap() }.getOrNull()
+        if (bitmap != null) return bitmap
+    }
+    return null
 }
+
+/**
+ * A song's cover: its own thumbnail, else (or if that will not load) YouTube's standard picture for the
+ * video id, which exists for every video. Null only for something with no picture anywhere.
+ */
+private suspend fun songCover(context: Context, song: Song, px: Int): Bitmap? =
+    song.thumbnailUrl?.let { fetch(context, it, px) }
+        ?: if (song.isYouTube) fetch(context, "https://i.ytimg.com/vi/${song.id}/hqdefault.jpg", px) else null
 
 private fun canvasWithBackground(): Pair<Bitmap, Canvas> {
     val bitmap = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
@@ -114,7 +129,7 @@ private fun Canvas.drawFooter(context: Context) {
 
 /** The 1080 x 1080 card for one song. */
 suspend fun songCard(context: Context, song: Song): Bitmap = withContext(Dispatchers.IO) {
-    val art = cover(context, song.thumbnailUrl, 800)
+    val art = songCover(context, song, 800)
     val (bitmap, canvas) = canvasWithBackground()
     canvas.drawCover(art, 270f, 56f, 540f, 56f)
     val titleHeight = canvas.drawCentered(song.title, 626f, 60f, INK, bold = true, maxLines = 2)
@@ -123,17 +138,40 @@ suspend fun songCard(context: Context, song: Song): Bitmap = withContext(Dispatc
     bitmap
 }
 
-/** The 1080 x 1080 card for a playlist: up to four covers, the name and how many songs. */
-suspend fun playlistCard(context: Context, name: String, songs: List<Song>): Bitmap = withContext(Dispatchers.IO) {
-    val covers = songs.take(4).map { cover(context, it.thumbnailUrl, 500) }
+/**
+ * The 1080 x 1080 card for a playlist, its name and how many songs.
+ *
+ * The picture is the playlist's own cover when it has one, large. Otherwise four *different* song
+ * covers (an album's songs share one, and four copies of it looked like a bug), or one big cover when
+ * fewer than four different ones can be found.
+ */
+suspend fun playlistCard(
+    context: Context,
+    name: String,
+    songs: List<Song>,
+    ownCover: String? = null,
+): Bitmap = withContext(Dispatchers.IO) {
+    val own = ownCover?.let { fetch(context, it, 800) }
+    val covers: List<Bitmap> = if (own != null) {
+        listOf(own)
+    } else {
+        // Candidates with different pictures, looked at together; the first four that load win.
+        val candidates = songs.distinctBy { it.thumbnailUrl ?: it.id }.take(10)
+        val loaded = coroutineScope { candidates.map { async { songCover(context, it, 500) } }.awaitAll() }.filterNotNull()
+        if (loaded.size >= 4) loaded.take(4) else loaded.take(1)
+    }
     val (bitmap, canvas) = canvasWithBackground()
-    val side = 262f
-    val gap = 20f
-    val left = (SIZE - (side * 2 + gap)) / 2f
-    for (i in 0 until 4) {
-        val x = left + (i % 2) * (side + gap)
-        val y = 48f + (i / 2) * (side + gap)
-        canvas.drawCover(covers.getOrNull(i), x, y, side, 36f)
+    if (covers.size == 4) {
+        val side = 262f
+        val gap = 20f
+        val left = (SIZE - (side * 2 + gap)) / 2f
+        for (i in 0 until 4) {
+            val x = left + (i % 2) * (side + gap)
+            val y = 48f + (i / 2) * (side + gap)
+            canvas.drawCover(covers[i], x, y, side, 36f)
+        }
+    } else {
+        canvas.drawCover(covers.firstOrNull(), 270f, 56f, 540f, 56f)
     }
     val nameHeight = canvas.drawCentered(name, 626f, 60f, INK, bold = true, maxLines = 2)
     canvas.drawCentered(
@@ -185,12 +223,13 @@ suspend fun shareSong(context: Context, song: Song) {
 
 /**
  * Share a playlist: its card, and under it the name and one Mero link that carries every song.
- * False when it cannot be a link: nothing to share, or too many songs for one (use the file).
+ * Returns how many songs the link holds (a link fits [ShareLink.MAX_PLAYLIST_SONGS], so a longer
+ * playlist goes out as its first that many), or null when there is nothing to share.
  */
-suspend fun sharePlaylist(context: Context, name: String, songs: List<Song>): Boolean {
-    val tracks = songs.filter { it.isYouTube }
-    val link = ShareLink.playlist(name, tracks.map { it.id }) ?: return false
+suspend fun sharePlaylist(context: Context, name: String, songs: List<Song>, ownCover: String? = null): Int? {
+    val tracks = songs.filter { it.isYouTube }.distinctBy { it.id }.take(ShareLink.MAX_PLAYLIST_SONGS)
+    val link = ShareLink.playlist(name, tracks.map { it.id }) ?: return null
     val caption = "$name - ${tracks.size} songs on Mero\n$link"
-    sendCard(context, playlistCard(context, name, tracks), "Mero playlist.png", caption, "Share $name")
-    return true
+    sendCard(context, playlistCard(context, name, tracks, ownCover), "Mero playlist.png", caption, "Share $name")
+    return tracks.size
 }

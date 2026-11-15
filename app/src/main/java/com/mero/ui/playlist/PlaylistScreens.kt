@@ -273,8 +273,7 @@ fun PlaylistDetailScreen(
     onPlay: (Song) -> Unit,
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
-    onRemove: (Song) -> Unit,
-    /** The song menu, so a playlist song can be queued, liked or shared like any other. */
+    /** The song menu, so a playlist song can be queued, liked, shared or taken out of the playlist. */
     onSongMore: ((Song) -> Unit)? = null,
     onRename: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
@@ -285,8 +284,6 @@ fun PlaylistDetailScreen(
     onDelete: () -> Unit,
     /** Null where sharing makes no sense: smart playlists change by themselves. */
     onShare: (() -> Unit)? = null,
-    /** The .mero file, for playlists too long for a link or to send to someone with Mero but no link. */
-    onShareFile: (() -> Unit)? = null,
     contentPadding: PaddingValues,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -294,6 +291,7 @@ fun PlaylistDetailScreen(
     var renaming by remember { mutableStateOf(false) }
     var describing by remember { mutableStateOf(false) }
     var confirmingDelete by remember { mutableStateOf(false) }
+    com.mero.ui.components.HideKeyboardWhen(menuOpen)
 
     if (renaming) {
         NamePlaylistDialog(
@@ -355,13 +353,6 @@ fun PlaylistDetailScreen(
                             text = { Text("Share playlist") },
                             leadingIcon = { Icon(Icons.Rounded.Share, null) },
                             onClick = { menuOpen = false; onShare() },
-                        )
-                    }
-                    if (onShareFile != null) {
-                        DropdownMenuItem(
-                            text = { Text("Share as a file") },
-                            leadingIcon = { Icon(Icons.Rounded.Share, null) },
-                            onClick = { menuOpen = false; onShareFile() },
                         )
                     }
                     DropdownMenuItem(
@@ -558,14 +549,6 @@ fun PlaylistDetailScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    IconButton(onClick = { onRemove(song) }) {
-                        Icon(
-                            Icons.Rounded.Close,
-                            "Remove from playlist",
-                            Modifier.size(20.dp),
-                            tint = scheme.onSurfaceVariant,
-                        )
-                    }
                     if (onSongMore != null) {
                         IconButton(onClick = { onSongMore(song) }) {
                             Icon(Icons.Rounded.MoreVert, "More", tint = scheme.onSurfaceVariant)
@@ -590,6 +573,7 @@ fun AddToPlaylistSheet(
 ) {
     val scheme = MaterialTheme.colorScheme
     var creating by remember { mutableStateOf(false) }
+    com.mero.ui.components.HideKeyboardWhen()
 
     if (creating) {
         NamePlaylistDialog(
