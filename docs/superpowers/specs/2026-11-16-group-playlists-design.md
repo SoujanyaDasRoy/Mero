@@ -78,7 +78,7 @@ CREATE TABLE groups (
   name       TEXT NOT NULL,
   has_cover  INTEGER NOT NULL DEFAULT 0,
   head       INTEGER NOT NULL DEFAULT 0,   -- seq of the newest step
-  touched_at INTEGER NOT NULL             -- ms; for clean-up
+  touched_at INTEGER NOT NULL             -- ms; last time any phone synced it (at most one write a day)
 );
 CREATE TABLE steps (
   code    TEXT NOT NULL,
@@ -94,7 +94,9 @@ CREATE TABLE steps (
 
 The cover image stays in KV (`g:<code>`, no expiry), as today's share covers are.
 
-Endpoints (all validated like `/api/p`: id format, name length, ≤500 songs in a group, JPEG header, cover ≤200 KB):
+Endpoints (all validated like `/api/p`: id format, name length, JPEG header, cover ≤200 KB). There is **no limit on how
+many songs a group holds**; requests carry at most 1,000 steps each, so a large playlist is uploaded in several
+requests (`POST /api/g` with the first 1,000, then `/steps` for the rest) and `GET` pages through steps 1,000 at a time:
 
 | Call | Does |
 |---|---|
@@ -105,7 +107,9 @@ Endpoints (all validated like `/api/p`: id format, name length, ≤500 songs in 
 | `GET /c/g/<code>.jpg` | The group's cover |
 | `GET /g/<code>` | Page with Open Graph preview (name, count, cover) for people without Mero / older Mero: "Get Mero 1.15 to join" |
 
-Clean-up: a group untouched for **180 days** is deleted (steps, row and cover). Pages has no scheduled jobs,
+Clean-up: a group that **no member's phone has synced for 180 days** is deleted (steps, row and cover). Every
+sync, including the 6-hourly background one, refreshes `touched_at` (at most once a day per group), so a group is
+only deleted once everyone has left it or uninstalled Mero. Pages has no scheduled jobs,
 so this is a small separate Worker (`meroapp-cleanup`) with a daily cron, bound to the same D1 and KV.
 
 ### App
@@ -123,7 +127,7 @@ so this is a small separate Worker (`meroapp-cleanup`) with a daily cron, bound 
 - Songs already on this phone keep **this phone's order**; newly added songs go to the end in `seq` order.
 - Pending outbox steps are applied on top, so your own unsent edits never flicker away while waiting.
 - Tested cases include: concurrent add and remove, re-adding a removed song, a step for a song the phone has
-  never seen, duplicate steps, an empty group, 500 songs.
+  never seen, duplicate steps, an empty group, 10,000 songs.
 
 **Editing:** when a playlist has a `groupCode`, `addToPlaylist` / `removeFromPlaylist` (and rename/cover) also
 write an outbox row in the same transaction, then ask for a sync. Ordinary playlists are untouched.
@@ -142,6 +146,8 @@ failed (spec §9: visible and retryable, never a silent hang).
 **Edge cases (decided):**
 - Making a group: the phone's playlist gets the returned `groupCode`, `groupSeq = head`, and an empty outbox.
 - Joining: a new local playlist with `groupSeq = 0`; the first sync replays the whole log and downloads the cover.
+  The playlist appears at once; song details (title, artist, art) are filled in by `resolveIds` in batches in the
+  background, so a very long playlist doesn't hold up the screen.
 - Phone files and podcast episodes have no YouTube id, so they never become steps: they're left out when a
   group is made, and if added to a group playlist later they stay on this phone only (shown as usual).
 - A song whose details can't be fetched (offline, removed from YouTube) is saved with just its id and shown as
@@ -169,11 +175,11 @@ site for as long as it's in use, deleted after 180 days untouched. Nothing about
 
 1. **Anyone in the group can remove any song**, including ones others added. (That's what B is; a removal is
    undone by adding the song back.)
-2. **180 days** of no activity before a group is deleted from the server.
+2. A group is deleted from the server after **180 days with no member's phone syncing it** (background syncs count).
 3. **Name and cover are shared**, the most recent change wins.
 4. **"Make it a group playlist" is a separate action**; today's **Share playlist** still sends a copy.
 5. **Leaving doesn't tell the server**; with no accounts there's no member list to leave.
-6. **Limit 500 songs per group**, matching short links.
+6. **No limit on songs per group** (user's decision: mostly used by two people). Requests are batched at 1,000 steps.
 7. **D1 for the steps** (not KV), because of KV's 1,000 writes a day.
 
 ## Left to the builder
