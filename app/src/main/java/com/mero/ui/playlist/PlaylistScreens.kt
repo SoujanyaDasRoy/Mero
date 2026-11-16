@@ -27,6 +27,9 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Notes
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.GroupRemove
+import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -187,12 +190,23 @@ fun PlaylistsTab(
             ) {
                 Artwork(playlist.displayArtwork, 48, icon = Icons.Rounded.QueueMusic)
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        playlist.name,
-                        fontSize = 16.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            playlist.name,
+                            Modifier.weight(1f, fill = false),
+                            fontSize = 16.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (playlist.groupCode != null) {
+                            Icon(
+                                Icons.Rounded.Group,
+                                "Group playlist",
+                                Modifier.padding(start = 6.dp).size(16.dp),
+                                tint = scheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     Text(
                         "${playlist.trackCount} " +
                             if (playlist.trackCount == 1) "song" else "songs",
@@ -284,10 +298,21 @@ fun PlaylistDetailScreen(
     onDelete: () -> Unit,
     /** Null where sharing makes no sense: smart playlists change by themselves. */
     onShare: (() -> Unit)? = null,
+    /** A group playlist: friends add and remove songs too (GroupSync). */
+    isGroup: Boolean = false,
+    /** The last sync failed: say so, with a way to try again. */
+    notSynced: Boolean = false,
+    onRetrySync: () -> Unit = {},
+    /** Null where a playlist can't become a group (smart playlists). */
+    onMakeGroup: (() -> Unit)? = null,
+    onInvite: () -> Unit = {},
+    onLeave: () -> Unit = {},
     contentPadding: PaddingValues,
 ) {
     val scheme = MaterialTheme.colorScheme
     var menuOpen by remember { mutableStateOf(false) }
+    var confirmingGroup by remember { mutableStateOf(false) }
+    var confirmingLeave by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var describing by remember { mutableStateOf(false) }
     var confirmingDelete by remember { mutableStateOf(false) }
@@ -310,6 +335,32 @@ fun PlaylistDetailScreen(
             onDismiss = { describing = false },
             onConfirm = { describing = false; onDescriptionChange(it) },
             allowEmpty = true,
+        )
+    }
+    if (confirmingGroup) {
+        AlertDialog(
+            onDismissRequest = { confirmingGroup = false },
+            title = { Text("Make it a group playlist?") },
+            text = { Text("Anyone you send the link to can add and remove songs, and everyone's copy stays the same.") },
+            confirmButton = {
+                TextButton(onClick = { confirmingGroup = false; onMakeGroup?.invoke() }) { Text("Make group") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingGroup = false }) { Text("Cancel") }
+            },
+        )
+    }
+    if (confirmingLeave) {
+        AlertDialog(
+            onDismissRequest = { confirmingLeave = false },
+            title = { Text("Leave this group?") },
+            text = { Text("Your songs stay here as an ordinary playlist.") },
+            confirmButton = {
+                TextButton(onClick = { confirmingLeave = false; onLeave() }) { Text("Leave") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingLeave = false }) { Text("Cancel") }
+            },
         )
     }
     if (confirmingDelete) {
@@ -353,6 +404,24 @@ fun PlaylistDetailScreen(
                             text = { Text("Share playlist") },
                             leadingIcon = { Icon(Icons.Rounded.Share, null) },
                             onClick = { menuOpen = false; onShare() },
+                        )
+                    }
+                    if (isGroup) {
+                        DropdownMenuItem(
+                            text = { Text("Invite friends") },
+                            leadingIcon = { Icon(Icons.Rounded.PersonAdd, null) },
+                            onClick = { menuOpen = false; onInvite() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Leave group") },
+                            leadingIcon = { Icon(Icons.Rounded.GroupRemove, null) },
+                            onClick = { menuOpen = false; confirmingLeave = true },
+                        )
+                    } else if (onMakeGroup != null) {
+                        DropdownMenuItem(
+                            text = { Text("Make it a group playlist") },
+                            leadingIcon = { Icon(Icons.Rounded.Group, null) },
+                            onClick = { menuOpen = false; confirmingGroup = true },
                         )
                     }
                     DropdownMenuItem(
@@ -405,21 +474,43 @@ fun PlaylistDetailScreen(
                         icon = Icons.Rounded.QueueMusic,
                         modifier = Modifier.clickableScaled(onClick = onPickCover),
                     )
-                    Text(
-                        name,
+                    Row(
                         Modifier.padding(start = 24.dp, end = 24.dp, top = 14.dp),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            name,
+                            Modifier.weight(1f, fill = false),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (isGroup) {
+                            Icon(
+                                Icons.Rounded.Group,
+                                "Group playlist",
+                                Modifier.padding(start = 6.dp).size(16.dp),
+                                tint = scheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     Text(
                         songs.size.toString() + if (songs.size == 1) " song" else " songs",
                         Modifier.padding(top = 2.dp),
                         fontSize = 12.sp,
                         color = scheme.onSurfaceVariant,
                     )
+                    if (isGroup && notSynced) {
+                        Row(
+                            Modifier.padding(top = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Not synced yet", fontSize = 12.sp, color = scheme.error)
+                            TextButton(onClick = onRetrySync) { Text("Retry") }
+                        }
+                    }
                     if (!description.isNullOrBlank()) {
                         Text(
                             description,

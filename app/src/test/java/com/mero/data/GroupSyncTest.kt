@@ -6,6 +6,7 @@ import com.mero.data.db.GroupOutboxEntity
 import com.mero.data.db.MeroDatabase
 import com.mero.domain.Song
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -164,6 +165,18 @@ class GroupSyncTest {
         assertEquals(listOf("a", "d"), ids(id))
     }
 
+    @Test fun `songs from friends are announced with the playlist's name`() = runBlocking {
+        val (id, code) = groupWith("a")
+        val heard = ArrayList<Pair<String, Int>>()
+        val listening = launch(kotlinx.coroutines.Dispatchers.Unconfined) { sync.arrivals.collect { heard += it } }
+        api.append(code, "add", "d")
+        api.append(code, "add", "e")
+        sync.sync(id).getOrThrow()
+        sync.sync(id).getOrThrow()
+        listening.cancel()
+        assertEquals(listOf("Road trip" to 2), heard)
+    }
+
     @Test fun `resent outbox steps are applied once`() = runBlocking {
         val (id, code) = groupWith("a")
         library.addToPlaylist(id, song("c"))
@@ -206,6 +219,18 @@ class GroupSyncTest {
         assertEquals("s1500", songs.last())
         assertEquals(1500L, group(joined).groupSeq)
         assertEquals("Road trip", group(joined).name)
+    }
+
+    @Test fun `a preview names the group and counts its songs without joining`() = runBlocking {
+        val (id, code) = groupWith("a", "b", "c")
+        api.append(code, "remove", "b")
+        db.dao().deletePlaylist(id)
+
+        val preview = sync.preview(code).getOrThrow()
+
+        assertEquals("Road trip", preview.name)
+        assertEquals(listOf("a", "c"), preview.songIds)
+        assertTrue(library.playlists.first().isEmpty())
     }
 
     @Test fun `joining an unknown code fails without creating a playlist`() = runBlocking {

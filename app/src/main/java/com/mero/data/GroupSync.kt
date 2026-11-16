@@ -3,13 +3,18 @@ package com.mero.data
 import com.mero.data.db.MeroDao
 import com.mero.domain.Song
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
+
+/** A group seen from its link before joining. */
+data class GroupPreview(val name: String, val songIds: List<String>, val hasCover: Boolean)
 
 /** The title a group song is stored under until its details can be fetched. */
 const val UNAVAILABLE_SONG = "Unavailable song"
@@ -34,6 +39,11 @@ class GroupSync(
     /** Group playlists whose last sync failed. */
     val failed: StateFlow<Set<String>> = _failed
 
+    private val _arrivals = MutableSharedFlow<Pair<String, Int>>(extraBufferCapacity = 8)
+
+    /** (playlist name, songs that arrived from friends), after a sync that brought any. */
+    val arrivals: SharedFlow<Pair<String, Int>> = _arrivals
+
     /** Turns a playlist into a group playlist; the link to send friends. */
     suspend fun makeGroup(playlistId: String): Result<String> = attempt {
         val playlist = dao.playlistNow(playlistId) ?: error("No such playlist")
@@ -43,6 +53,12 @@ class GroupSync(
         val (code, head) = api.create(playlist.name, ids, coverForUpload(playlist.coverUri)).getOrThrow()
         dao.setGroup(playlistId, code, head)
         ShareLink.shortGroup(code)
+    }
+
+    /** What a group link holds, without joining it: its name and songs (for the join dialog). */
+    suspend fun preview(code: String): Result<GroupPreview> = attempt {
+        val pages = fetchAll(code, 0)
+        GroupPreview(pages.first().name, mergeGroup(emptyList(), pages.flatMap { it.steps }, emptyList()).songIds, pages.first().hasCover)
     }
 
     /** Joins the group behind [code]; the local playlist's id (the existing one if already joined). */
@@ -77,6 +93,7 @@ class GroupSync(
             val pending = dao.outbox(playlistId).map { PendingStep(it.kind, it.value) }
             val merged = apply(playlistId, code, local, pages, pending)
             if (merged.coverChanged) downloadCover(playlistId, code)
+            if (merged.added > 0) _arrivals.tryEmit((merged.name ?: playlist.name) to merged.added)
             merged.added
         }
         _failed.update { if (result.isSuccess) it - playlistId else it + playlistId }
@@ -134,7 +151,8 @@ class GroupSync(
         return merged
     }
 
-    private suspend fun downloadCover(playlistId: String, code: String) {
+    /** Keeps the group's cover for [playlistId] (also used for "Just add a copy"). */
+    suspend fun downloadCover(playlistId: String, code: String) {
         val bytes = api.cover(code) ?: return
         saveCover(playlistId, bytes)?.let { library.setPlaylistCover(playlistId, it) }
     }

@@ -221,6 +221,12 @@ suspend fun shareSong(context: Context, song: Song) {
     sendCard(context, songCard(context, song), "Mero song.png", "$line\n$link", "Share ${song.title}")
 }
 
+/** Share a group playlist's link: its card, and the link that lets a friend join it. */
+suspend fun shareGroup(context: Context, name: String, songs: List<Song>, ownCover: String?, link: String) {
+    val tracks = songs.filter { it.isYouTube }
+    sendCard(context, playlistCard(context, name, tracks, ownCover), "Mero playlist.png", "$name - group playlist on Mero\n$link", "Share $name")
+}
+
 /** How a playlist went out: [shared] of [total] songs, as a short link ([short]) or the long fallback. */
 data class PlaylistShare(val shared: Int, val total: Int, val short: Boolean)
 

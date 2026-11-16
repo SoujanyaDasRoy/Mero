@@ -379,6 +379,8 @@ private fun MeroContent(
                 android.widget.Toast.makeText(context, "Couldn't use that picture", android.widget.Toast.LENGTH_SHORT).show()
             } else {
                 container.libraryRepository.setPlaylistCover(playlistId, saved)
+                // A group playlist's members get the new cover on their next sync (no-op otherwise).
+                container.groupSync.pushCover(playlistId)
             }
         }
     }
@@ -554,6 +556,13 @@ private fun MeroContent(
     }
 
     fun playlistName(id: String) = playlists.firstOrNull { it.id == id }?.name ?: "playlist"
+
+    // A sync that brought friends' songs says so, wherever it was started from.
+    LaunchedEffect(Unit) {
+        container.groupSync.arrivals.collect { (name, n) ->
+            toast(name + ": " + n + if (n == 1) " new song" else " new songs")
+        }
+    }
 
     // Covers picked before 1.13.2 are the picker's URIs; take a copy of each so they survive and can be shared.
     LaunchedEffect(playlists) {
@@ -1071,6 +1080,56 @@ private fun MeroContent(
     // connected, and a play command against no player is silently dropped.
     val opened = openedAudio?.collectAsStateWithLifecycle()?.value
     var incomingPlaylist by remember { mutableStateOf<com.mero.data.PlaylistLink?>(null) }
+    var incomingGroup by remember { mutableStateOf<Pair<String, com.mero.data.GroupPreview>?>(null) }
+    incomingGroup?.let { (code, group) ->
+        val n = group.songIds.size
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { incomingGroup = null },
+            title = { androidx.compose.material3.Text(group.name) },
+            text = {
+                androidx.compose.material3.Text(
+                    "A group playlist: " + n + (if (n == 1) " song" else " songs") + ". Join to add and remove songs together.",
+                )
+            },
+            confirmButton = {
+                androidx.compose.foundation.layout.Row {
+                    androidx.compose.material3.TextButton(onClick = {
+                        incomingGroup = null
+                        scope.launch {
+                            container.groupSync.join(code).fold(
+                                onSuccess = { id ->
+                                    toast("Joined " + group.name)
+                                    navController.navigate(PlaylistRoute(id)) { launchSingleTop = true }
+                                },
+                                onFailure = { toast("Couldn't reach Mero's share site. Try again.") },
+                            )
+                        }
+                    }) { androidx.compose.material3.Text("Join") }
+                    androidx.compose.material3.TextButton(onClick = {
+                        incomingGroup = null
+                        scope.launch {
+                            container.searchRepository.resolveIds(group.songIds).fold(
+                                onSuccess = { songs ->
+                                    val added = com.mero.data.addSharedPlaylist(
+                                        library,
+                                        com.mero.data.SharedPlaylist(group.name, null, songs),
+                                    )
+                                    if (group.hasCover) container.groupSync.downloadCover(added.id, code)
+                                    toast("Added \"" + added.name + "\" with " + added.songCount + " songs")
+                                },
+                                onFailure = { toast("Couldn't reach Mero's share site. Try again.") },
+                            )
+                        }
+                    }) { androidx.compose.material3.Text("Just add a copy") }
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { incomingGroup = null }) {
+                    androidx.compose.material3.Text("Not now")
+                }
+            },
+        )
+    }
     incomingPlaylist?.let { link ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { incomingPlaylist = null },
@@ -1137,6 +1196,27 @@ private fun MeroContent(
     LaunchedEffect(opened, connection.controller != null) {
         val uri = opened ?: return@LaunchedEffect
         if (connection.controller == null) return@LaunchedEffect
+        // A group playlist link: join it, or keep a copy.
+        com.mero.data.ShareLink.parseGroup(uri.toString())?.let { code ->
+            val existing = playlists.firstOrNull { it.groupCode == code }
+            if (existing != null) {
+                navController.navigate(PlaylistRoute(existing.id)) { launchSingleTop = true }
+                toast("You're already in this group")
+            } else {
+                say("Opening the group playlist…")
+                container.groupSync.preview(code).fold(
+                    onSuccess = { incomingGroup = code to it },
+                    onFailure = {
+                        say(
+                            if (it is com.mero.data.GroupGone) "That group playlist doesn't exist"
+                            else "Couldn't reach Mero's share site. Try again.",
+                        )
+                    },
+                )
+            }
+            onOpenedHandled()
+            return@LaunchedEffect
+        }
         // A short playlist link: the songs (and cover) are on Mero's share site for 30 days.
         com.mero.data.ShareLink.parseShortPlaylist(uri.toString())?.let { short ->
             say("Opening the playlist…")
@@ -2068,6 +2148,10 @@ private fun MeroContent(
                             .collectAsStateWithLifecycle(null)
                         val songs by library.playlistSongs(route.playlistId)
                             .collectAsStateWithLifecycle(emptyList())
+                        val notSynced by container.groupSync.failed.collectAsStateWithLifecycle()
+                        val groupCode = meta?.groupCode
+                        // Opening a group playlist brings it up to date.
+                        LaunchedEffect(groupCode) { if (groupCode != null) container.groupSync.sync(route.playlistId) }
 
                         PlaylistDetailScreen(
                             name = meta?.name ?: "Playlist",
@@ -2129,6 +2213,44 @@ private fun MeroContent(
                                     } else if (sent.shared < sent.total) {
                                         toast("Shared the first ${sent.shared} songs: a link can't hold more")
                                     }
+                                }
+                            },
+                            isGroup = groupCode != null,
+                            notSynced = route.playlistId in notSynced,
+                            onRetrySync = { scope.launch { container.groupSync.sync(route.playlistId) } },
+                            onMakeGroup = {
+                                scope.launch {
+                                    container.groupSync.makeGroup(route.playlistId).fold(
+                                        onSuccess = { link ->
+                                            toast("Made a group playlist")
+                                            com.mero.ui.components.shareGroup(context, meta?.name ?: "Playlist", songs, meta?.coverUri, link)
+                                        },
+                                        onFailure = {
+                                            toast(
+                                                if (it is IllegalArgumentException) it.message ?: "Add a song first"
+                                                else "Couldn't reach Mero's share site. Try again.",
+                                            )
+                                        },
+                                    )
+                                }
+                            },
+                            onInvite = {
+                                groupCode?.let { code ->
+                                    scope.launch {
+                                        com.mero.ui.components.shareGroup(
+                                            context,
+                                            meta?.name ?: "Playlist",
+                                            songs,
+                                            meta?.coverUri,
+                                            com.mero.data.ShareLink.shortGroup(code),
+                                        )
+                                    }
+                                }
+                            },
+                            onLeave = {
+                                scope.launch {
+                                    container.groupSync.leave(route.playlistId)
+                                    toast("Left the group")
                                 }
                             },
                             contentPadding = contentPadding,
