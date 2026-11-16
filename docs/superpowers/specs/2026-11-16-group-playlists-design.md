@@ -77,8 +77,7 @@ CREATE TABLE groups (
   code       TEXT PRIMARY KEY,      -- 8 chars, same alphabet as share codes
   name       TEXT NOT NULL,
   has_cover  INTEGER NOT NULL DEFAULT 0,
-  head       INTEGER NOT NULL DEFAULT 0,   -- seq of the newest step
-  touched_at INTEGER NOT NULL             -- ms; last time any phone synced it (at most one write a day)
+  head       INTEGER NOT NULL DEFAULT 0    -- seq of the newest step
 );
 CREATE TABLE steps (
   code    TEXT NOT NULL,
@@ -107,10 +106,8 @@ requests (`POST /api/g` with the first 1,000, then `/steps` for the rest) and `G
 | `GET /c/g/<code>.jpg` | The group's cover |
 | `GET /g/<code>` | Page with Open Graph preview (name, count, cover) for people without Mero / older Mero: "Get Mero 1.15 to join" |
 
-Clean-up: a group that **no member's phone has synced for 180 days** is deleted (steps, row and cover). Every
-sync, including the 6-hourly background one, refreshes `touched_at` (at most once a day per group), so a group is
-only deleted once everyone has left it or uninstalled Mero. Pages has no scheduled jobs,
-so this is a small separate Worker (`meroapp-cleanup`) with a daily cron, bound to the same D1 and KV.
+Groups are **never deleted** from the server (user's decision). There is no clean-up job. A group stays reachable
+by its link for as long as the site exists; a member who leaves simply stops syncing.
 
 ### App
 
@@ -169,13 +166,13 @@ failed (spec §9: visible and retryable, never a silent hang).
 - The manifest's verified-link filter for `meroapp.pages.dev` gains `/g/`.
 
 **Privacy text** (README, SECURITY): a group playlist's name, song ids and cover are stored on Mero's share
-site for as long as it's in use, deleted after 180 days untouched. Nothing about the people in it is stored.
+site and kept there (not deleted). Nothing about the people in it is stored.
 
 ## Calls made without asking (check these)
 
 1. **Anyone in the group can remove any song**, including ones others added. (That's what B is; a removal is
    undone by adding the song back.)
-2. A group is deleted from the server after **180 days with no member's phone syncing it** (background syncs count).
+2. **Groups are never deleted from the server** (user's decision).
 3. **Name and cover are shared**, the most recent change wins.
 4. **"Make it a group playlist" is a separate action**; today's **Share playlist** still sends a copy.
 5. **Leaving doesn't tell the server**; with no accounts there's no member list to leave.
@@ -192,6 +189,7 @@ site for as long as it's in use, deleted after 180 days untouched. Nothing about
 
 ## Revisit triggers
 
+- D1 or KV storage passes half of the free tier: add clean-up of groups no phone has synced in a long time.
 - More than about 50 people using it, or KV/D1 free limits within 25%: reconsider storage and add rate limits.
 - Friends ask for synced order or "who added this": both need identity, which reopens spec §3.1.
 - Someone abuses a leaked link: add per-group owner tokens and a "reset link" action.
