@@ -58,6 +58,17 @@ rotate immediately:
 
 `.gitignore` already covers all of these.
 
+## What Mero's share site stores
+
+`meroapp.pages.dev` (code in `docs/share-site/cloudflare`) stores playlists people chose to share: a name,
+YouTube video ids and an optional cover picture. Shared copies expire after 30 days; group playlists are kept
+so members' phones stay in step. There are no accounts and nothing about the people involved is stored. A
+playlist's random 8-character code is the only key, so anyone holding a group link can add and remove songs
+in it. Treat a group link like a door key: send it only to people who should edit that playlist.
+
+Every endpoint validates what it receives (video id format, name length, JPEG header, sizes, at most 1,000
+steps per request).
+
 ## Reporting something real
 
 Open an issue, or contact the maintainer directly if it's sensitive.

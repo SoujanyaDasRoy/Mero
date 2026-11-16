@@ -269,6 +269,27 @@ there. Swapping a manual container for Koin later is mechanical.
 *Revisit trigger:* the container exceeds roughly fifteen objects, or real
 scoping beyond app-and-screen becomes necessary.
 
+### Why Mero has a small share site (and still no backend for playback)
+
+Playback, search and the library stay entirely on the phone: every phone talks to YouTube itself and
+nothing about what anyone listens to leaves it. What changed is sharing. Short links with a cover in the
+preview (1.14) and group playlists that stay the same on several phones (1.15) both need somewhere to keep a
+playlist that two phones can reach.
+
+| Option | Assessment |
+|---|---|
+| **No server** (links carry everything) | Links of hundreds of characters, no cover in previews, no way for two copies to stay in step |
+| **A hosted backend with accounts** | Contradicts the no-account rule (PRD §3.1) and costs money and upkeep |
+| **Peer to peer** | Both phones must be online at once; Android kills background connections; far more code |
+| **Cloudflare Pages + Functions + KV + D1, free tier** | **Chosen.** `meroapp.pages.dev`, code in `docs/share-site/cloudflare`. No accounts: a random 8-character code is the key. Stores only playlist names, song ids and covers |
+
+Shared (copy) playlists expire after 30 days. Group playlists are kept: an ordered log of add/remove/rename/cover
+steps per group in D1; each phone keeps an outbox of unsent steps and merges with `mergeGroup` (the site's order
+decides, so no CRDT is needed). If the site is unreachable, playlists keep working and only syncing waits.
+
+*Revisit trigger:* D1 or KV storage past half of the free tier, more than about 50 people using it, or a leaked
+group link being abused (then: per-group owner tokens and a "reset link").
+
 ### Smaller decisions
 
 **`Result<T>` at repository boundaries, not exceptions.** Errors become values
@@ -298,7 +319,7 @@ changes, so does the answer.
 | No repository interfaces | A second implementation genuinely appears |
 | Single audio source (YouTube) | A second source is added — *then* build the abstraction, not before |
 | Client-side extraction only | Upstream is repeatedly slow to fix breakage → evaluate the `youtubedl-android` fallback (PRD §9) |
-| No shared backend | Friends actually ask for shared playlists |
+| Share site on Cloudflare free tier (no accounts) | Storage past half the free tier, ~50+ users, or link abuse |
 
 ---
 

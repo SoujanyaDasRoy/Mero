@@ -139,6 +139,7 @@ All processing happens inside Mero, so it sounds the same on every phone.
 - **Paste a YouTube link** into search and it plays, catalogue or not
 - **Automatic backup** to a folder on the phone or a file in Google Drive (it survives a reinstall; Mero never signs in to Google), plus manual backup and restore, in Settings → Library
 - **Share songs and playlists** as a picture card with a short link (`meroapp.pages.dev`) that opens straight in Mero (and in YouTube Music for people without it); a playlist's own cover goes along and is kept on your friend's phone
+- **Group playlists:** turn a playlist into one your friends can add songs to and remove songs from; everyone's copy stays the same, with no account
 - **Song reminders** — an occasional, quiet nudge about a favourite you haven't played lately. *Now and then* by default; *Daily* or *Off* in Settings
 
 ### Reliability
@@ -190,6 +191,7 @@ key, so installing over an older version keeps everything.
 - **No ads, no analytics, no tracking.**
 - The photo picker gives Mero only the one picture you choose; storage permission is never requested.
 - **Sharing a playlist is the one thing that leaves your phone:** its name, its song ids and, if you chose one, its cover are stored on Mero's own share site (Cloudflare) for **30 days**, then deleted automatically. Nothing about you, and no account, is sent. If the site can't be reached, Mero sends a long link that carries the songs itself.
+- **Group playlists** are kept on the same site so everyone's copy stays the same: the name, the song ids and the cover. Nothing about the people in a group is stored, and there's no member list. Leaving a group keeps your songs as an ordinary playlist.
 
 ---
 
