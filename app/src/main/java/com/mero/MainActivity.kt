@@ -95,8 +95,10 @@ class MainActivity : ComponentActivity() {
     /** Reminders wait until Mero has gone unopened for a while; this is the clock. */
     override fun onStart() {
         super.onStart()
-        (application as MeroApplication).container.settings
-            .putLong(com.mero.data.SettingsStore.LAST_OPENED, System.currentTimeMillis())
+        val container = (application as MeroApplication).container
+        container.settings.putLong(com.mero.data.SettingsStore.LAST_OPENED, System.currentTimeMillis())
+        // Pick up what friends changed in group playlists while Mero was in the background.
+        container.appScope.launch { container.groupSync.syncAll() }
     }
 
     private fun wantsUpdate(intent: Intent?): Boolean =

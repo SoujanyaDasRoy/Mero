@@ -99,7 +99,24 @@ class AppContainer(context: Context) {
     val lyricsRepository: LyricsRepository by lazy { LyricsRepository() }
 
     val sleepTimer: SleepTimer by lazy { SleepTimer() }
-    val libraryRepository: LibraryRepository by lazy { LibraryRepository(database.dao(), settings::recommenderV2) }
+    val libraryRepository: LibraryRepository by lazy {
+        LibraryRepository(database.dao(), settings::recommenderV2).also { it.onGroupEdit = ::requestGroupSync }
+    }
+
+    /** Work that outlives a screen: group syncs started by an edit or by Mero coming to the front. */
+    val appScope = CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+    private val pendingGroupSyncs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+
+    /** Syncs a group playlist 3 s after its last edit, so a burst of edits goes in one request. */
+    fun requestGroupSync(playlistId: String) {
+        pendingGroupSyncs.put(
+            playlistId,
+            appScope.launch {
+                kotlinx.coroutines.delay(3_000)
+                groupSync.sync(playlistId)
+            },
+        )?.cancel()
+    }
 
     /** Group playlists: keeps them the same on every member's phone (see GroupSync). */
     val groupSync: com.mero.data.GroupSync by lazy {
@@ -222,6 +239,7 @@ class MeroApplication : Application(), SingletonImageLoader.Factory {
         container.outputRoute.start()
         CoroutineScope(Dispatchers.IO).launch { container.libraryRepository.tidyPlayEvents() }
         com.mero.data.SongReminderWorker.schedule(this)
+        com.mero.data.GroupSyncWorker.schedule(this)
         com.mero.data.UpdateCheckWorker.schedule(this)
     }
 
