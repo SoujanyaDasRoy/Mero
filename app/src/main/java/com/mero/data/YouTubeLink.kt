@@ -9,8 +9,10 @@ private val HOSTS = setOf(
     "youtu.be", "www.youtu.be", "youtube-nocookie.com", "www.youtube-nocookie.com",
     // Mero's own share links (ShareLink): https://<host>/song/?v=<id>
     ShareLink.HOST,
+    // ...and the short ones: https://<short host>/s/<id>
+    ShareLink.SHORT_HOST,
 )
-private val ID_IN_PATH = setOf("shorts", "embed", "live", "v")
+private val ID_IN_PATH = setOf("shorts", "embed", "live", "v", "s")
 
 /**
  * Reads whatever people paste into search: watch, share, Music, Shorts, embed

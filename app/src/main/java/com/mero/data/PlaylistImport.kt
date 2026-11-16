@@ -6,7 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
-data class ImportedPlaylist(val name: String, val songCount: Int)
+data class ImportedPlaylist(val name: String, val songCount: Int, val id: String = "")
 
 private const val MAX_FILE_BYTES = 8 * 1024 * 1024
 
@@ -40,7 +40,7 @@ suspend fun addSharedPlaylist(library: LibraryRepository, shared: SharedPlaylist
     val id = library.createPlaylist(name)
     shared.description?.let { library.setPlaylistDescription(id, it) }
     library.addToPlaylist(id, shared.songs)
-    return ImportedPlaylist(name, shared.songs.size)
+    return ImportedPlaylist(name, shared.songs.size, id)
 }
 
 private fun java.io.InputStream.readNBytesCapped(limit: Int): ByteArray {

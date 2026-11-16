@@ -207,7 +207,7 @@ private fun sendCard(context: Context, card: Bitmap, fileName: String, caption: 
 
 /** Share a song: its card, and under it the name and the Mero link. */
 suspend fun shareSong(context: Context, song: Song) {
-    val link = ShareLink.song(song.id)
+    val link = ShareLink.shortSong(song.id)
     val line = "${song.title} - ${song.artist}"
     if (link == null) {
         context.startActivity(
@@ -221,15 +221,23 @@ suspend fun shareSong(context: Context, song: Song) {
     sendCard(context, songCard(context, song), "Mero song.png", "$line\n$link", "Share ${song.title}")
 }
 
+/** How a playlist went out: [shared] of [total] songs, as a short link ([short]) or the long fallback. */
+data class PlaylistShare(val shared: Int, val total: Int, val short: Boolean)
+
 /**
- * Share a playlist: its card, and under it the name and one Mero link that carries every song.
- * Returns how many songs the link holds (a link fits [ShareLink.MAX_PLAYLIST_SONGS], so a longer
- * playlist goes out as its first that many), or null when there is nothing to share.
+ * Share a playlist: its card, and under it the name and a Mero link. The link is a short one from Mero's
+ * share site, which also keeps the playlist's cover for the friend; when the site cannot be reached it is
+ * the long link that carries the songs itself (no cover, 150 songs at most). Null when there is nothing to share.
  */
-suspend fun sharePlaylist(context: Context, name: String, songs: List<Song>, ownCover: String? = null): Int? {
-    val tracks = songs.filter { it.isYouTube }.distinctBy { it.id }.take(ShareLink.MAX_PLAYLIST_SONGS)
-    val link = ShareLink.playlist(name, tracks.map { it.id }) ?: return null
+suspend fun sharePlaylist(context: Context, name: String, songs: List<Song>, ownCover: String? = null): PlaylistShare? {
+    val all = songs.filter { it.isYouTube }.distinctBy { it.id }
+    if (all.isEmpty()) return null
+    val uploaded = all.take(ShareLink.MAX_SHORT_SONGS)
+    val cover = withContext(Dispatchers.IO) { com.mero.data.PlaylistCovers.forUpload(ownCover) }
+    val short = com.mero.data.ShareApi.createPlaylist(name, uploaded.map { it.id }, cover)
+    val tracks = if (short != null) uploaded else all.take(ShareLink.MAX_PLAYLIST_SONGS)
+    val link = short ?: ShareLink.playlist(name, tracks.map { it.id }) ?: return null
     val caption = "$name - ${tracks.size} songs on Mero\n$link"
     sendCard(context, playlistCard(context, name, tracks, ownCover), "Mero playlist.png", caption, "Share $name")
-    return tracks.size
+    return PlaylistShare(tracks.size, all.size, short != null)
 }

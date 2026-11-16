@@ -1112,6 +1112,12 @@ private fun MeroContent(
                                             library,
                                             com.mero.data.SharedPlaylist(link.name, null, songs),
                                         )
+                                        // The sender's cover comes along, and from here it is this phone's own copy.
+                                        link.coverCode?.let { code ->
+                                            com.mero.data.ShareApi.fetchCover(code)
+                                                ?.let { com.mero.data.PlaylistCovers.saveBytes(context, added.id, it) }
+                                                ?.let { library.setPlaylistCover(added.id, it) }
+                                        }
                                         toast("Added \"" + added.name + "\" with " + added.songCount + " songs")
                                     }
                                 },
@@ -1131,7 +1137,23 @@ private fun MeroContent(
     LaunchedEffect(opened, connection.controller != null) {
         val uri = opened ?: return@LaunchedEffect
         if (connection.controller == null) return@LaunchedEffect
-        // A playlist shared from Mero: ask what to do with it.
+        // A short playlist link: the songs (and cover) are on Mero's share site for 30 days.
+        com.mero.data.ShareLink.parseShortPlaylist(uri.toString())?.let { short ->
+            say("Opening the playlist…")
+            com.mero.data.ShareApi.fetchPlaylist(short.code).fold(
+                onSuccess = { remote ->
+                    incomingPlaylist = com.mero.data.PlaylistLink(
+                        remote.name,
+                        remote.ids,
+                        short.code.takeIf { remote.hasCover },
+                    )
+                },
+                onFailure = { say("That playlist link has expired, or you're offline. Ask for it again.") },
+            )
+            onOpenedHandled()
+            return@LaunchedEffect
+        }
+        // A playlist shared from Mero (an older, long link): ask what to do with it.
         com.mero.data.ShareLink.parsePlaylist(uri.toString())?.let { link ->
             incomingPlaylist = link
             onOpenedHandled()
@@ -2102,8 +2124,10 @@ private fun MeroContent(
                                     )
                                     if (sent == null) {
                                         toast("There are no songs here to share")
-                                    } else if (sent < songs.count { it.isYouTube }) {
-                                        toast("Shared the first $sent songs: a link can't hold more")
+                                    } else if (!sent.short) {
+                                        toast("Offline: sent the long link, without the cover")
+                                    } else if (sent.shared < sent.total) {
+                                        toast("Shared the first ${sent.shared} songs: a link can't hold more")
                                     }
                                 }
                             },

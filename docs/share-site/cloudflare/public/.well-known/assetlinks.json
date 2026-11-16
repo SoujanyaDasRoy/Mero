@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.mero",
+      "sha256_cert_fingerprints": [
+        "69:50:37:04:05:7D:D3:9B:AE:34:32:3A:7A:77:A9:62:63:37:79:5C:A5:0F:FE:40:77:02:88:58:64:51:22:00"
+      ]
+    }
+  }
+]

@@ -44,6 +44,35 @@ object PlaylistCovers {
         Uri.fromFile(file).toString()
     }.getOrNull()
 
+    /** Keeps a cover received from a friend (already a small JPEG). Null if it is not a usable picture. */
+    fun saveBytes(context: Context, playlistId: String, bytes: ByteArray): String? = runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0 || bytes.size > 1_000_000) return null
+        delete(context, playlistId)
+        val file = File(dir(context), "${safeId(playlistId)}_${System.currentTimeMillis().toString(36)}.jpg")
+        file.parentFile?.mkdirs()
+        file.writeBytes(bytes)
+        Uri.fromFile(file).toString()
+    }.getOrNull()
+
+    /** The cover at [uri] (a `file://` this class made) as a JPEG small enough to upload (under ~190 KB), or null. */
+    fun forUpload(uri: String?): ByteArray? = runCatching {
+        val path = Uri.parse(uri ?: return null).path ?: return null
+        val source = BitmapFactory.decodeFile(path) ?: return null
+        val scale = 600f / maxOf(source.width, source.height)
+        val bitmap = if (scale < 1f) Bitmap.createScaledBitmap(source, (source.width * scale).toInt(), (source.height * scale).toInt(), true) else source
+        var best: ByteArray? = null
+        var quality = 85
+        while (best == null && quality >= 30) {
+            val out = java.io.ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
+            if (out.size() <= 190 * 1024) best = out.toByteArray()
+            quality -= 10
+        }
+        best
+    }.getOrNull()
+
     fun delete(context: Context, playlistId: String) {
         dir(context).listFiles { f -> f.name.startsWith(safeId(playlistId) + "_") }?.forEach { it.delete() }
     }

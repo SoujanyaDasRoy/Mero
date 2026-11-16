@@ -106,6 +106,16 @@
                 <data android:pathPrefix="/song" />
                 <data android:pathPrefix="/playlist" />
             </intent-filter>
+            <!-- The short links (docs/share-site/cloudflare, https://meroapp.pages.dev): /s/<song>, /p/<playlist>. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="meroapp.pages.dev" />
+                <data android:pathPrefix="/s/" />
+                <data android:pathPrefix="/p/" />
+            </intent-filter>
             <!-- "Share" > Mero, from YouTube Music, the browser, WhatsApp: the one route that does not
                  depend on who owns the link. The first link in the text is opened. -->
             <intent-filter>

@@ -5,7 +5,10 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 
 /** A playlist as it travels in a link: its name and its songs' YouTube ids, in order. */
-data class PlaylistLink(val name: String, val ids: List<String>)
+data class PlaylistLink(val name: String, val ids: List<String>, val coverCode: String? = null)
+
+/** A playlist short link (https://meroapp.pages.dev/p/<code>): the songs are fetched from the site by [code]. */
+data class ShortPlaylistLink(val code: String)
 
 /**
  * The links Mero puts in what it shares. They point at Mero's own site (docs/share-site, published as
@@ -17,8 +20,27 @@ data class PlaylistLink(val name: String, val ids: List<String>)
 object ShareLink {
     const val HOST = "soujanyadasroy.github.io"
 
-    /** A link carries every song id, 11 characters each; past this it is a file's job, not a link's. */
+    /** Mero's share site: short links, covers in previews. Stored playlists there expire after 30 days. */
+    const val SHORT_HOST = "meroapp.pages.dev"
+
+    /** A link that carries every song id (11 characters each) tops out here; the site's short links hold [MAX_SHORT_SONGS]. */
     const val MAX_PLAYLIST_SONGS = 150
+    const val MAX_SHORT_SONGS = 500
+
+    private val CODE = Regex("[A-Za-z0-9]{8}")
+
+    /** The short address of a song: https://meroapp.pages.dev/s/<id>. Null for something with no YouTube id. */
+    fun shortSong(videoId: String): String? = videoId.takeIf { VIDEO_ID.matches(it) }?.let { "https://$SHORT_HOST/s/$it" }
+
+    fun shortPlaylist(code: String): String = "https://$SHORT_HOST/p/$code"
+
+    /** Reads a link made by [shortPlaylist]; null for anything else. */
+    fun parseShortPlaylist(url: String): ShortPlaylistLink? {
+        val uri = runCatching { URI(url.trim()) }.getOrNull() ?: return null
+        if (uri.scheme != "https" || uri.host?.lowercase() != SHORT_HOST) return null
+        val segments = uri.path.orEmpty().split('/').filter { it.isNotEmpty() }
+        return segments.takeIf { it.size == 2 && it[0] == "p" && CODE.matches(it[1]) }?.let { ShortPlaylistLink(it[1]) }
+    }
 
     private val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
     private const val MAX_NAME = 80

@@ -24,6 +24,25 @@ class ShareLinkTest {
         assertNull(parseYouTubeLink("https://soujanyadasroy.github.io/song/"))
     }
 
+    @Test fun `a song short link is read back as that song`() {
+        assertEquals("https://meroapp.pages.dev/s/$id", ShareLink.shortSong(id))
+        assertEquals(YouTubeLink(id, null), parseYouTubeLink(ShareLink.shortSong(id)!!))
+    }
+
+    @Test fun `a playlist short link is read back as its code`() {
+        val link = ShareLink.shortPlaylist("8WVNEHVo")
+        assertEquals("https://meroapp.pages.dev/p/8WVNEHVo", link)
+        assertEquals(ShortPlaylistLink("8WVNEHVo"), ShareLink.parseShortPlaylist(link))
+    }
+
+    @Test fun `short links that are not Mero's are not read`() {
+        assertNull(ShareLink.parseShortPlaylist("https://evil.example/p/8WVNEHVo"))
+        assertNull(ShareLink.parseShortPlaylist("https://meroapp.pages.dev/p/short"))
+        assertNull(ShareLink.parseShortPlaylist("https://meroapp.pages.dev/p/8WVNEHVo/extra"))
+        assertNull(ShareLink.parseShortPlaylist("http://meroapp.pages.dev/p/8WVNEHVo"))
+        assertNull(parseYouTubeLink("https://meroapp.pages.dev/p/8WVNEHVo"))
+    }
+
     private val a = "dQw4w9WgXcQ"
     private val b = "9bZkp7q19f0"
 
