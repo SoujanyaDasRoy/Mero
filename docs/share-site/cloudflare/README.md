@@ -8,6 +8,8 @@ Serves <https://meroapp.pages.dev>: the short links Mero shares.
 | `/p/<code>` | A playlist stored in KV for 30 days (name, up to 500 song ids, optional cover up to 200 KB), deleted by Cloudflare afterwards |
 | `/c/<code>.jpg` | That playlist's cover, used as the link preview image and downloaded by a friend's Mero |
 | `POST /api/p`, `GET /api/p/<code>` | Create / read a playlist (validated: id format, counts, sizes, JPEG header) |
+| `/g/<code>` | A group playlist's link: preview page (name, song count, cover) |
+| `POST /api/g`, `GET /api/g/<code>?since=`, `POST /api/g/<code>/steps`, `PUT /api/g/<code>/cover`, `/c/g/<code>.jpg` | Group playlists: an ordered log of add/remove/rename/cover steps per group in D1 (`schema.sql`), never deleted. 1,000 steps per request |
 | `/.well-known/assetlinks.json` | Tells Android that `com.mero` (with the signing certificate listed) may open these links |
 
 Deploy (needs `wrangler login`):
@@ -15,6 +17,8 @@ Deploy (needs `wrangler login`):
     cd docs/share-site/cloudflare
     wrangler pages deploy public --project-name meroapp --branch main
 
-The KV namespace `SHARES` is bound in `wrangler.toml`. If Mero's signing key ever changes, update the
+The KV namespace `SHARES` and the D1 database `mero` are bound in `wrangler.toml`. A new D1 database needs
+`wrangler d1 execute mero --remote --file schema.sql`. `bash test-groups.sh` checks the group endpoints against
+the live site. If Mero's signing key ever changes, update the
 fingerprint in `public/.well-known/assetlinks.json` and redeploy. Free-tier KV allows 1,000 writes a day
 (each shared playlist is one or two).

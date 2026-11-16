@@ -5,3 +5,8 @@ pages_build_output_dir = "public"
 [[kv_namespaces]]
 binding = "SHARES"
 id = "12019ce16af54c24b5bda22a9d6ea528"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mero"
+database_id = "78f24dbc-2baf-45ed-83f5-7e0b337ff6bb"

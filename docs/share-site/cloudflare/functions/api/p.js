@@ -1,11 +1,4 @@
-import { CODE, ID, MAX_COVER_BYTES, MAX_NAME, MAX_SONGS, TTL_SECONDS, json } from "../_lib.js";
-
-const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-
-function newCode() {
-  const bytes = crypto.getRandomValues(new Uint8Array(8));
-  return Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join("");
-}
+import { ID, MAX_COVER_BYTES, MAX_NAME, MAX_SONGS, TTL_SECONDS, json, newCode } from "../_lib.js";
 
 function fromBase64(s) {
   const bin = atob(s);

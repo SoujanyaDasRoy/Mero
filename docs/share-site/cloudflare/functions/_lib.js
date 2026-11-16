@@ -8,6 +8,14 @@ export const MAX_COVER_BYTES = 200 * 1024;
 /** A shared playlist is deleted by Cloudflare itself this long after it was made. */
 export const TTL_SECONDS = 30 * 24 * 60 * 60;
 
+export const MAX_STEPS = 1000;
+export const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+
+export function newCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join("");
+}
+
 export function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
