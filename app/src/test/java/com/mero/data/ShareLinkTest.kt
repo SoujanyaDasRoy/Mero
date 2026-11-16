@@ -43,6 +43,21 @@ class ShareLinkTest {
         assertNull(parseYouTubeLink("https://meroapp.pages.dev/p/8WVNEHVo"))
     }
 
+    @Test fun `a group link is read back as its code`() {
+        val link = ShareLink.shortGroup("8WVNEHVo")
+        assertEquals("https://meroapp.pages.dev/g/8WVNEHVo", link)
+        assertEquals("8WVNEHVo", ShareLink.parseGroup(link))
+    }
+
+    @Test fun `group links that are not Mero's are not read`() {
+        assertNull(ShareLink.parseGroup("https://evil.example/g/8WVNEHVo"))
+        assertNull(ShareLink.parseGroup("http://meroapp.pages.dev/g/8WVNEHVo"))
+        assertNull(ShareLink.parseGroup("https://meroapp.pages.dev/g/short"))
+        assertNull(ShareLink.parseGroup("https://meroapp.pages.dev/g/8WVNEHVo/extra"))
+        assertNull(ShareLink.parseGroup("https://meroapp.pages.dev/p/8WVNEHVo"))
+        assertNull(ShareLink.parseShortPlaylist("https://meroapp.pages.dev/g/8WVNEHVo"))
+    }
+
     private val a = "dQw4w9WgXcQ"
     private val b = "9bZkp7q19f0"
 

@@ -34,12 +34,21 @@ object ShareLink {
 
     fun shortPlaylist(code: String): String = "https://$SHORT_HOST/p/$code"
 
+    /** A group playlist's link: https://meroapp.pages.dev/g/<code>. */
+    fun shortGroup(code: String): String = "https://$SHORT_HOST/g/$code"
+
+    /** The group code in a link made by [shortGroup]; null for anything else. */
+    fun parseGroup(url: String): String? = codeAfter("g", url)
+
     /** Reads a link made by [shortPlaylist]; null for anything else. */
-    fun parseShortPlaylist(url: String): ShortPlaylistLink? {
+    fun parseShortPlaylist(url: String): ShortPlaylistLink? = codeAfter("p", url)?.let { ShortPlaylistLink(it) }
+
+    /** The code in https://<short host>/<prefix>/<code>, or null. */
+    private fun codeAfter(prefix: String, url: String): String? {
         val uri = runCatching { URI(url.trim()) }.getOrNull() ?: return null
         if (uri.scheme != "https" || uri.host?.lowercase() != SHORT_HOST) return null
         val segments = uri.path.orEmpty().split('/').filter { it.isNotEmpty() }
-        return segments.takeIf { it.size == 2 && it[0] == "p" && CODE.matches(it[1]) }?.let { ShortPlaylistLink(it[1]) }
+        return segments.takeIf { it.size == 2 && it[0] == prefix && CODE.matches(it[1]) }?.get(1)
     }
 
     private val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
