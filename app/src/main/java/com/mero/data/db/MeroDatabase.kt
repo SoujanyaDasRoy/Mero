@@ -307,6 +307,34 @@ interface MeroDao {
     @Query("SELECT * FROM playlists WHERE id = :id")
     suspend fun playlistNow(id: String): PlaylistEntity?
 
+    /** A song added to a playlist and, for a group playlist, the step that tells the others. */
+    @Transaction
+    suspend fun addToPlaylistWithStep(entry: PlaylistSongEntity, step: GroupOutboxEntity?) {
+        insertPlaylistSong(entry)
+        step?.let { insertOutbox(it) }
+    }
+
+    @Transaction
+    suspend fun removeFromPlaylistWithStep(playlistId: String, songId: String, step: GroupOutboxEntity?) {
+        removeFromPlaylist(playlistId, songId)
+        step?.let { insertOutbox(it) }
+    }
+
+    @Transaction
+    suspend fun renamePlaylistWithStep(id: String, name: String, step: GroupOutboxEntity?) {
+        renamePlaylist(id, name)
+        step?.let { insertOutbox(it) }
+    }
+
+    /** A group playlist's state after a sync, written in one go so a failed sync changes nothing. */
+    @Transaction
+    suspend fun applyGroupState(playlistId: String, songIds: List<String>, name: String?, code: String, seq: Long) {
+        deletePlaylistSongs(playlistId)
+        insertPlaylistSongs(songIds.mapIndexed { i, id -> PlaylistSongEntity(playlistId, id, i) })
+        name?.let { renamePlaylist(playlistId, it) }
+        setGroup(playlistId, code, seq)
+    }
+
     /**
      * Cover art is borrowed from the first track, so a playlist looks like
      * something without the user doing any work.

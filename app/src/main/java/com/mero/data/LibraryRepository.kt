@@ -1,5 +1,6 @@
 package com.mero.data
 
+import com.mero.data.db.GroupOutboxEntity
 import com.mero.data.db.MeroDao
 import com.mero.data.db.PlayEventEntity
 import com.mero.data.db.PlaylistEntity
@@ -42,6 +43,15 @@ private fun Song.toEntity() = SongEntity(
  * source of truth rather than in-memory Compose state.
  */
 class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boolean = { true }) {
+
+    /** Called after a change to a group playlist, so it can be sent soon (set by AppContainer). */
+    var onGroupEdit: (playlistId: String) -> Unit = {}
+
+    /** The step to record for [kind] if [playlistId] is a group playlist, else null. */
+    private suspend fun stepFor(playlistId: String, kind: String, value: String): GroupOutboxEntity? =
+        dao.playlistNow(playlistId)?.groupCode?.let {
+            GroupOutboxEntity(java.util.UUID.randomUUID().toString(), playlistId, kind, value, System.currentTimeMillis())
+        }
 
     val liked: Flow<List<Song>> = dao.likedSongs().map { rows -> rows.map { it.toDomain() } }
     val downloads: Flow<List<Song>> = dao.downloads().map { rows -> rows.map { it.toDomain() } }
@@ -214,7 +224,11 @@ class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boole
 
     suspend fun deleteSmartPlaylist(id: String) = dao.deleteSmartPlaylist(id)
 
-    suspend fun renamePlaylist(id: String, name: String) = dao.renamePlaylist(id, name.trim())
+    suspend fun renamePlaylist(id: String, name: String) {
+        val step = stepFor(id, "rename", name.trim())
+        dao.renamePlaylistWithStep(id, name.trim(), step)
+        if (step != null) onGroupEdit(id)
+    }
 
     /** A picture the user picked, or null to go back to the first track's cover. */
     suspend fun setPlaylistCover(id: String, uri: String?) =
@@ -229,9 +243,10 @@ class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boole
     suspend fun addToPlaylist(playlistId: String, song: Song): Boolean {
         if (dao.isInPlaylist(playlistId, song.id)) return false
         ensure(song)
-        dao.insertPlaylistSong(
-            PlaylistSongEntity(playlistId, song.id, dao.nextPositionIn(playlistId)),
-        )
+        // Phone files and podcast episodes have no YouTube id: in a group playlist they stay on this phone.
+        val step = if (song.isYouTube) stepFor(playlistId, "add", song.id) else null
+        dao.addToPlaylistWithStep(PlaylistSongEntity(playlistId, song.id, dao.nextPositionIn(playlistId)), step)
+        if (step != null) onGroupEdit(playlistId)
         return true
     }
 
@@ -239,8 +254,26 @@ class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boole
     suspend fun addToPlaylist(playlistId: String, songs: List<Song>): Int =
         songs.count { addToPlaylist(playlistId, it) }
 
-    suspend fun removeFromPlaylist(playlistId: String, songId: String) =
-        dao.removeFromPlaylist(playlistId, songId)
+    suspend fun removeFromPlaylist(playlistId: String, songId: String) {
+        val isYouTube = dao.song(songId)?.sourceUri == null
+        val step = if (isYouTube) stepFor(playlistId, "remove", songId) else null
+        dao.removeFromPlaylistWithStep(playlistId, songId, step)
+        if (step != null) onGroupEdit(playlistId)
+    }
+
+    /** Fills in (or creates) stored songs, for songs that arrive through a group playlist. */
+    suspend fun upsertSongs(songs: List<Song>) = songs.forEach { incoming ->
+        val existing = dao.song(incoming.id)
+        dao.upsertSong(existing?.copy(
+            title = incoming.title, artist = incoming.artist, album = incoming.album,
+            durationSec = incoming.durationSec, thumbnailUrl = incoming.thumbnailUrl,
+        ) ?: incoming.toEntity())
+    }
+
+    /** Stores a song known only by its id until its details can be fetched. */
+    suspend fun placeholder(id: String) {
+        if (dao.song(id) == null) dao.upsertSong(SongEntity(id, UNAVAILABLE_SONG, "", "", 0, null))
+    }
 
     suspend fun reorderPlaylist(playlistId: String, songs: List<Song>) {
         dao.deletePlaylistSongs(playlistId)

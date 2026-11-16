@@ -101,6 +101,18 @@ class AppContainer(context: Context) {
     val sleepTimer: SleepTimer by lazy { SleepTimer() }
     val libraryRepository: LibraryRepository by lazy { LibraryRepository(database.dao(), settings::recommenderV2) }
 
+    /** Group playlists: keeps them the same on every member's phone (see GroupSync). */
+    val groupSync: com.mero.data.GroupSync by lazy {
+        com.mero.data.GroupSync(
+            dao = database.dao(),
+            library = libraryRepository,
+            api = com.mero.data.HttpGroupApi,
+            resolve = searchRepository::resolveIds,
+            saveCover = { playlistId, bytes -> com.mero.data.PlaylistCovers.saveBytes(context.applicationContext, playlistId, bytes) },
+            coverForUpload = com.mero.data.PlaylistCovers::forUpload,
+        )
+    }
+
     val ytDlpApi: YtDlpPlayerApi by lazy { YtDlpPlayerApi(context.applicationContext) }
 
     val streamRepository: StreamRepository by lazy {
