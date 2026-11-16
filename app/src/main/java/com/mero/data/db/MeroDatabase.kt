@@ -97,6 +97,25 @@ data class PlaylistEntity(
     val coverUri: String? = null,
     /** Their own note about what this playlist is for. */
     val description: String? = null,
+    /** The group this playlist is synced with on Mero's share site, or null for an ordinary playlist. */
+    val groupCode: String? = null,
+    /** The newest group step this phone has applied. */
+    val groupSeq: Long = 0,
+)
+
+/**
+ * A change made on this phone to a group playlist and not yet accepted by the share site. Sent, then
+ * deleted, by GroupSync; the random [opId] lets the site ignore a step it already has.
+ */
+@Entity(tableName = "group_outbox")
+data class GroupOutboxEntity(
+    @PrimaryKey val opId: String,
+    val playlistId: String,
+    /** add, remove or rename */
+    val kind: String,
+    /** A video id, or the new name. */
+    val value: String?,
+    val createdAt: Long,
 )
 
 @Entity(tableName = "playlist_songs", primaryKeys = ["playlistId", "songId"])
@@ -125,6 +144,7 @@ data class PlaylistSummary(
     val artworkUrl: String?,
     val coverUri: String? = null,
     val description: String? = null,
+    val groupCode: String? = null,
 ) {
     /** The chosen picture if there is one, otherwise the first track's cover. */
     val displayArtwork: String? get() = coverUri ?: artworkUrl
@@ -259,8 +279,33 @@ interface MeroDao {
     @Transaction
     suspend fun deletePlaylist(id: String) {
         deletePlaylistSongs(id)
+        deleteOutboxOf(id)
         deletePlaylistRow(id)
     }
+
+    @Insert
+    suspend fun insertOutbox(entry: GroupOutboxEntity)
+
+    @Query("SELECT * FROM group_outbox WHERE playlistId = :playlistId ORDER BY createdAt, opId")
+    suspend fun outbox(playlistId: String): List<GroupOutboxEntity>
+
+    @Query("DELETE FROM group_outbox WHERE opId IN (:opIds)")
+    suspend fun deleteOutbox(opIds: List<String>)
+
+    @Query("DELETE FROM group_outbox WHERE playlistId = :playlistId")
+    suspend fun deleteOutboxOf(playlistId: String)
+
+    @Query("UPDATE playlists SET groupCode = :code, groupSeq = :seq WHERE id = :playlistId")
+    suspend fun setGroup(playlistId: String, code: String?, seq: Long)
+
+    @Query("SELECT * FROM playlists WHERE groupCode IS NOT NULL")
+    suspend fun groupPlaylists(): List<PlaylistEntity>
+
+    @Query("SELECT * FROM playlists WHERE groupCode = :code LIMIT 1")
+    suspend fun playlistByGroup(code: String): PlaylistEntity?
+
+    @Query("SELECT * FROM playlists WHERE id = :id")
+    suspend fun playlistNow(id: String): PlaylistEntity?
 
     /**
      * Cover art is borrowed from the first track, so a playlist looks like
@@ -269,7 +314,7 @@ interface MeroDao {
     @Query(
         """
         SELECT p.id AS id, p.name AS name, p.createdAt AS createdAt,
-               p.coverUri AS coverUri, p.description AS description,
+               p.coverUri AS coverUri, p.description AS description, p.groupCode AS groupCode,
                (SELECT COUNT(*) FROM playlist_songs ps WHERE ps.playlistId = p.id) AS trackCount,
                (SELECT s.thumbnailUrl FROM playlist_songs ps
                   INNER JOIN songs s ON s.id = ps.songId
@@ -397,7 +442,7 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
  * [ALL_MIGRATIONS] and a schema file in app/schemas (the build writes it); MigrationChainTest fails
  * if either is missing, because a database that cannot be migrated is a library wiped on update.
  */
-const val DB_VERSION = 8
+const val DB_VERSION = 9
 
 @Database(
     entities = [
@@ -407,6 +452,7 @@ const val DB_VERSION = 8
         PlaylistSongEntity::class,
         SmartPlaylistEntity::class,
         PlayEventEntity::class,
+        GroupOutboxEntity::class,
     ],
     version = DB_VERSION,
     exportSchema = true,
@@ -488,6 +534,25 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+/** Group playlists: which group a playlist follows, and this phone's unsent changes to it. */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE playlists ADD COLUMN groupCode TEXT")
+        db.execSQL("ALTER TABLE playlists ADD COLUMN groupSeq INTEGER NOT NULL DEFAULT 0")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS group_outbox (
+                opId TEXT NOT NULL PRIMARY KEY,
+                playlistId TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                value TEXT,
+                createdAt INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+    }
+}
+
 /** Every migration, oldest first. The database is opened with exactly these; nothing is ever dropped to fit. */
 val ALL_MIGRATIONS: Array<Migration> = arrayOf(
     MIGRATION_1_2,
@@ -497,4 +562,5 @@ val ALL_MIGRATIONS: Array<Migration> = arrayOf(
     MIGRATION_5_6,
     MIGRATION_6_7,
     MIGRATION_7_8,
+    MIGRATION_8_9,
 )

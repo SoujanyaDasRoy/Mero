@@ -82,7 +82,7 @@ class MigrationTest {
 
     private fun openWithRoom(name: String): MeroDatabase =
         Room.databaseBuilder(context, MeroDatabase::class.java, name)
-            .addMigrations(MIGRATION_7_8)
+            .addMigrations(*ALL_MIGRATIONS)
             .allowMainThreadQueries()
             .build()
 
@@ -120,6 +120,50 @@ class MigrationTest {
                 val row = dao.lastPlayEvents(5).single()
                 assertEquals(9L, row.listenedMs)
                 assertTrue(row.finalized)
+            }
+        } finally {
+            room.close()
+        }
+    }
+
+    @Test
+    fun `8 to 9 keeps playlists, adds no group, and an empty outbox`() {
+        createFromSchema(DB, 8).apply {
+            insertSongV7(this, "a")
+            execSQL("INSERT INTO playlists (id, name, createdAt) VALUES ('pl-1', 'Road trip', 1)")
+            execSQL("INSERT INTO playlist_songs (playlistId, songId, position) VALUES ('pl-1', 'a', 0)")
+            closeCheckpointed()
+        }
+
+        val room = openWithRoom(DB)
+        try {
+            runBlocking {
+                val dao = room.dao()
+                val playlist = dao.playlistNow("pl-1")!!
+                assertEquals(null, playlist.groupCode)
+                assertEquals(0L, playlist.groupSeq)
+                room.openHelper.writableDatabase.query("SELECT songId FROM playlist_songs WHERE playlistId = 'pl-1'").use {
+                    assertEquals(1, it.count)
+                }
+                assertTrue(dao.outbox("pl-1").isEmpty())
+            }
+        } finally {
+            room.close()
+        }
+    }
+
+    @Test
+    fun `deleting a playlist removes its outbox rows`() {
+        val room = openWithRoom(DB)
+        try {
+            runBlocking {
+                val dao = room.dao()
+                dao.insertPlaylist(PlaylistEntity("pl-1", "Road trip", 1))
+                dao.insertOutbox(GroupOutboxEntity("op-1", "pl-1", "add", "dQw4w9WgXcQ", 1))
+                dao.insertOutbox(GroupOutboxEntity("op-2", "pl-1", "remove", "dQw4w9WgXcQ", 2))
+                assertEquals(2, dao.outbox("pl-1").size)
+                dao.deletePlaylist("pl-1")
+                assertTrue(dao.outbox("pl-1").isEmpty())
             }
         } finally {
             room.close()
