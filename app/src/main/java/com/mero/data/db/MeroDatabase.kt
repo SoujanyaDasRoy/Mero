@@ -326,6 +326,15 @@ interface MeroDao {
         step?.let { insertOutbox(it) }
     }
 
+    @Query("SELECT songId FROM playlist_songs WHERE playlistId = :playlistId ORDER BY position")
+    suspend fun playlistSongIds(playlistId: String): List<String>
+
+    /** Runs [block] as one transaction: edits from elsewhere wait until it is done. */
+    @Transaction
+    suspend fun runInTransaction(block: suspend () -> Unit) {
+        block()
+    }
+
     /** A group playlist's state after a sync, written in one go so a failed sync changes nothing. */
     @Transaction
     suspend fun applyGroupState(playlistId: String, songIds: List<String>, name: String?, code: String, seq: Long) {

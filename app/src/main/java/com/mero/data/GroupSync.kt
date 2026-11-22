@@ -68,7 +68,7 @@ class GroupSync(
         val first = pages.first()
         val id = library.createPlaylist(first.name)
         try {
-            apply(id, code, emptyList(), pages, emptyList())
+            apply(id, code, pages)
             if (first.hasCover) downloadCover(id, code)
         } catch (e: Exception) {
             dao.deletePlaylist(id)
@@ -83,15 +83,19 @@ class GroupSync(
             val playlist = dao.playlistNow(playlistId) ?: return@attempt 0
             val code = playlist.groupCode ?: return@attempt 0
             val outbox = dao.outbox(playlistId)
-            if (outbox.isNotEmpty()) {
-                api.send(code, outbox).getOrThrow()
-                dao.deleteOutbox(outbox.map { it.opId })
+            // A new cover goes up as a picture, not as a step (the site adds the step itself).
+            val covers = outbox.filter { it.kind == "cover" }
+            if (covers.isNotEmpty()) {
+                coverForUpload(playlist.coverUri)?.let { api.putCover(code, it).getOrThrow() }
+                dao.deleteOutbox(covers.map { it.opId })
+            }
+            val steps = outbox - covers.toSet()
+            if (steps.isNotEmpty()) {
+                api.send(code, steps).getOrThrow()
+                dao.deleteOutbox(steps.map { it.opId })
             }
             val pages = fetchAll(code, playlist.groupSeq)
-            val local = library.playlistSongs(playlistId).first().map { it.id }
-            // Edits made while this sync was running stay on top of what arrived.
-            val pending = dao.outbox(playlistId).map { PendingStep(it.kind, it.value) }
-            val merged = apply(playlistId, code, local, pages, pending)
+            val merged = apply(playlistId, code, pages)
             if (merged.coverChanged) downloadCover(playlistId, code)
             if (merged.added > 0) _arrivals.tryEmit((merged.name ?: playlist.name) to merged.added)
             merged.added
@@ -110,12 +114,16 @@ class GroupSync(
         _failed.update { it - playlistId }
     }
 
-    /** Sends this playlist's cover to the group (members fetch it on their next sync). */
-    suspend fun pushCover(playlistId: String): Result<Unit> = attempt {
-        val playlist = dao.playlistNow(playlistId) ?: return@attempt
-        val code = playlist.groupCode ?: return@attempt
-        val jpeg = coverForUpload(playlist.coverUri) ?: return@attempt
-        api.putCover(code, jpeg).getOrThrow()
+    /**
+     * Queues this playlist's new cover for the group, like any other edit: it is uploaded by the next
+     * sync, retried if that fails, and members fetch it on theirs. Nothing for an ordinary playlist.
+     */
+    suspend fun pushCover(playlistId: String) {
+        if (dao.playlistNow(playlistId)?.groupCode == null) return
+        dao.insertOutbox(
+            com.mero.data.db.GroupOutboxEntity(java.util.UUID.randomUUID().toString(), playlistId, "cover", null, System.currentTimeMillis()),
+        )
+        library.onGroupEdit(playlistId)
     }
 
     private suspend fun fetchAll(code: String, since: Long): List<GroupPage> {
@@ -129,26 +137,29 @@ class GroupSync(
         return pages
     }
 
-    /** Merges, fetches details for songs this phone hasn't got, and writes it all in one transaction. */
-    private suspend fun apply(
-        playlistId: String,
-        code: String,
-        local: List<String>,
-        pages: List<GroupPage>,
-        pending: List<PendingStep>,
-    ): Merged {
+    /**
+     * Fetches details for songs this phone hasn't got (a network call, so first, outside any
+     * transaction), then reads the playlist and the outbox, merges and writes in ONE transaction.
+     * An edit made while the sync was running lands either wholly before the read or after the write,
+     * so it is never overwritten: phone files in a group playlist have no step to bring them back.
+     */
+    private suspend fun apply(playlistId: String, code: String, pages: List<GroupPage>): Merged {
         val steps = pages.flatMap { it.steps }
-        val merged = mergeGroup(local, steps, pending)
-        val needDetails = merged.songIds.filter { id -> dao.song(id).let { it == null || it.title == UNAVAILABLE_SONG } }
-        if (needDetails.isNotEmpty()) {
-            val found = resolve(needDetails).getOrDefault(emptyList())
-            library.upsertSongs(found)
-            val foundIds = found.mapTo(HashSet()) { it.id }
-            needDetails.filter { it !in foundIds }.forEach { library.placeholder(it) }
+        val candidates = (steps.filter { it.kind == "add" }.mapNotNull { it.value } + dao.playlistSongIds(playlistId))
+            .distinct()
+            .filter { id -> dao.song(id).let { it == null || (it.title == UNAVAILABLE_SONG && it.sourceUri == null) } }
+        if (candidates.isNotEmpty()) library.upsertSongs(resolve(candidates).getOrDefault(emptyList()))
+
+        var merged: Merged? = null
+        dao.runInTransaction {
+            val pending = dao.outbox(playlistId).filter { it.kind != "cover" }.map { PendingStep(it.kind, it.value) }
+            val result = mergeGroup(dao.playlistSongIds(playlistId), steps, pending)
+            result.songIds.forEach { library.placeholder(it) }
+            val seq = steps.lastOrNull()?.seq ?: dao.playlistNow(playlistId)?.groupSeq ?: 0
+            dao.applyGroupState(playlistId, result.songIds, result.name, code, seq)
+            merged = result
         }
-        val seq = steps.lastOrNull()?.seq ?: dao.playlistNow(playlistId)?.groupSeq ?: 0
-        dao.applyGroupState(playlistId, merged.songIds, merged.name, code, seq)
-        return merged
+        return merged!!
     }
 
     /** Keeps the group's cover for [playlistId] (also used for "Just add a copy"). */

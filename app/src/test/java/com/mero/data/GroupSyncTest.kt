@@ -28,6 +28,7 @@ private class FakeGroupApi : GroupApi {
     private val seen = HashMap<String, MutableSet<String>>()
     var covers = HashMap<String, ByteArray>()
     var failSteps = false
+    var failCover = false
     var loseNextSendReply = false
     private var next = 0
 
@@ -67,6 +68,7 @@ private class FakeGroupApi : GroupApi {
     }
 
     override suspend fun putCover(code: String, jpeg: ByteArray): Result<Long> {
+        if (failCover) return Result.failure(IOException("offline"))
         covers[code] = jpeg
         append(code, "cover", null)
         return Result.success(logs.getValue(code).last().seq)
@@ -84,6 +86,8 @@ class GroupSyncTest {
     private lateinit var api: FakeGroupApi
     private lateinit var sync: GroupSync
     private val unresolvable = HashSet<String>()
+    /** Runs inside the song lookup, to make an edit land while a sync is under way. */
+    private var duringResolve: (suspend () -> Unit)? = null
     private val savedCovers = HashMap<String, ByteArray>()
 
     private fun song(id: String) = Song(id = id, title = "Title $id", artist = "Artist", album = "", durationSec = 100, thumbnailUrl = null)
@@ -96,7 +100,11 @@ class GroupSyncTest {
             dao = db.dao(),
             library = library,
             api = api,
-            resolve = { ids -> Result.success(ids.filter { it !in unresolvable }.map { song(it) }) },
+            resolve = { ids ->
+                duringResolve?.invoke()
+                duringResolve = null
+                Result.success(ids.filter { it !in unresolvable }.map { song(it) })
+            },
             saveCover = { playlistId, bytes -> savedCovers[playlistId] = bytes; "file:///covers/$playlistId.jpg" },
             coverForUpload = { uri -> if (uri == null) null else byteArrayOf(1, 2, 3) },
         )
@@ -175,6 +183,56 @@ class GroupSyncTest {
         sync.sync(id).getOrThrow()
         listening.cancel()
         assertEquals(listOf("Road trip" to 2), heard)
+    }
+
+    @Test fun `a phone file added while a sync is running is kept`() = runBlocking {
+        val (id, code) = groupWith("a")
+        api.append(code, "add", "d")
+        val file = song("local:9").copy(sourceUri = "content://phone/9")
+        duringResolve = { library.addToPlaylist(id, file) }
+
+        sync.sync(id).getOrThrow()
+
+        assertEquals(listOf("a", "local:9", "d"), ids(id))
+    }
+
+    @Test fun `a YouTube song added while a sync is running stays put`() = runBlocking {
+        val (id, code) = groupWith("a")
+        api.append(code, "add", "d")
+        duringResolve = { library.addToPlaylist(id, song("c")) }
+
+        sync.sync(id).getOrThrow()
+
+        assertTrue("c" in ids(id))
+        assertEquals(listOf("add"), db.dao().outbox(id).map { it.kind })
+    }
+
+    @Test fun `a new cover is queued and sent on the next sync`() = runBlocking {
+        val (id, code) = groupWith("a")
+        library.setPlaylistCover(id, "file:///covers/mine.jpg")
+        sync.pushCover(id)
+        assertEquals(listOf("cover"), db.dao().outbox(id).map { it.kind })
+
+        sync.sync(id).getOrThrow()
+
+        assertTrue(api.covers.getValue(code).contentEquals(byteArrayOf(1, 2, 3)))
+        assertTrue(db.dao().outbox(id).isEmpty())
+    }
+
+    @Test fun `a cover upload that fails is kept, reported and retried`() = runBlocking {
+        val (id, code) = groupWith("a")
+        library.setPlaylistCover(id, "file:///covers/mine.jpg")
+        sync.pushCover(id)
+        api.failCover = true
+
+        assertTrue(sync.sync(id).isFailure)
+        assertTrue(id in sync.failed.value)
+        assertEquals(listOf("cover"), db.dao().outbox(id).map { it.kind })
+
+        api.failCover = false
+        sync.sync(id).getOrThrow()
+        assertTrue(api.covers.containsKey(code))
+        assertTrue(db.dao().outbox(id).isEmpty())
     }
 
     @Test fun `resent outbox steps are applied once`() = runBlocking {
