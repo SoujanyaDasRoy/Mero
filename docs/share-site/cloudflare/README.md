@@ -18,7 +18,11 @@ Deploy (needs `wrangler login`):
     wrangler pages deploy public --project-name meroapp --branch main
 
 The KV namespace `SHARES` and the D1 database `mero` are bound in `wrangler.toml`. A new D1 database needs
-`wrangler d1 execute mero --remote --file schema.sql`. `bash test-groups.sh` checks the group endpoints against
-the live site. If Mero's signing key ever changes, update the
+`wrangler d1 execute mero --remote --file schema.sql`; the live one was made before rate limits and got
+`migrate-001.sql` on top. Rate limits (`_groups.js`, `LIMITS`) count senders by a salted hash; the salt is the
+Pages secret `LIMIT_SALT` (`wrangler pages secret put LIMIT_SALT --project-name meroapp`).
+
+`bash test-groups.sh` checks the group endpoints against the live site and deletes the groups it made.
+`RATE=1 bash test-groups.sh` also checks the new-group limit, which uses up this hour's allowance for your address. If Mero's signing key ever changes, update the
 fingerprint in `public/.well-known/assetlinks.json` and redeploy. Free-tier KV allows 1,000 writes a day
 (each shared playlist is one or two).

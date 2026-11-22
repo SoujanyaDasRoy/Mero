@@ -66,8 +66,11 @@ so members' phones stay in step. There are no accounts and nothing about the peo
 playlist's random 8-character code is the only key, so anyone holding a group link can add and remove songs
 in it. Treat a group link like a door key: send it only to people who should edit that playlist.
 
-Every endpoint validates what it receives (video id format, name length, JPEG header, sizes, at most 1,000
-steps per request).
+Every endpoint validates what it receives (video id format, name length, JPEG header, sizes counted as the
+body arrives, at most 1,000 steps per request). Writes are rate-limited per sender per hour (30 new groups,
+300 change requests, 30 covers). A sender is counted by a salted hash of their address, bucket and hour; the
+address is never stored and the counters are deleted after the hour. The salt is a Cloudflare secret
+(`LIMIT_SALT`), not in this repository.
 
 ## Reporting something real
 
