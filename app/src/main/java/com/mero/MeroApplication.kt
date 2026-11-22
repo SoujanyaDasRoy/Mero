@@ -105,18 +105,10 @@ class AppContainer(context: Context) {
 
     /** Work that outlives a screen: group syncs started by an edit or by Mero coming to the front. */
     val appScope = CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
-    private val pendingGroupSyncs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+    private val groupSyncDebouncer by lazy { com.mero.Debouncer(appScope, 3_000) { groupSync.sync(it) } }
 
     /** Syncs a group playlist 3 s after its last edit, so a burst of edits goes in one request. */
-    fun requestGroupSync(playlistId: String) {
-        pendingGroupSyncs.put(
-            playlistId,
-            appScope.launch {
-                kotlinx.coroutines.delay(3_000)
-                groupSync.sync(playlistId)
-            },
-        )?.cancel()
-    }
+    fun requestGroupSync(playlistId: String) = groupSyncDebouncer.request(playlistId)
 
     /** Group playlists: keeps them the same on every member's phone (see GroupSync). */
     val groupSync: com.mero.data.GroupSync by lazy {

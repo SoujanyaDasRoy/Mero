@@ -225,7 +225,8 @@ class LibraryRepository(private val dao: MeroDao, private val useV2: () -> Boole
     suspend fun deleteSmartPlaylist(id: String) = dao.deleteSmartPlaylist(id)
 
     suspend fun renamePlaylist(id: String, name: String) {
-        val step = stepFor(id, "rename", name.trim())
+        // The share site keeps names to 80 characters.
+        val step = stepFor(id, "rename", name.trim().take(MAX_GROUP_NAME))
         dao.renamePlaylistWithStep(id, name.trim(), step)
         if (step != null) onGroupEdit(id)
     }

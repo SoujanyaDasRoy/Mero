@@ -28,6 +28,10 @@ private class FakeGroupApi : GroupApi {
     private val seen = HashMap<String, MutableSet<String>>()
     var covers = HashMap<String, ByteArray>()
     var failSteps = false
+    /** Runs inside create, to make an edit land while a group is being made. */
+    var onCreate: (suspend () -> Unit)? = null
+    /** Song ids the site refuses: a batch containing one is rejected whole, as the real site does. */
+    val rejected = HashSet<String>()
     var failCover = false
     var loseNextSendReply = false
     private var next = 0
@@ -40,6 +44,9 @@ private class FakeGroupApi : GroupApi {
     }
 
     override suspend fun create(name: String, ids: List<String>, cover: ByteArray?): Result<Pair<String, Long>> {
+        onCreate?.invoke()
+        onCreate = null
+        if (name.length > 80) return Result.failure(GroupRejected())
         val code = "CODE%04d".format(next++)
         logs[code] = mutableListOf()
         names[code] = name
@@ -59,6 +66,7 @@ private class FakeGroupApi : GroupApi {
 
     override suspend fun send(code: String, steps: List<GroupOutboxEntity>): Result<Long> {
         if (!logs.containsKey(code)) return Result.failure(GroupGone())
+        if (steps.any { it.value in rejected }) return Result.failure(GroupRejected())
         steps.forEach { append(code, it.kind, it.value, it.opId) }
         if (loseNextSendReply) {
             loseNextSendReply = false
@@ -232,6 +240,76 @@ class GroupSyncTest {
         api.failCover = false
         sync.sync(id).getOrThrow()
         assertTrue(api.covers.containsKey(code))
+        assertTrue(db.dao().outbox(id).isEmpty())
+    }
+
+    @Test fun `an edit made while a group is being created is queued`() = runBlocking {
+        val id = library.createPlaylist("Road trip")
+        library.addToPlaylist(id, song("a"))
+        library.addToPlaylist(id, song("b"))
+        api.onCreate = {
+            library.addToPlaylist(id, song("c"))
+            library.removeFromPlaylist(id, "a")
+        }
+
+        sync.makeGroup(id).getOrThrow()
+        val code = group(id).groupCode!!
+        sync.sync(id).getOrThrow()
+
+        assertEquals(listOf("add a", "add b", "add c", "remove a"), log(code))
+        assertEquals(listOf("b", "c"), ids(id))
+    }
+
+    @Test fun `a long name is shortened to fit the site`() = runBlocking {
+        val id = library.createPlaylist("x".repeat(100))
+        library.addToPlaylist(id, song("a"))
+        sync.makeGroup(id).getOrThrow()
+        assertEquals(80, api.names.getValue(group(id).groupCode!!).length)
+    }
+
+    @Test fun `a long rename is shortened before it is queued`() = runBlocking {
+        val (id, _) = groupWith("a")
+        library.renamePlaylist(id, "y".repeat(100))
+        assertEquals(80, db.dao().outbox(id).single().value!!.length)
+    }
+
+    @Test fun `a step the site rejects is dropped and the rest still go`() = runBlocking {
+        val (id, code) = groupWith("a")
+        api.rejected += "badbadbadxx"
+        library.addToPlaylist(id, song("badbadbadxx"))
+        library.addToPlaylist(id, song("d"))
+
+        sync.sync(id).getOrThrow()
+
+        assertEquals("add d", log(code).last())
+        assertFalse(log(code).contains("add badbadbadxx"))
+        assertTrue(db.dao().outbox(id).isEmpty())
+        assertFalse(id in sync.failed.value)
+    }
+
+    @Test fun `deleting the playlist during a sync leaves nothing behind`() = runBlocking {
+        val (id, code) = groupWith("a")
+        api.append(code, "add", "d")
+        duringResolve = { db.dao().deletePlaylist(id) }
+
+        sync.sync(id)
+
+        assertTrue(db.dao().playlistSongIds(id).isEmpty())
+        assertNull(db.dao().playlistNow(id))
+    }
+
+    @Test fun `outbox rows come back in the order they were made`() = runBlocking {
+        val id = library.createPlaylist("Order")
+        db.dao().insertOutbox(GroupOutboxEntity("zzz", id, "remove", "a", 5))
+        db.dao().insertOutbox(GroupOutboxEntity("aaa", id, "add", "a", 5))
+        assertEquals(listOf("zzz", "aaa"), db.dao().outbox(id).map { it.opId })
+    }
+
+    @Test fun `more than 999 outbox rows can be cleared at once`() = runBlocking {
+        val id = library.createPlaylist("Many")
+        val rows = (1..1500).map { GroupOutboxEntity("op$it", id, "add", "id$it", it.toLong()) }
+        rows.forEach { db.dao().insertOutbox(it) }
+        db.dao().deleteOutbox(rows.map { it.opId })
         assertTrue(db.dao().outbox(id).isEmpty())
     }
 

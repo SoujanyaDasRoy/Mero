@@ -286,11 +286,18 @@ interface MeroDao {
     @Insert
     suspend fun insertOutbox(entry: GroupOutboxEntity)
 
-    @Query("SELECT * FROM group_outbox WHERE playlistId = :playlistId ORDER BY createdAt, opId")
+    /** In the order the edits were made (insertion order; the clock can go backwards). */
+    @Query("SELECT * FROM group_outbox WHERE playlistId = :playlistId ORDER BY rowid")
     suspend fun outbox(playlistId: String): List<GroupOutboxEntity>
 
     @Query("DELETE FROM group_outbox WHERE opId IN (:opIds)")
-    suspend fun deleteOutbox(opIds: List<String>)
+    suspend fun deleteOutboxChunk(opIds: List<String>)
+
+    /** In chunks: Android 9-11's SQLite refuses a statement with more than 999 values. */
+    @Transaction
+    suspend fun deleteOutbox(opIds: List<String>) {
+        opIds.chunked(500).forEach { deleteOutboxChunk(it) }
+    }
 
     @Query("DELETE FROM group_outbox WHERE playlistId = :playlistId")
     suspend fun deleteOutboxOf(playlistId: String)
@@ -338,6 +345,8 @@ interface MeroDao {
     /** A group playlist's state after a sync, written in one go so a failed sync changes nothing. */
     @Transaction
     suspend fun applyGroupState(playlistId: String, songIds: List<String>, name: String?, code: String, seq: Long) {
+        // Deleted while the sync was running: write nothing, or its songs would outlive it.
+        if (playlistNow(playlistId) == null) return
         deletePlaylistSongs(playlistId)
         insertPlaylistSongs(songIds.mapIndexed { i, id -> PlaylistSongEntity(playlistId, id, i) })
         name?.let { renamePlaylist(playlistId, it) }

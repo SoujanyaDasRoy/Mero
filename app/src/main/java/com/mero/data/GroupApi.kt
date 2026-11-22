@@ -16,6 +16,9 @@ data class GroupPage(val name: String, val hasCover: Boolean, val head: Long, va
 /** The share site has no group with that code. */
 class GroupGone : Exception("That group playlist doesn't exist")
 
+/** The share site refused what was sent (HTTP 400): resending it as it is will never work. */
+class GroupRejected : Exception("Mero's share site refused that change")
+
 /**
  * Mero's share site, for group playlists (docs/share-site/cloudflare, /api/g). An interface so the sync
  * can be tested against a group held in memory.
@@ -43,7 +46,7 @@ object HttpGroupApi : GroupApi {
 
     override suspend fun create(name: String, ids: List<String>, cover: ByteArray?): Result<Pair<String, Long>> = call {
         val body = JSONObject()
-            .put("name", name)
+            .put("name", name.trim().take(MAX_GROUP_NAME))
             .put("ids", JSONArray(ids.take(MAX_GROUP_STEPS)))
             .apply { if (cover != null) put("cover", Base64.encodeToString(cover, Base64.NO_WRAP)) }
         val reply = JSONObject(request("POST", "/api/g", "application/json", body.toString().toByteArray()))
@@ -110,6 +113,8 @@ object HttpGroupApi : GroupApi {
             when (conn.responseCode) {
                 200 -> return conn.inputStream.bufferedReader().readText()
                 404 -> throw GroupGone()
+                400 -> throw GroupRejected()
+                429 -> throw java.io.IOException("Mero's share site is busy; trying again later")
                 else -> throw java.io.IOException("Share site said ${conn.responseCode}")
             }
         } finally {

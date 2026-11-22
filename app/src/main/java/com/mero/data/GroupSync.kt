@@ -16,6 +16,19 @@ import java.util.concurrent.ConcurrentHashMap
 /** A group seen from its link before joining. */
 data class GroupPreview(val name: String, val songIds: List<String>, val hasCover: Boolean)
 
+/** The share site's limit on a playlist name. */
+const val MAX_GROUP_NAME = 80
+
+/**
+ * False for a step the share site could never accept (no song, or a name it won't take); those are dropped
+ * rather than left to block the outbox. Anything subtler is the site's call: see [GroupSync.send].
+ */
+internal fun isSendable(step: com.mero.data.db.GroupOutboxEntity): Boolean = when (step.kind) {
+    "add", "remove" -> !step.value.isNullOrBlank()
+    "rename" -> !step.value.isNullOrBlank() && step.value.trim().length <= MAX_GROUP_NAME
+    else -> false
+}
+
 /** The title a group song is stored under until its details can be fetched. */
 const val UNAVAILABLE_SONG = "Unavailable song"
 
@@ -45,15 +58,35 @@ class GroupSync(
     val arrivals: SharedFlow<Pair<String, Int>> = _arrivals
 
     /** Turns a playlist into a group playlist; the link to send friends. */
-    suspend fun makeGroup(playlistId: String): Result<String> = attempt {
-        val playlist = dao.playlistNow(playlistId) ?: error("No such playlist")
-        playlist.groupCode?.let { return@attempt ShareLink.shortGroup(it) }
-        val ids = library.playlistSongs(playlistId).first().filter { it.isYouTube }.map { it.id }
-        require(ids.isNotEmpty()) { "Add a song first" }
-        val (code, head) = api.create(playlist.name, ids, coverForUpload(playlist.coverUri)).getOrThrow()
-        dao.setGroup(playlistId, code, head)
-        ShareLink.shortGroup(code)
+    suspend fun makeGroup(playlistId: String): Result<String> = lockFor(playlistId).withLock {
+        attempt {
+            val playlist = dao.playlistNow(playlistId) ?: error("No such playlist")
+            playlist.groupCode?.let { return@attempt ShareLink.shortGroup(it) }
+            val uploaded = youTubeSongIds(playlistId)
+            require(uploaded.isNotEmpty()) { "Add a song first" }
+            val name = playlist.name.trim().take(MAX_GROUP_NAME)
+            val (code, head) = api.create(name, uploaded, coverForUpload(playlist.coverUri)).getOrThrow()
+            // Edits made while the group was being created had no group to go to: queue the difference
+            // now, in the same transaction that makes this a group playlist, so none slips between.
+            var queued = false
+            dao.runInTransaction {
+                dao.setGroup(playlistId, code, head)
+                val now = youTubeSongIds(playlistId)
+                val steps = (now - uploaded.toSet()).map { "add" to it } + (uploaded - now.toSet()).map { "remove" to it }
+                steps.forEach { (kind, id) ->
+                    dao.insertOutbox(
+                        com.mero.data.db.GroupOutboxEntity(java.util.UUID.randomUUID().toString(), playlistId, kind, id, System.currentTimeMillis()),
+                    )
+                }
+                queued = steps.isNotEmpty()
+            }
+            if (queued) library.onGroupEdit(playlistId)
+            ShareLink.shortGroup(code)
+        }
     }
+
+    private suspend fun youTubeSongIds(playlistId: String): List<String> =
+        dao.playlistSongIds(playlistId).filter { dao.song(it)?.sourceUri == null }
 
     /** What a group link holds, without joining it: its name and songs (for the join dialog). */
     suspend fun preview(code: String): Result<GroupPreview> = attempt {
@@ -89,11 +122,7 @@ class GroupSync(
                 coverForUpload(playlist.coverUri)?.let { api.putCover(code, it).getOrThrow() }
                 dao.deleteOutbox(covers.map { it.opId })
             }
-            val steps = outbox - covers.toSet()
-            if (steps.isNotEmpty()) {
-                api.send(code, steps).getOrThrow()
-                dao.deleteOutbox(steps.map { it.opId })
-            }
+            send(code, outbox - covers.toSet())
             val pages = fetchAll(code, playlist.groupSeq)
             val merged = apply(playlistId, code, pages)
             if (merged.coverChanged) downloadCover(playlistId, code)
@@ -124,6 +153,27 @@ class GroupSync(
             com.mero.data.db.GroupOutboxEntity(java.util.UUID.randomUUID().toString(), playlistId, "cover", null, System.currentTimeMillis()),
         )
         library.onGroupEdit(playlistId)
+    }
+
+    /**
+     * Sends [steps] and clears them from the outbox. A step the site would refuse is dropped first; if
+     * the site still refuses the batch, the steps go one by one and only the refused one is dropped, so a
+     * single bad step can never stop a playlist syncing. Any other failure keeps them for next time.
+     */
+    private suspend fun send(code: String, steps: List<com.mero.data.db.GroupOutboxEntity>) {
+        val (good, bad) = steps.partition(::isSendable)
+        if (bad.isNotEmpty()) dao.deleteOutbox(bad.map { it.opId })
+        if (good.isEmpty()) return
+        val sent = api.send(code, good)
+        if (sent.isSuccess) {
+            dao.deleteOutbox(good.map { it.opId })
+            return
+        }
+        if (sent.exceptionOrNull() !is GroupRejected) sent.getOrThrow()
+        for (step in good) {
+            val one = api.send(code, listOf(step))
+            if (one.isSuccess || one.exceptionOrNull() is GroupRejected) dao.deleteOutbox(listOf(step.opId)) else one.getOrThrow()
+        }
     }
 
     private suspend fun fetchAll(code: String, since: Long): List<GroupPage> {
